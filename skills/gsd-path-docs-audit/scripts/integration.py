@@ -301,7 +301,9 @@ def discard_unpublished_stale_integration(
         project, "merge-base", "--is-ancestor", merge_commit, remote_default_sha
     )
     if published.returncode == 0:
-        raise ArchiveError("stale integration merge is already published on origin/main")
+        raise ArchiveError(
+            f"stale integration merge is already published on origin/{default_name}"
+        )
     if published.returncode != 1:
         archive_milestone.require_git_success(published, "inspect stale integration publication")
 
@@ -659,9 +661,10 @@ def require_pull_request_identity(
     pull: dict,
     branch: str,
     ship_commit: str,
+    base: str = "main",
 ) -> None:
-    if pull["base"].get("ref") != "main":
-        raise ArchiveError("GitHub pull request base is not main")
+    if pull["base"].get("ref") != base:
+        raise ArchiveError(f"GitHub pull request base is not {base}")
     if pull["head"].get("ref") != branch:
         raise ArchiveError("GitHub pull request head is not the bound branch")
     if pull["head"].get("sha") != ship_commit:
@@ -670,7 +673,9 @@ def require_pull_request_identity(
         raise ArchiveError("GitHub pull request head repository is not origin")
 
 
-def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optional[dict]:
+def find_pull_request(
+    repository: str, branch: str, ship_commit: str, base: str = "main"
+) -> Optional[dict]:
     pulls = require_pull_request_pages(
         github_api_json(
             f"repos/{repository}/pulls",
@@ -679,7 +684,7 @@ def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optiona
             "-f",
             "state=all",
             "-f",
-            "base=main",
+            f"base={base}",
             "--paginate",
             "--slurp",
         )
@@ -687,7 +692,7 @@ def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optiona
     pulls = [
         pull
         for pull in pulls
-        if pull["base"].get("ref") == "main"
+        if pull["base"].get("ref") == base
         and (
             pull["head"].get("sha") == ship_commit
             or (
@@ -697,17 +702,19 @@ def find_pull_request(repository: str, branch: str, ship_commit: str) -> Optiona
         )
     ]
     if len(pulls) > 1:
-        raise ArchiveError("multiple pull requests target main from the ship commit")
+        raise ArchiveError(f"multiple pull requests target {base} from the ship commit")
     if not pulls:
         return None
     pull = pulls[0]
-    require_pull_request_identity(repository, pull, branch, ship_commit)
+    require_pull_request_identity(repository, pull, branch, ship_commit, base)
     return pull
 
 
-def pull_request_body(archive_path: str, ship_commit: str, branch: str) -> str:
+def pull_request_body(
+    archive_path: str, ship_commit: str, branch: str, base: str = "main"
+) -> str:
     return (
-        f"{integrate_commit_body(archive_path, ship_commit, 'main', branch)}"
+        f"{integrate_commit_body(archive_path, ship_commit, base, branch)}"
         f"\n\n---\n{PR_CREDIT_LINE}"
     )
 
@@ -719,8 +726,12 @@ def update_pull_request_body(
     ship_commit: str,
     branch: str,
     expected_body: Optional[str] = None,
+    base: str = "main",
 ) -> dict:
-    expected = expected_body if expected_body is not None else pull_request_body(archive_path, ship_commit, branch)
+    expected = (
+        expected_body if expected_body is not None
+        else pull_request_body(archive_path, ship_commit, branch, base)
+    )
     current = pull.get("body")
     if isinstance(current, str) and current.rstrip().endswith(PR_CREDIT_LINE):
         return pull
@@ -732,7 +743,7 @@ def update_pull_request_body(
         f"body={expected}",
     )
     updated = require_pull_request_shape(response)
-    require_pull_request_identity(repository, updated, branch, ship_commit)
+    require_pull_request_identity(repository, updated, branch, ship_commit, base)
     if updated.get("body") != expected:
         raise ArchiveError("updated GitHub pull request is missing the credit footer")
     return updated
@@ -744,23 +755,24 @@ def create_pull_request(
     archive_path: str,
     archive_name: str,
     ship_commit: str,
+    base: str = "main",
 ) -> dict:
-    body = pull_request_body(archive_path, ship_commit, branch)
+    body = pull_request_body(archive_path, ship_commit, branch, base)
     response = github_api_json(
         f"repos/{repository}/pulls",
         "--method",
         "POST",
         "-f",
-        f"title={integrate_subject(archive_name, 'main')}",
+        f"title={integrate_subject(archive_name, base)}",
         "-f",
         f"head={branch}",
         "-f",
-        "base=main",
+        f"base={base}",
         "-f",
         f"body={body}",
     )
     pull = require_pull_request_shape(response)
-    require_pull_request_identity(repository, pull, branch, ship_commit)
+    require_pull_request_identity(repository, pull, branch, ship_commit, base)
     return pull
 
 
@@ -850,7 +862,9 @@ def require_pull_request_merge(
         "inspect remote-default first-parent history",
     ).splitlines()
     if merge_commit not in first_parent:
-        raise ArchiveError("pull-request merge is not on origin/main first-parent history")
+        raise ArchiveError(
+            f"pull-request merge is not on {remote_default} first-parent history"
+        )
 
 
 def require_pull_request_merge_provenance(
@@ -967,7 +981,8 @@ def integrate_pull_request(
         raise ArchiveError("pull-request integration requires a bound branch")
     require_github_authentication()
     repository = github_repository(project)
-    pull = find_pull_request(repository, branch, ship_commit)
+    base = state.default_branch
+    pull = find_pull_request(repository, branch, ship_commit, base)
     if pull is None:
         publish_bound_branch(project, branch, ship_commit)
         pull = create_pull_request(
@@ -976,6 +991,7 @@ def integrate_pull_request(
             archive_path,
             archive_name,
             ship_commit,
+            base,
         )
     elif pull["merged_at"] is None:
         if pull["state"] != "open":
@@ -986,6 +1002,7 @@ def integrate_pull_request(
             archive_path,
             ship_commit,
             branch,
+            base=base,
         )
     if pull["merged_at"] is None:
         if pull["state"] != "open":
@@ -1016,6 +1033,7 @@ def integrate_pull_request(
         archive_path,
         ship_commit,
         branch,
+        base=base,
     )
     tag_name = f"milestone/{archive_name}"
     message = pull_request_tag_message(
@@ -1163,8 +1181,10 @@ def integrate(repo: Path, slug: str) -> dict:
 
     remote_default = refresh_origin(project)["remote_default"]
     default_name = default_branch_name(remote_default)
-    if default_name != "main":
-        raise ArchiveError(f"remote default must be main, got {default_name!r}")
+    if default_name != state.default_branch:
+        raise ArchiveError(
+            f"remote default must be {state.default_branch}, got {default_name!r}"
+        )
     if bound_branch == default_name:
         raise ArchiveError("bound branch must not be the remote default")
     remote_default_sha = archive_milestone.require_git_success(
@@ -1271,7 +1291,7 @@ def integrate(repo: Path, slug: str) -> dict:
                     "origin",
                     f"{merge_commit}:refs/heads/{default_name}",
                 ),
-                "push integration merge to main",
+                f"push integration merge to {default_name}",
             )
             archive_milestone.require_git_success(
                 run_git(project, "update-ref", f"refs/remotes/{remote_default}", merge_commit),
@@ -1416,10 +1436,12 @@ def validate_integrated(
     if bound_branch == default_name:
         raise ArchiveError(
             f"bound branch {bound_branch!r} is the remote default; "
-            "ship merges onto main, never onto the work branch"
+            "ship merges onto the default branch, never onto the work branch"
         )
-    if default_name != "main":
-        raise ArchiveError(f"remote default must be main, got {default_name!r}")
+    if default_name != state.default_branch:
+        raise ArchiveError(
+            f"remote default must be {state.default_branch}, got {default_name!r}"
+        )
 
     # (b) Resolve the integration proof selected before build.
     tag_name = f"milestone/{archive_name}"
@@ -1435,7 +1457,7 @@ def validate_integrated(
         pull_request = metadata["Pull-Request"]
         require_github_authentication()
         repository = github_repository(project)
-        pull = find_pull_request(repository, bound_branch, ship_commit)
+        pull = find_pull_request(repository, bound_branch, ship_commit, default_name)
         if pull is None:
             raise ArchiveError("GitHub pull request for the ship commit is missing")
         if pull["html_url"] != pull_request:

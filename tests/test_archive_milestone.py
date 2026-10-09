@@ -3526,31 +3526,37 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             state_path.read_text(encoding="utf-8").replace("branch: gsd-path/M001", f"branch: {branch}").encode("utf-8")
         )
 
-    def make_publishable_bound_repo(self, root: Path, remote: Path) -> None:
+    def make_publishable_bound_repo(
+        self, root: Path, remote: Path, default: str = "main"
+    ) -> None:
         created = self.run_command(
             "git",
             "init",
             "--bare",
             "-q",
             "-b",
-            "main",
+            default,
             str(remote),
             cwd=root.parent,
         )
         self.assertEqual(created.returncode, 0, created.stderr)
-        self.make_repo(root, branch="main")
+        self.make_repo(root, branch=default)
         added = self.git(root, "remote", "add", "origin", str(remote))
         self.assertEqual(added.returncode, 0, added.stderr)
-        pushed = self.git(root, "push", "-q", "-u", "origin", "main")
+        pushed = self.git(root, "push", "-q", "-u", "origin", default)
         self.assertEqual(pushed.returncode, 0, pushed.stderr)
         linked = self.git(root, "remote", "set-head", "origin", "--auto")
         self.assertEqual(linked.returncode, 0, linked.stderr)
         checkout = self.git(root, "checkout", "-q", "-b", "gsd-path/M001")
         self.assertEqual(checkout.returncode, 0, checkout.stderr)
         state_path = root / ".project" / "STATE.md"
-        state_path.write_bytes(
-            state_path.read_text(encoding="utf-8").replace("branch: main", "branch: gsd-path/M001").encode("utf-8")
+        text = state_path.read_text(encoding="utf-8").replace(
+            f"branch: {default}", "branch: gsd-path/M001"
         )
+        if default != "main":
+            # What initialize records for an origin whose default is not main.
+            text = text.replace("\n---\n", f"\ndefault_branch: {default}\n---\n", 1)
+        state_path.write_bytes(text.encode("utf-8"))
 
     def ship_bound(self, repo: Path) -> tuple:
         archive = self.prepare_archive(repo)
@@ -3894,6 +3900,120 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
             validated = integration.validate_integrated(repo, "demo")
             self.assertEqual(validated["landing"], merge_sha)
+
+    def test_external_landing_lands_on_the_default_branch_state_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote, default="master")
+            self.enable_external_landing_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            baseline = self.git(remote, "rev-parse", "master").stdout.strip()
+
+            waiting = integration.integrate(repo, "demo")
+
+            self.assertEqual(waiting["status"], "awaiting-merge")
+            self.assertEqual(
+                waiting["merge_subject"], "integrate: M001 — merge gsd-path/M001 into master"
+            )
+            self.assertIn("Default: master", waiting["merge_body"])
+            self.assertEqual(self.git(remote, "rev-parse", "master").stdout.strip(), baseline)
+
+            # Merge exactly as the forge would, with only the text Path returned.
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject=waiting["merge_subject"],
+                body=waiting["merge_body"],
+                default_branch="master",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/master")
+            self.git(repo, "push", "-q", "origin", "--delete", "gsd-path/M001")
+
+            result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["mode"], "external-landing")
+            self.assertEqual(result["landing"], merge_sha)
+            self.assertEqual(
+                self.git(
+                    remote, "rev-parse", f"milestone/{archive_name}^{{commit}}"
+                ).stdout.strip(),
+                merge_sha,
+            )
+            validated = integration.validate_integrated(repo, "demo")
+            self.assertEqual(validated["landing"], merge_sha)
+
+    def test_pull_request_integration_targets_the_default_branch_state_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote, default="master")
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            requests = []
+            created_base = {"ref": "master"}
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_github_api(arguments, "graphql"):
+                    payload = {"data": {"repository": {"pullRequest": {
+                        "mergeQueue": {"nodes": []},
+                        "autoMerge": {"nodes": []},
+                        "mergeAction": {"nodes": []},
+                    }}}}
+                    return subprocess.CompletedProcess(arguments, 0, json.dumps(payload), "")
+                if "GET" in arguments:
+                    return subprocess.CompletedProcess(arguments, 0, "[[]]", "")
+                created = {
+                    "number": 7,
+                    "state": "open",
+                    "html_url": "https://github.com/open-gsd/demo/pull/7",
+                    "merged_at": None,
+                    "merge_commit_sha": None,
+                    "base": created_base,
+                    "head": {
+                        "ref": "gsd-path/M001",
+                        "sha": ship_sha,
+                        "repo": {"full_name": "open-gsd/demo"},
+                    },
+                }
+                return subprocess.CompletedProcess(arguments, 0, json.dumps(created), "")
+
+            def integrate():
+                with (
+                    mock.patch.object(
+                        integration, "github_repository", return_value="open-gsd/demo"
+                    ),
+                    mock.patch.object(integration, "run_command", side_effect=github_api),
+                ):
+                    return integration.integrate(repo, "demo")
+
+            result = integrate()
+
+            self.assertEqual(result["status"], "awaiting-merge")
+            listing = next(arguments for arguments in requests if "GET" in arguments)
+            self.assertIn("base=master", listing)
+            post = next(arguments for arguments in requests if "POST" in arguments)
+            self.assertIn(
+                f"title={pipeline_git.integrate_subject(archive_name, 'master')}", post
+            )
+            self.assertIn("base=master", post)
+            body = next(argument for argument in post if argument.startswith("body="))
+            self.assertIn("Default: master", body)
+
+            created_base["ref"] = "main"
+            with self.assertRaisesRegex(
+                integration.ArchiveError, "pull request base is not master"
+            ):
+                integrate()
 
     def test_external_landing_rejects_noncanonical_merge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -4623,6 +4743,51 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 self.assertEqual(self.git(repo, "show-ref").stdout, refs)
             self.assertEqual(validated["landing"], merge_sha)
 
+    def test_pull_request_integration_validates_a_merge_on_the_default_branch_state_records(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote, default="master")
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+                default_branch="master",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/master")
+            self.git(repo, "push", "-q", "origin", "--delete", "gsd-path/M001")
+            pull = {**self.merged_pull_request(ship_sha, merge_sha), "base": {"ref": "master"}}
+
+            def github():
+                return (
+                    mock.patch.object(
+                        integration, "github_repository", return_value="open-gsd/demo"
+                    ),
+                    mock.patch.object(
+                        integration, "run_command", side_effect=self.github_api([pull])
+                    ),
+                )
+
+            repository, command = github()
+            with repository, command:
+                result = integration.integrate(repo, "demo")
+            self.assertEqual(result["mode"], "pull-request")
+            self.assertEqual(result["landing"], merge_sha)
+
+            repository, command = github()
+            with repository, command:
+                validated = integration.validate_integrated(repo, "demo")
+            self.assertEqual(validated["landing"], merge_sha)
+
     def test_validate_integrated_rejects_open_tagged_pull_request(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -5258,6 +5423,66 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
                 merge_sha,
             )
+
+    def test_integrate_publishes_onto_the_default_branch_state_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote, default="master")
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.install_commit_guard(repo)
+
+            first = self.integrate(repo)
+
+            self.assertEqual(first.returncode, 0, first.stderr)
+            payload = json.loads(first.stdout)
+            merge_sha = payload["integrate"]
+            self.assertEqual(payload["commit"], ship_sha)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "master").stdout.strip(), merge_sha
+            )
+            self.assertNotEqual(
+                self.git(remote, "rev-parse", "--verify", "--quiet", "refs/heads/main").returncode, 0
+            )
+            self.assertEqual(
+                self.git(repo, "log", "-1", "--format=%s", merge_sha).stdout.strip(),
+                "integrate: M001 — merge gsd-path/M001 into master",
+            )
+            self.assertIn(
+                "Default: master",
+                self.git(repo, "log", "-1", "--format=%b", merge_sha).stdout,
+            )
+            self.assertEqual(
+                self.git(
+                    remote, "rev-parse", f"milestone/{archive_name}^{{commit}}"
+                ).stdout.strip(),
+                merge_sha,
+            )
+            validated = self.validate_integrated(repo)
+            self.assertEqual(validated.returncode, 0, validated.stderr)
+            self.assertEqual(json.loads(self.integrate(repo).stdout), payload)
+
+    def test_integrate_rejects_origin_head_that_differs_from_state_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote, default="master")
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            base = self.git(repo, "rev-parse", "refs/remotes/origin/master").stdout.strip()
+            self.git(repo, "push", "-q", "origin", f"{base}:refs/heads/main")
+            # The forge owner changes the default branch after initialization.
+            self.git(remote, "symbolic-ref", "HEAD", "refs/heads/main")
+
+            result = self.integrate(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("remote default must be master, got 'main'", result.stderr)
+            self.assertEqual(self.git(remote, "rev-parse", "main").stdout.strip(), base)
+            self.assertEqual(self.git(remote, "rev-parse", "master").stdout.strip(), base)
 
     def test_integrate_resumes_a_merge_that_has_no_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
