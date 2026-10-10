@@ -1301,7 +1301,14 @@ def task_review_observation(item: str, task_text: str) -> str:
     item = _normalize_ws(item)
     section = _common.section_body(task_text, "Acceptance criteria")
     if section is not None:
-        for criterion in _numbered_items(section, continuations=True).values():
+        try:
+            criteria = tuple(_numbered_items(section, continuations=True).values())
+        except HandoffError:
+            # Issue #374: frozen landed bytes may repeat a criterion number.
+            # Quote splitting is best-effort; without it the caller still
+            # validates the full evidence line for content and placeholders.
+            criteria = ()
+        for criterion in criteria:
             quoted = _normalize_ws(criterion)
             prefix = quoted + " — "
             if item.startswith(prefix):

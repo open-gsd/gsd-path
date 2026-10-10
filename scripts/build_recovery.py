@@ -59,7 +59,13 @@ def _parse_recovery_record(value: object) -> dict:
 
 
 def _recovery_base_proves_milestone(before, current, source: str) -> bool:
-    if before.branch != current.branch or before.milestone != current.milestone:
+    if before.branch != current.branch:
+        return False
+    if before.milestone != current.milestone and before.milestone is not None:
+        # Issue #374: a base written before define filled STATE.milestone
+        # records null; the bound branch already encodes M00N, so an unset
+        # base milestone still proves identity. A milestone named by the
+        # base must still equal the current one.
         return False
     if source == "plan":
         return (before.phase, before.status) in {("plan", "active"), ("plan", "blocked")}
