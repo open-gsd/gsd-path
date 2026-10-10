@@ -806,7 +806,7 @@ class DispatchDriverTests(unittest.TestCase):
         root = self.root
         self.fixture(root, wave_t002=2)
         self.share_app_contract(root)
-        missing ="T002: ## Interface contract names a path missing at the layer base: src/app.py"
+        missing = "T002: ## Interface contract names a path missing at the layer base: src/app.py"
         with self.assertRaises(pipeline_state.PipelineStateError) as refused:
             state_checkpoint._validate_plan_briefs(root, "plan", ".project")
         self.assertIn(missing, str(refused.exception))
