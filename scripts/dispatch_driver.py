@@ -2007,6 +2007,23 @@ def next_task_id(tasks_dir: Path) -> str:
     return f"T{max(numbers, default=0) + 1:03d}"
 
 
+def replaced_review_base(primary: Path, project_dir: str, wave: int, cycle: int) -> Optional[str]:
+    """The recovery base when this cycle's review replaces the one a build recovery set aside, else None."""
+    recovery = pipeline_state._build_recovery().context(primary)
+    if not recovery:
+        return None
+    relative = f"{project_dir}/review/wave-{wave}.cycle{cycle}.md"
+    before = isolation.run_git(primary, "show", f"{recovery['base']}:{relative}")
+    current = primary / relative
+    # Plan approval restores the review of an unchanged wave before its checkpoint, so no commit
+    # since the base touches that file. A set-aside review is deleted by that checkpoint.
+    rewritten = isolation.run_git(primary, "log", "-1", "--format=%H", f"{recovery['base']}..HEAD", "--", relative)
+    if (not rewritten.stdout.strip() and before.returncode == 0 and current.is_file()
+            and current.read_text(encoding="utf-8") == before.stdout):
+        return None  # the restored review keeps its repairs
+    return recovery["base"]
+
+
 def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
     """Step 7: one fix task per findings batch, carrying failed criteria and observations verbatim."""
     receipt: Dict[str, object] = {"status": None, "wave": options.wave, "cycle": options.cycle,
@@ -2015,14 +2032,26 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         project = primary / options.project_dir
         tasks_dir = project / "tasks"
         repairs = []
+        pending = []
         for path in sorted(tasks_dir.glob("*-fix-wave-*-cycle-*.md")):
             text = path.read_text(encoding="utf-8")
             fields, _ = isolation.task_frontmatter(text)
             repairs.append({"task": fields["id"], "path": path.relative_to(primary).as_posix(),
                             "wave": int(fields["wave"]), "locators": re.findall(r"(?m)^### (.+)$", _common.section_body(text, "Review findings") or "")})
+            if fields["status"] != "done":
+                pending.append(repairs[-1])
         suffix = f"-fix-wave-{options.wave}-cycle-{options.cycle}.md"
-        existing = [item for item in repairs if item["path"].endswith(suffix)]
-        carried = {locator for item in repairs if item not in existing for locator in item["locators"]}
+        # A build recovery restarts a changed wave at cycle 1, so the repairs and the PLAN heading
+        # of the review it set aside carry the same names. They belong to that review, not this one.
+        replaced = replaced_review_base(primary, options.project_dir, options.wave, options.cycle)
+
+        def at_base(relative: str) -> Optional[str]:
+            shown = isolation.run_git(primary, "show", f"{replaced}:{relative}") if replaced else None
+            return shown.stdout if shown and shown.returncode == 0 else None
+
+        existing = [item for item in repairs if item["path"].endswith(suffix) and at_base(item["path"]) is None]
+        # A landed repair no longer carries its finding: a repeat proves that fix failed and needs the next one.
+        carried = {locator for item in pending if not item["path"].endswith(suffix) for locator in item["locators"]}
         findings = review_findings.compute(primary, options.project_dir, options.wave, options.cycle)
         receipt["findings"] = findings
         escalation = [key for key in ("structural_blockers", "skeptic_groups", "cap_reached", "all_refuted")
@@ -2043,8 +2072,10 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         repair_waves = {item["wave"] for item in existing}
         if len(repair_waves) > 1:
             raise DriverStop("repair tasks for this cycle disagree on their wave")
-        repair_heading = re.search(
+        base_headings = (at_base(f"{options.project_dir}/plan/PLAN.md") or "").splitlines()
+        repair_heading = next((heading for heading in re.finditer(
             rf"(?m)^## Wave (\d+) — fix wave {options.wave} cycle {options.cycle} review findings$", plan_text)
+            if heading.group(0) not in base_headings), None)
         if repair_waves:
             fix_wave = next(iter(repair_waves))
         elif repair_heading:

@@ -506,7 +506,11 @@ dispatch contract and perform steps 1–5 by hand.
      its groups' failed criteria and observed evidence verbatim. A group
      with `repeat` true is evidence its earlier fix failed, never a new
      finding; a re-review never spawns a duplicate fix task for a finding
-     already carried. Write each fix task to `.project/tasks/` with `wave`
+     that a fix task not yet `done` already carries. A repeat after its fix
+     landed gets the next fix task. After a build recovery, a changed wave
+     is reviewed again from cycle 1; the fix tasks and PLAN.md repair wave
+     of the review that recovery set aside do not count for the new one.
+     Write each fix task to `.project/tasks/` with `wave`
      set to the current wave or a newly appended `## Wave N` heading in
      PLAN.md before dispatch. Its dependencies include every source task in
      the batch; its files match the batch. In `## Review findings`, use one
@@ -523,6 +527,10 @@ dispatch contract and perform steps 1–5 by hand.
      the new review judges the repaired product against the original criteria.
      Preserve prior verdicts and source tasks. On helper rejection, resolve
      the evidence blocker rather than redispatching an already proven fix.
+     When the blocker cannot be resolved, for example `repair base contains
+     unlinked changes to original product` because a later wave changed the
+     same files, run the next review cycle of the source wave in full at the
+     current HEAD, without the receipt.
    At the cap, record all attempts in the STATE.md log and ask the user —
    through an interactive user-input tool when available — after linking
    the resolved absolute blocking wave review, every deep lens file for the
