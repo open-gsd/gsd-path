@@ -222,6 +222,23 @@ class BuildReentryTests(unittest.TestCase):
             "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
         })
 
+    def test_interrupted_approval_reports_dropped_reviews_on_resume(self):
+        from scripts import pipeline_state, state_checkpoint
+        plan, review = self.reviewed_plan_recovery()
+        plan.write_bytes(plan.read_text(encoding="utf-8")
+                         .replace("finding_skeptics: off", "finding_skeptics: on").encode("utf-8"))
+        with mock.patch.object(state_checkpoint, "isolation_checkpoint",
+                               side_effect=pipeline_state.IsolationError("simulated interruption")):
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "simulated interruption"):
+                state_checkpoint.checkpoint_approval(self.repo, "plan", self.base)
+        resumed = self.cli("resume-checkpoint")
+        self.assertEqual(resumed["status"], "approved")
+        self.assertFalse(review.exists())
+        self.assertEqual(resumed["recovery_reviews"], {
+            "restored": [],
+            "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
+        })
+
     def test_changed_task_reports_its_wave_for_review(self):
         _, review = self.reviewed_plan_recovery()
         self.task.write_bytes(self.task.read_text(encoding="utf-8")
