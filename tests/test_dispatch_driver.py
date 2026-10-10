@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Iterator
 from unittest import mock
 
-from scripts import _common, dispatch_driver, pipeline_state
+from scripts import _common, dispatch_driver, pipeline_state, state_checkpoint
 
 # Git for Windows bash, never the System32 WSL launcher CreateProcess finds first.
 BASH = _common.find_bash()
@@ -777,6 +777,44 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.round(root, "--wait", "60", wave=2)
         self.assertEqual(receipt["wave"], 2)
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T002"])
+
+    def share_app_contract(self, root: Path) -> None:
+        """Both tasks name `src/app.py`, which only T001 creates, in their Interface contract."""
+        for name in ("T001-demo.md", "T002-demo.md"):
+            task = root / ".project/tasks" / name
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "## Interface contract\n\n- None",
+                "## Interface contract\n\n- `src/app.py` prints the greeting.", 1).encode("utf-8"))
+        run_git(root, "commit", "-qam", "plan: share the interface contract")
+        self.assertFalse((root / "src/app.py").exists())
+
+    def brief_lint(self, receipt: dict) -> dict:
+        return next(step for step in receipt["steps"] if step["script"] == "check_task_briefs.py")
+
+    def test_round_lint_accepts_the_dependency_supplied_contract_path_approval_accepts(self) -> None:
+        # Issue #354: plan approval accepted this plan and the dispatch lint rejected it.
+        root = self.root
+        self.fixture(root, deps_t002="[T001]", wave_t002=2)
+        self.share_app_contract(root)
+        state_checkpoint._validate_plan_briefs(root, "plan", ".project")
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(self.brief_lint(receipt)["exit_code"], 0, receipt)
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual([item["task"] for item in receipt["landed"]], ["T001"])
+
+    def test_round_lint_rejects_a_contract_path_no_dependency_supplies_as_approval_does(self) -> None:
+        root = self.root
+        self.fixture(root, wave_t002=2)
+        self.share_app_contract(root)
+        missing = "T002: ## Interface contract names a path missing at the layer base: src/app.py"
+        with self.assertRaises(pipeline_state.PipelineStateError) as refused:
+            state_checkpoint._validate_plan_briefs(root, "plan", ".project")
+        self.assertIn(missing, str(refused.exception))
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(self.brief_lint(receipt)["exit_code"], 1, receipt)
+        self.assertIn(missing, self.brief_lint(receipt)["stderr"])
+        self.assertEqual(receipt["dispatched"], [])
 
     def test_round_without_wait_returns_in_flight_and_settles_later(self) -> None:
         root = self.root
