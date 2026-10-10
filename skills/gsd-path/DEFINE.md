@@ -168,8 +168,12 @@ State ownership. There is no re-interview of charter or roadmap scope:
    and prohibition ruling for the user to accept or change; it never rules on
    them silently. A requested change that contradicts the
    charter or the resolved roadmap entry is a scope change — this phase never
-   edits the roadmap; surface it to the user for a `$gsd-path-roadmap` re-slice
-   at the next milestone boundary.
+   edits the roadmap; surface it to the user for a `$gsd-path-roadmap`
+   re-slice. Before intent approval, that re-slice keeps `define/active` and
+   can change the scope of this milestone's `active` entry; after its
+   approval, draft INTENT.md again from the changed entry. In `corrections`
+   mode the intent is already approved, so the re-slice waits for the next
+   milestone boundary.
 4. On approval, finalize per the Output contract, setting `milestone` to the
    resolved entry's slug. The router continues with milestone-scoped research
    when the entry lists open questions, otherwise planning.

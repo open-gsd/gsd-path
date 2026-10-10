@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from typing import Optional, Tuple
 
-from scripts import check_handoffs
+from scripts import check_handoffs, pipeline_state
 
 
 RESEARCH_HEAD = "a" * 40
@@ -1795,6 +1795,50 @@ The task implements the demo.
             with self.assertRaises(check_handoffs.HandoffError) as failure:
                 check_handoffs.validate_roadmap(root)
             self.assertIn("M001 is missing Surfaces", str(failure.exception))
+
+    def test_roadmap_gate_runs_only_where_a_roadmap_or_boundary_reslice_is_legal(self) -> None:
+        for phase, status, legal in (
+            ("roadmap", "active", True),
+            ("inspect", "active", True),
+            ("define", "active", True),
+            ("inspect", "done", False),
+            ("define", "done", False),
+            ("plan", "active", False),
+            ("build", "active", False),
+        ):
+            with self.subTest(phase=phase, status=status), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_state(root, phase, status)
+                self.write(root, ".project/ROADMAP.md", ROADMAP)
+                if legal:
+                    self.assertEqual(check_handoffs.validate_roadmap(root)["milestones"], ["M001"])
+                    continue
+                with self.assertRaises(check_handoffs.HandoffError) as failure:
+                    check_handoffs.validate_roadmap(root)
+                self.assertIn(f"found {phase}/{status}", str(failure.exception))
+
+    def test_roadmap_gate_rejects_define_reentered_after_intent_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            git(root, "init", "-b", "gsd-path/M001")
+            git(root, "config", "user.email", "test@example.test")
+            git(root, "config", "user.name", "Test")
+            self.write_state(root, "plan", "active")
+            self.write(root, ".project/ROADMAP.md", ROADMAP)
+            self.write(root, ".project/intent/INTENT.md", "# Approved\n")
+            self.write(root, ".project/plan/PLAN.md", "# Draft\n")
+            git(root, "add", ".project")
+            git(root, "commit", "-q", "-m", "approved intent")
+            pipeline_state.transition_state(
+                root,
+                {"phase": "plan", "status": "active", "branch": "gsd-path/M001", "archive": None},
+                {"phase": "define", "status": "active"},
+                "plan intent corrections requested",
+            )
+
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_roadmap(root)
+            self.assertIn("after intent approval", str(failure.exception))
 
     def test_roadmap_rejects_repeated_surfaces_within_one_milestone(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

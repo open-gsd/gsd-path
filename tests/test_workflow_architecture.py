@@ -184,6 +184,78 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
             self.assertTrue(baseline.exists())
             self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), head)
 
+    def test_define_reslice_may_amend_active_entry_but_keeps_it_active(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, head = self.repo(tmp, "define")
+            roadmap = repo / ".project/ROADMAP.md"
+            baseline = repo / ".project/ROADMAP.before-reslice.md"
+            baseline.write_bytes(roadmap.read_bytes())
+            narrowed = roadmap.read_text(encoding="utf-8").replace("Goal: second", "Goal: narrowed")
+            for label, old, new in (
+                ("dependencies", "Depends on: [M001]", "Depends on: []"),
+                ("status", "Status: active", "Status: pending"),
+                ("id", "### M002 — second", "### M003 — second"),
+            ):
+                with self.subTest(fixed=label):
+                    roadmap.write_bytes(narrowed.replace(old, new).encode("utf-8"))
+                    with self.assertRaisesRegex(pipeline_state.PipelineStateError, "active roadmap entry changed: second"):
+                        self.approve(repo, head)
+                    self.assertTrue(baseline.exists())
+            roadmap.write_bytes(narrowed.encode("utf-8"))
+            result = self.approve(repo, head)
+            self.assertEqual((result["state"]["phase"], result["state"]["status"]), ("define", "active"))
+            self.assertEqual(result["state"]["milestone"], "second")
+            approved = roadmap.read_text(encoding="utf-8")
+            self.assertEqual(approved, narrowed)
+            self.assertEqual(approved.count("Status: active"), 1)
+            self.assertFalse(baseline.exists())
+            self.assertEqual(run_git(repo, "rev-list", "--count", head + "..HEAD").stdout.strip(), "1")
+            self.assertEqual(run_git(repo, "show", "HEAD:.project/ROADMAP.md").stdout, narrowed)
+
+    def test_define_reslice_with_amended_active_entry_resumes_after_interruption(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, head = self.repo(tmp, "define")
+            roadmap = repo / ".project/ROADMAP.md"
+            baseline = repo / ".project/ROADMAP.before-reslice.md"
+            baseline.write_bytes(roadmap.read_bytes())
+            narrowed = roadmap.read_text(encoding="utf-8").replace("Goal: second", "Goal: narrowed")
+            roadmap.write_bytes(narrowed.encode("utf-8"))
+            with mock.patch.object(state_checkpoint, "isolation_checkpoint",
+                                   side_effect=pipeline_state.IsolationError("interrupted")):
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "interrupted"):
+                    self.approve(repo, head)
+            self.assertEqual(pipeline_state.route_state(repo)["route"]["action"], "resume-checkpoint")
+            result = state_checkpoint.resume_checkpoint(repo)
+            self.assertEqual((result["state"]["phase"], result["state"]["status"]), ("define", "active"))
+            self.assertFalse(baseline.exists())
+            self.assertEqual(run_git(repo, "show", "HEAD:.project/ROADMAP.md").stdout, narrowed)
+
+    def test_define_reslice_refuses_active_entry_amendment_after_intent_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self.repo(tmp, "plan")
+            project = repo / ".project"
+            for name in ("intent/INTENT.md", "plan/PLAN.md"):
+                (project / name).parent.mkdir()
+                (project / name).write_bytes(b"# Approved\n")
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "approved intent and plan draft")
+            head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            pipeline_state.transition_state(
+                repo,
+                {"phase": "plan", "status": "active", "branch": "gsd-path/M002", "archive": None},
+                {"phase": "define", "status": "active"},
+                "plan intent corrections requested",
+            )
+            self.assertEqual(pipeline_state.route_state(repo)["route"].get("mode"), "corrections")
+            roadmap = project / "ROADMAP.md"
+            baseline = project / "ROADMAP.before-reslice.md"
+            baseline.write_bytes(roadmap.read_bytes())
+            roadmap.write_bytes(roadmap.read_text(encoding="utf-8").replace("Goal: second", "Goal: narrowed").encode("utf-8"))
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "active roadmap entry changed: second"):
+                self.approve(repo, head)
+            self.assertTrue(baseline.exists())
+            self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), head)
+
     def test_deferred_reslice_uses_same_selection_and_cleanup_without_committing(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo, head = self.repo(tmp, "roadmap", "null")

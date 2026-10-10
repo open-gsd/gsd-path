@@ -1746,7 +1746,24 @@ def validate_roadmap(
 ) -> Dict[str, object]:
     """Validate roadmap structure and dependency ordering."""
 
-    _require_state(root, "roadmap", "active", project_dir)
+    # A milestone-boundary re-slice keeps its entering inspect or define state.
+    _require_state_one_of(
+        root,
+        {("roadmap", "active"), ("inspect", "active"), ("define", "active")},
+        project_dir,
+    )
+    if _require_pipeline(root, project_dir)["phase"] == "define":
+        if __package__:
+            from . import build_recovery
+        else:
+            import build_recovery
+        try:
+            # Define entered again after intent approval is not a boundary.
+            reopened = (build_recovery.context(root.resolve()) or {}).get("active")
+        except PipelineStateError as error:
+            raise HandoffError(str(error)) from error
+        if reopened:
+            raise HandoffError("roadmap re-slice is not legal after intent approval")
     relative = f"{project_dir}/ROADMAP.md"
     text = _read(root, relative)
     if re.search(r"(?m)^## Wave |^\|\s*Task\s*\||^Files:\s*", text):

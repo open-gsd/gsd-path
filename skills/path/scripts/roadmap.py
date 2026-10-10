@@ -252,7 +252,12 @@ def activate_milestone(text: str, milestone: str) -> str:
     return "".join(lines)
 
 
-def reslice(before: str, candidate: str, phase: str, selected: str) -> str:
+def _entry_identity(block: dict) -> tuple:
+    """Heading, Status, Depends on, Archive and Integrated of one entry."""
+    return block["id"], block["title"], {name: value for name, (_, value) in block["fields"].items()}
+
+
+def reslice(before: str, candidate: str, phase: str, selected: str, amend_active: bool = False) -> str:
     old_blocks = roadmap_blocks(before)
     before_lines = before.splitlines(keepends=True)
     candidate_lines = candidate.splitlines(keepends=True)
@@ -264,6 +269,9 @@ def reslice(before: str, candidate: str, phase: str, selected: str) -> str:
         new = milestone_block(candidate, slug)
         if status == "shipped":
             changed = roadmap_contract(before, slug) != roadmap_contract(candidate, slug)
+        elif status == "active" and amend_active:
+            # Intent is not approved: the scope may change, the identity may not.
+            changed = _entry_identity(block) != _entry_identity(new)
         else:
             changed = before_lines[block["start"]:block["end"]] != candidate_lines[new["start"]:new["end"]]
         if changed:
