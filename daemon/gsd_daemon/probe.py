@@ -37,7 +37,7 @@ REVIEW_VERDICT_RE = re.compile(r"^(?:Wave|Overall|Gap)\s+verdict:\s*([A-Za-z-]+)
                                re.IGNORECASE | re.MULTILINE)
 REVIEW_CYCLE_RE = re.compile(r"^Cycle:\s*(\d+)", re.MULTILINE)
 REVIEW_DEPTH_RE = re.compile(r"^Depth:\s*([A-Za-z-]+)", re.MULTILINE)
-WAVE_REVIEW_FILE_RE = re.compile(r"^wave-\d+\.cycle\d+(?:\.[a-z]+)?\.md$")
+WAVE_REVIEW_FILE_RE = re.compile(r"^wave-(\d+)\.cycle(\d+)(\.[a-z]+)?\.md$")
 GAP_REVIEW_FILE_RE = re.compile(r"^final-gap-\d+\.md$")
 CRITERION_HEADING_RE = re.compile(r"^###\s+(.+?)\s*$", re.MULTILINE)
 CRITERION_ID_RE = re.compile(r"^(SC\d+)\s*—\s*(.*)$")
@@ -677,6 +677,18 @@ def _human_age(seconds: float) -> str:
     return f"{max(0, int(seconds // 3600))}h"
 
 
+def _superseded_reviews(reviews: List[dict]) -> set:
+    """Wave review files that a later cycle of the same wave and lens replaces."""
+    cycles: Dict[tuple, Dict[int, object]] = {}
+    for review in reviews:
+        match = WAVE_REVIEW_FILE_RE.match(str(review.get("file")))
+        if match:
+            wave, cycle, lens = match.groups()
+            cycles.setdefault((int(wave), lens), {})[int(cycle)] = review.get("file")
+    return {name for found in cycles.values()
+            for cycle, name in found.items() if cycle < max(found)}
+
+
 def compute_attention(status: ProjectStatus,
                       now: Optional[datetime] = None) -> List[dict]:
     items: List[dict] = []
@@ -690,7 +702,10 @@ def compute_attention(status: ProjectStatus,
         if task.status and "blocked" in task.status.lower():
             label = f"{task.id} — {task.title}" if task.title else str(task.id)
             items.append({"kind": "blocked", "label": label, "ref": task.id})
+    superseded = _superseded_reviews(status.reviews)
     for review in status.reviews:
+        if review.get("file") in superseded:
+            continue
         verdict = review.get("verdict")
         if isinstance(verdict, str) and verdict.lower() in NEGATIVE_REVIEW_VERDICTS:
             name = review.get("file") or "review"

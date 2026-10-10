@@ -234,6 +234,43 @@ class AttentionTests(unittest.TestCase):
         self.assertEqual(self.kinds(status), ["unverified"])
         self.assertEqual(status.health, "amber")
 
+    def write_wave_reviews(self, *reviews: tuple) -> None:
+        review_dir = self.root / ".project" / "review"
+        review_dir.mkdir()
+        for wave, cycle, lens, verdict in reviews:
+            (review_dir / f"wave-{wave}.cycle{cycle}{lens}.md").write_bytes(
+                f"# Review — wave {wave}, cycle {cycle}\n\n"
+                f"Wave verdict: {verdict}\nCycle: {cycle}\n".encode("utf-8"),
+            )
+
+    def failed_refs(self) -> list:
+        status = probe.probe_project(self.root)
+        return [item["ref"] for item in status.attention if item["kind"] == "failed"]
+
+    def test_blocked_cycle_superseded_by_a_passed_cycle_is_not_attention(self) -> None:
+        make_project(self.root)
+        self.write_wave_reviews((1, 1, "", "blocked"), (1, 2, "", "pass"))
+        self.assertEqual(self.failed_refs(), [])
+        # The earlier cycle stays in the review history.
+        files = [review["file"] for review in probe.probe_project(self.root).reviews]
+        self.assertEqual(files, ["wave-1.cycle1.md", "wave-1.cycle2.md"])
+
+    def test_blocked_newest_cycle_is_one_failed_row_per_wave(self) -> None:
+        make_project(self.root)
+        self.write_wave_reviews(
+            (1, 1, "", "blocked"), (1, 2, "", "blocked"),
+            (2, 1, "", "blocked"), (10, 1, "", "pass"),
+        )
+        self.assertEqual(self.failed_refs(), ["wave-1.cycle2.md", "wave-2.cycle1.md"])
+
+    def test_deep_review_cycles_are_superseded_per_lens(self) -> None:
+        make_project(self.root)
+        self.write_wave_reviews(
+            (1, 1, ".contract", "blocked"), (1, 1, ".adversarial", "blocked"),
+            (1, 2, ".adversarial", "pass"),
+        )
+        self.assertEqual(self.failed_refs(), ["wave-1.cycle1.contract.md"])
+
     def test_stale_active_project_amber(self) -> None:
         make_project(self.root)
         age_tree(self.root / ".project", seconds=3 * 86400)
