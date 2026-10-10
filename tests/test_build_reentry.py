@@ -184,6 +184,55 @@ class BuildReentryTests(unittest.TestCase):
         failure = self.cli("approve", "--kind", "plan", "--expected-head", self.base, success=False)
         self.assertIn("changed wave must be reviewed after build resumes", failure)
 
+    def reviewed_plan_recovery(self):
+        """Commit a reviewed wave under a plan with Config and Dependency notes, then open a plan repair."""
+        plan = self.project / "plan/PLAN.md"
+        plan.write_bytes((
+            "# Plan — demo\n\n## Config\n\n- max_review_cycles: 3\n- wave_budget: none\n"
+            "- review_panel: off\n- finding_skeptics: off\n\n"
+            "## Wave 1 — Deliver the module\n\nGoal: Deliver the module\nReview depth: full\n\n"
+            "## Dependency notes\n\nNone.\n"
+        ).encode("utf-8"))
+        review = self.project / "review/wave-1.cycle1.md"
+        review.write_bytes("Previously recorded wave evidence\n".encode("utf-8"))
+        self.base = self.commit()
+        self.reopen("plan")
+        self.cli("prepare-build-recovery")
+        return plan, review
+
+    def test_cap_and_dependency_note_edits_keep_wave_reviews(self):
+        plan, review = self.reviewed_plan_recovery()
+        text = plan.read_text(encoding="utf-8")
+        plan.write_bytes(text.replace("max_review_cycles: 3", "max_review_cycles: 5")
+                         .replace("wave_budget: none", "wave_budget: 2h")
+                         .replace("None.\n", "T002 follows T001: it reads the module T001 writes.\n")
+                         .encode("utf-8"))
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertEqual(review.read_text(encoding="utf-8"), "Previously recorded wave evidence\n")
+        self.assertEqual(approved["recovery_reviews"], {"restored": [1], "review_again": []})
+
+    def test_governing_config_edit_drops_wave_reviews_and_reports_them(self):
+        plan, review = self.reviewed_plan_recovery()
+        plan.write_bytes(plan.read_text(encoding="utf-8")
+                         .replace("finding_skeptics: off", "finding_skeptics: on").encode("utf-8"))
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertFalse(review.exists())
+        self.assertEqual(approved["recovery_reviews"], {
+            "restored": [],
+            "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
+        })
+
+    def test_changed_task_reports_its_wave_for_review(self):
+        _, review = self.reviewed_plan_recovery()
+        self.task.write_bytes(self.task.read_text(encoding="utf-8")
+                              .replace("Repair the demo.", "Repair the demo output.").encode("utf-8"))
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertFalse(review.exists())
+        self.assertEqual(approved["recovery_reviews"], {
+            "restored": [],
+            "review_again": [{"wave": 1, "reason": "wave 1 task contracts changed"}],
+        })
+
     def test_plan_repair_preserves_real_landed_task_and_proof(self):
         from scripts import isolation, build_state
         self.move("build", "active", "build resumed")

@@ -578,8 +578,9 @@ def checkpoint_approval(
         state, state_before, state_path = pipeline_state.load_state(resolved, project_dir)
         changes, event, subject, body = _approval_details(kind, state, selected_milestone)
         _validate_plan_briefs(resolved, kind, project_dir)
+        recovery_reviews = None
         if kind == "plan" and project_dir == ".project":
-            pipeline_state._build_recovery().restore_unchanged_reviews(resolved)
+            recovery_reviews = pipeline_state._build_recovery().restore_unchanged_reviews(resolved)
         expected = {
             "phase": state.phase,
             "status": state.status,
@@ -642,7 +643,10 @@ def checkpoint_approval(
         if baseline_before is not None:
             journal["baseline_before"] = baseline_before
         pipeline_state._write_json(journal_path, journal)
-        return _resume_checkpoint_locked(resolved, project, journal_path, journal)
+        approved = _resume_checkpoint_locked(resolved, project, journal_path, journal)
+        if recovery_reviews is not None:
+            approved["recovery_reviews"] = recovery_reviews
+        return approved
 
 
 def _checkpoint_deferral_error(repo: Path, kind: str, patch: bool) -> Optional[str]:

@@ -69,6 +69,16 @@ checks landed-task preservation and restored intent ownership, restores review
 evidence only for unchanged contracts, and creates the normal journaled plan
 checkpoint. A failed approval leaves recovery open.
 
+A wave keeps its review evidence when INTENT.md, its own `## Wave N` section,
+its task files, and every other PLAN.md section are byte-identical to the
+recovery base. Two edits are exempt: the `max_review_cycles` and `wave_budget`
+lines in `## Config`, and all of `## Dependency notes`. Any other non-wave
+edit drops the evidence of every wave. The approval result reports this in
+`recovery_reviews`: `restored` lists the waves that kept their evidence, and
+`review_again` lists each wave that lost it, with the reason. Review every
+`review_again` wave again after build resumes; completion refuses a wave
+without a passing review.
+
 Return through `plan/done → build/active` with event `build started`. The dispatch
 driver uses a separate record directory for this recovery base, while retaining
 the milestone budget ledger. Resume only from the new approved task inventory.
