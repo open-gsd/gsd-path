@@ -1196,6 +1196,64 @@ class IsolationTests(unittest.TestCase):
                 status_before,
             )
 
+    def test_allowed_changes_accept_files_under_a_declared_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolation.validate_allowed_changes(
+                repo, base, {"fixtures/set/a.json", "fixtures/set/deep/b.json"}, {"fixtures/set"}
+            )
+            # A sibling, the repository root and a path below a base file stay undeclared.
+            for path, declared in (
+                ("fixtures/setx.json", "fixtures/set"),
+                ("fixtures/set/a.json", "."),
+                ("src/app.py/a.json", "src/app.py"),
+            ):
+                with self.subTest(path=path, declared=declared):
+                    with self.assertRaises(isolation.IsolationError) as raised:
+                        isolation.validate_allowed_changes(repo, base, {path}, {declared})
+                    self.assertIn(f"unexpected paths: {path};", str(raised.exception))
+
+    def refuse_crlf_staging(self, repo: Path) -> None:
+        """Make `git add` fail for a CRLF file; status and diff only warn."""
+        git(repo, "config", "core.autocrlf", "input")
+        git(repo, "config", "core.safecrlf", "true")
+
+    def test_land_staging_failure_reports_git_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.refuse_crlf_staging(repo)
+            isolation.isolate_task(repo, base, "T001", 1)
+            self.write(repo, "src/app.py", "print('done')\r\n")
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                r"could not stage src/app\.py: .*CRLF would be replaced by LF",
+            ):
+                isolation.land(
+                    repo, repo, base, "T001", "add greeting", ".project/tasks/T001.md", ["src/app.py"]
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+    def test_checkpoint_staging_failure_reports_git_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.refuse_crlf_staging(repo)
+            self.write(repo, ".project/STATE.md", "roadmap done\r\n")
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                r"could not stage \.project/STATE\.md: .*CRLF would be replaced by LF",
+            ):
+                isolation.checkpoint(
+                    repo, base, "roadmap: program roadmap approved",
+                    "Why: approved roadmap checkpoint", [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
     def test_failed_commit_restores_task_and_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
@@ -2831,6 +2889,56 @@ class RecoverTests(unittest.TestCase):
         commit = self.land()
         self.assertEqual(self.recover()["verdict"], "recovered")
         self.assertEqual(self.recover()["commit"], commit)
+
+    def declare_directory(self) -> tuple[str, ...]:
+        """Move the base to a task that declares `fixtures/set`, a directory."""
+        files = ("src/app.py", "fixtures/set")
+        self.write_task("pending", "null", files=files)
+        git(self.repo, "commit", "-q", "-a", "-m", "declare a directory")
+        self.base = git(self.repo, "rev-parse", "HEAD")
+        return files
+
+    def test_land_and_recover_accept_files_under_a_declared_directory(self) -> None:
+        files = self.declare_directory()
+        self.write_task(
+            "in-progress", self.base, agent="coder", worktree=str(self.repo), files=files
+        )
+        (self.repo / "fixtures/set").mkdir(parents=True)
+        (self.repo / "fixtures/set/a.json").write_bytes(b"{}\n")
+        with (self.repo / ".project/tasks/T001.md").open("a") as log:
+            log.write("- done\n")
+
+        commit = isolation.land(
+            self.repo, self.repo, self.base, "T001", "add greeting",
+            ".project/tasks/T001.md", list(files),
+        )["commit"]
+
+        self.assertEqual(
+            git(self.repo, "show", "--name-only", "--format=", commit).splitlines(),
+            [".project/tasks/T001.md", "fixtures/set/a.json"],
+        )
+        report = self.recover()
+        self.assertEqual((report["verdict"], report["commit"]), ("recovered", commit))
+
+    def test_recovery_rejects_a_sibling_of_a_declared_directory(self) -> None:
+        files = self.declare_directory()
+        self.write_task("done", self.base, agent="coder", files=files, log="- done\n")
+        (self.repo / "fixtures").mkdir()
+        (self.repo / "fixtures/setx.json").write_bytes(b"{}\n")
+        changed = {".project/tasks/T001.md", "fixtures/setx.json"}
+        git(self.repo, "add", *sorted(changed))
+        git(
+            self.repo, "commit", "-q", "-m", "T001: add greeting", "-m",
+            pipeline_git.task_commit_body(".project/tasks/T001.md", changed, self.base),
+        )
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn(
+            "commit touches undeclared paths: fixtures/setx.json",
+            report["rejected"][0]["reason"],
+        )
 
     def test_recovery_rejects_whitespace_changed_retained_branch(self) -> None:
         source = self.land_parallel(b"print('hello')\n")

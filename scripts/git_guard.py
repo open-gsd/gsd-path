@@ -19,7 +19,7 @@ _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py").is_file() else _HERE))
 sys.dont_write_bytecode = True  # a hook must not leave __pycache__ in the worktree
 try:
-    from isolation import BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, task_frontmatter
+    from isolation import BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, task_frontmatter, undeclared_paths
     from pipeline_git import is_ship_subject, ship_body_matches, ship_commit_body, task_commit_body
     from pipeline_state import _completion_status
     import members
@@ -509,7 +509,7 @@ def product_commit_violations(entries, subject, body):
         if error:
             problems.append(error)
         if contract_paths is not None:
-            stray = sorted(set(staged) - contract_paths)
+            stray = undeclared_paths(repo_root(), base, set(staged), contract_paths)
             if stray:
                 problems.append("undeclared paths: " + ", ".join(stray))
         if body != task_commit_body(task_file, staged, base).strip():

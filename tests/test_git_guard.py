@@ -702,6 +702,30 @@ class GitGuardEndToEndTests(unittest.TestCase):
         landing = self.run_guard("T001: Demo task", self.landing_body(head, "plan #1.py"))
         self.assertEqual(0, landing.returncode, landing.stderr)
 
+    def test_landing_accepts_a_file_under_a_declared_directory(self):
+        self.enter_build()
+        task = self.repo / ".project" / "tasks" / "T001-demo.md"
+        task.write_bytes(
+            task.read_text(encoding="utf-8").replace("  - app.py", "  - fixtures/set").encode("utf-8"),
+        )
+        self.git("add", "-A", "--", ".project/tasks/T001-demo.md")
+        self.commit("build: declare a directory")
+        head = self.head()
+        (self.repo / "fixtures" / "set").mkdir(parents=True)
+        (self.repo / "fixtures" / "set" / "a.json").write_bytes(b"{}\n")
+        self.stamp_task(head)
+        self.git("add", "-A", "--", ".project/tasks/T001-demo.md", "fixtures/set")
+        landing = self.run_guard("T001: Demo task", self.landing_body(head, "fixtures/set/a.json"))
+        self.assertEqual(0, landing.returncode, landing.stderr)
+
+        (self.repo / "fixtures" / "setx.json").write_bytes(b"{}\n")
+        self.git("add", "-A", "--", "fixtures/setx.json")
+        sibling = self.run_guard(
+            "T001: Demo task", self.landing_body(head, "fixtures/set/a.json", "fixtures/setx.json")
+        )
+        self.assertEqual(1, sibling.returncode)
+        self.assertIn("undeclared paths: fixtures/setx.json", sibling.stderr)
+
     def test_build_entry_commit_must_stay_project_only(self):
         self.enter_build(phase="plan")
         state = self.repo / ".project" / "STATE.md"

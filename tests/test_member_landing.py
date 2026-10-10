@@ -237,6 +237,38 @@ class MemberLandingTests(unittest.TestCase):
         self.assertEqual(self.bound_tip(), self.member_base)
         self.assertFalse(self.journal().exists())
 
+    def land_directory_task(self, changed: str):
+        """Land T002, which declares the directory `fixtures/set`, with one changed file."""
+        task_file = ".project/tasks/T002-add.md"
+        task = TASK.replace("T001", "T002").replace("Change app", "Add fixtures").replace(
+            "app.py", "fixtures/set")
+        (self.coordinator / task_file).write_bytes(task.encode("utf-8"))
+        git(self.coordinator, "add", task_file)
+        git(self.coordinator, "commit", "-q", "-m", "add directory task")
+        base = git(self.coordinator, "rev-parse", "HEAD")
+        sidecar = Path(isolation.isolate_member_task(self.coordinator, "web", "T002")["worktree"])
+        isolation.activate_member_task(self.coordinator, "web", "T002", "coder", task_file, base)
+        (sidecar / changed).parent.mkdir(parents=True, exist_ok=True)
+        (sidecar / changed).write_bytes(b"{}\n")
+        return task_file, isolation.land_member(
+            self.coordinator, "web", "T002", "Add fixtures", task_file, base, self.member_base)
+
+    def test_member_file_under_a_declared_directory_lands_and_is_proven(self) -> None:
+        task_file, result = self.land_directory_task("fixtures/set/a.json")
+        self.assertEqual(self.bound_tip(), result["landing"])
+        self.assertEqual(
+            git(self.bound, "diff-tree", "--no-commit-id", "--name-only", "-r", result["landing"]),
+            "fixtures/set/a.json")
+        proven = isolation.verify_landed_task_files(
+            self.coordinator, [self.coordinator / task_file], ".project/tasks", result["commit"])
+        self.assertEqual([(task["verdict"], task["landing"]) for task in proven["tasks"]],
+                         [("recovered", result["landing"])])
+
+    def test_member_sibling_of_a_declared_directory_is_refused(self) -> None:
+        with self.assertRaisesRegex(isolation.IsolationError, "undeclared paths: fixtures/setx.json"):
+            self.land_directory_task("fixtures/setx.json")
+        self.assertEqual(self.bound_tip(), self.member_base)
+
     def test_coder_commit_needs_the_member_landing_body(self) -> None:
         self.edit()
         git(self.sidecar, "commit", "-q", "--no-verify", "-am", "T001: Change app", "-m", "free text")
