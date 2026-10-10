@@ -86,7 +86,7 @@ def _load_diagnose_modules():
             pipeline_git,
             pipeline_state,
         )
-    except ModuleNotFoundError as error:
+    except ImportError as error:  # a foreign `scripts` package
         if error.name not in {
             "scripts",
             "scripts.archive_milestone",
@@ -147,7 +147,7 @@ else:
             raise
         try:
             from scripts import pipeline_undo
-        except ModuleNotFoundError as error:
+        except ImportError as error:  # a foreign `scripts` package
             if error.name not in {"scripts", "scripts.pipeline_undo"}:
                 raise
             shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"

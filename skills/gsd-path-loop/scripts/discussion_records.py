@@ -33,7 +33,7 @@ def _load_pipeline_modules():
     try:
         from scripts import archive_milestone, pipeline_state, _common
         return _common, archive_milestone, pipeline_state
-    except ModuleNotFoundError as error:
+    except ImportError as error:  # a foreign `scripts` package
         if error.name not in {
             "scripts",
             "scripts.archive_milestone",

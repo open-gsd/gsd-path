@@ -525,6 +525,57 @@ class PipelineDiagnoseTests(unittest.TestCase):
                     self.assertNotEqual(completed.returncode, 0)
                     self.assertIn("missing_helper_dependency", completed.stderr)
 
+    def test_bundled_helpers_ignore_a_foreign_scripts_namespace(self) -> None:
+        # pywin32 puts an unrelated `scripts` directory on sys.path (#360).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "foreign" / "scripts").mkdir(parents=True)
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(root / "foreign")
+            bundle = PROJECT_ROOT / "skills" / "gsd-path-forensics" / "scripts"
+            # A bundle that has every helper except pipeline_undo.
+            shutil.copytree(PROJECT_ROOT / "scripts", root / "gsd-path" / "scripts")
+            shutil.copytree(PROJECT_ROOT / "scripts", root / "lone" / "scripts")
+            (root / "lone" / "scripts" / "pipeline_undo.py").unlink()
+            for target in (
+                bundle / "pipeline_diagnose.py",
+                bundle / "pipeline_undo.py",
+                bundle / "discussion_records.py",
+                root / "lone" / "scripts" / "pipeline_diagnose.py",
+            ):
+                with self.subTest(helper=str(target)):
+                    completed = subprocess.run(
+                        [sys.executable, "-B", str(target), "--help"],
+                        cwd=root,
+                        env=environment,
+                        capture_output=True,
+                        encoding="utf-8", errors="replace",
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertIn("usage:", completed.stdout)
+
+    def test_bundled_helpers_surface_a_broken_scripts_package_module(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / "scripts"
+            package.mkdir()
+            (package / "archive_milestone.py").write_bytes(
+                "from os import missing_helper_name\n".encode("utf-8"),
+            )
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = tmp
+            bundle = PROJECT_ROOT / "skills" / "gsd-path-forensics" / "scripts"
+            for name in ("pipeline_diagnose.py", "pipeline_undo.py", "discussion_records.py"):
+                with self.subTest(helper=name):
+                    completed = subprocess.run(
+                        [sys.executable, "-B", str(bundle / name), "--help"],
+                        cwd=tmp,
+                        env=environment,
+                        capture_output=True,
+                        encoding="utf-8", errors="replace",
+                    )
+                    self.assertNotEqual(completed.returncode, 0)
+                    self.assertIn("missing_helper_name", completed.stderr)
+
     def test_cli_diagnose_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
