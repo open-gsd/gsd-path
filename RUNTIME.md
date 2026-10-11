@@ -127,7 +127,11 @@ with `another dispatch_driver invocation holds the lock`; wait for the
 active call to return before retrying. Bookkeeping also blocks if an
 in-progress primary task has no open dispatch record.
 
-Verify output is saved in `verify.json`. A `verify-record` ledger entry is
+Verify output is saved in `verify.json`. `finish` also runs the Verify of each
+earlier-wave task that shares a file with the task, under the
+[wave loop](skills/gsd-path/references/build-native.md#wave-loop) rule; those
+runs are saved under `regressions` and a failure blocks the landing. A task
+with a `Heavy: yes` regression Verify counts as heavy. A `verify-record` ledger entry is
 written only when the landing commit's parent equals the recorded task base;
 a later parallel landing can therefore have no ledger entry.
 
