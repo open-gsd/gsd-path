@@ -184,12 +184,12 @@ class BuildReentryTests(unittest.TestCase):
         failure = self.cli("approve", "--kind", "plan", "--expected-head", self.base, success=False)
         self.assertIn("changed wave must be reviewed after build resumes", failure)
 
-    def reviewed_plan_recovery(self, skeptics="off", cap="- max_review_cycles: 3\n"):
+    def reviewed_plan_recovery(self, skeptics="off", cap="- max_review_cycles: 3\n", panel="- review_panel: off\n"):
         """Commit a reviewed wave under a plan with Config and Dependency notes, then open a plan repair."""
         plan = self.project / "plan/PLAN.md"
         plan.write_bytes((
             "# Plan — demo\n\n## Config\n\n" + cap + "- wave_budget: none\n"
-            "- review_panel: off\n" + (f"- finding_skeptics: {skeptics}\n" if skeptics else "") + "\n"
+            + panel + (f"- finding_skeptics: {skeptics}\n" if skeptics else "") + "\n"
             "## Wave 1 — Deliver the module\n\nGoal: Deliver the module\nReview depth: full\n\n"
             "## Dependency notes\n\nNone.\n"
         ).encode("utf-8"))
@@ -259,7 +259,7 @@ class BuildReentryTests(unittest.TestCase):
         self.assertFalse(review.exists())
         self.assertEqual(approved["recovery_reviews"], {
             "restored": [],
-            "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
+            "review_again": [{"wave": 1, "reason": "PLAN.md `review_panel` setting changed"}],
         })
 
     def test_cap_value_that_closes_an_open_comment_drops_wave_reviews(self):
@@ -284,6 +284,20 @@ class BuildReentryTests(unittest.TestCase):
         approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
         self.assertEqual(review.read_text(encoding="utf-8"), "Previously recorded wave evidence\n")
         self.assertEqual(approved["recovery_reviews"], {"restored": [1], "review_again": []})
+
+    def test_review_panel_line_added_in_dependency_notes_drops_wave_reviews(self):
+        from scripts import review_panel
+        plan, review = self.reviewed_plan_recovery(panel="")
+        plan.write_bytes(plan.read_text(encoding="utf-8")
+                         .replace("None.\n", "- review_panel: detected\n").encode("utf-8"))
+        self.assertEqual(review_panel.extract_config_value(
+            plan.read_text(encoding="utf-8"), review_panel.PLAN_LINE, "PLAN.md"), "detected")
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertFalse(review.exists())
+        self.assertEqual(approved["recovery_reviews"], {
+            "restored": [],
+            "review_again": [{"wave": 1, "reason": "PLAN.md `review_panel` setting changed"}],
+        })
 
     def assert_separator_in_a_cap_line_drops_wave_reviews(self, separator):
         plan, review = self.reviewed_plan_recovery(skeptics=None)

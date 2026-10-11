@@ -75,8 +75,9 @@ the recovery base. Two edits are exempt: the value of the `max_review_cycles`
 and `wave_budget` lines in `## Config`, and all of `## Dependency notes`. In
 `## Config` only those two values may change; any other edit there, a comment
 edit included, drops the evidence of every wave, as does any other non-wave
-edit. The approval result reports this in
-`recovery_reviews`: `restored` lists the waves that kept their evidence, and
+edit. A `- review_panel:` line that is added, removed, or changed anywhere in
+PLAN.md also drops the evidence of every wave. The approval result reports
+this in `recovery_reviews`: `restored` lists the waves that kept their evidence, and
 `review_again` lists each wave that lost it, with the reason. Review every
 `review_again` wave again after build resumes; completion refuses a wave
 without a passing review.

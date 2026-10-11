@@ -311,6 +311,9 @@ def stale_review_reasons(repo: Path, recovery: dict, waves: set[int]) -> dict[in
         return dict.fromkeys(waves, "INTENT.md changed")
     old_plan = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/plan/PLAN.md") or ""
     new_plan = state._read_real_file(project / "plan/PLAN.md", "PLAN.md")
+    panel_lines = r"(?m)^-[ \t]*review_panel:.*$"
+    if re.findall(panel_lines, old_plan) != re.findall(panel_lines, new_plan):
+        return dict.fromkeys(waves, "PLAN.md `review_panel` setting changed")
 
     def sections(text):
         return {match[1]: match[2] for match in re.finditer(
