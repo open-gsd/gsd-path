@@ -646,10 +646,10 @@ def abandon_contract_violations(subject, body, abandon):
 
 
 def recorded_default_branch():
-    """STATE default_branch in the worktree; None when unrecorded or unreadable."""
+    """STATE default_branch in the worktree: main without the field; None without a readable STATE."""
     try:
         content = (repo_root() / ".project" / "STATE.md").read_text(encoding="utf-8")
-        name = frontmatter_of(content, "STATE.md").get("default_branch", "")
+        name = frontmatter_of(content, "STATE.md").get("default_branch", "main")
     except (OSError, ValueError, subprocess.CalledProcessError):
         return None
     return name if valid_default_branch(name) else None

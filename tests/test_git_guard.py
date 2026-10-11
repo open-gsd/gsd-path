@@ -507,16 +507,32 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("config", "init.defaultBranch", "main")
         self.assert_integration_merge_allowed("main")
 
-    def test_integration_merge_honors_a_configured_default_branch(self):
+    # A STATE file without default_branch means main. Live configuration does not change it.
+    def test_integration_merge_ignores_a_configured_default_branch(self):
         self.git("config", "init.defaultBranch", "trunk")
-        self.assert_integration_merge_allowed("trunk")
+        self.assert_integration_merge_allowed("main")
 
-    def test_integration_merge_honors_the_origin_default_branch(self):
+    def test_integration_merge_ignores_the_origin_default_branch(self):
         self.git("config", "init.defaultBranch", "main")
-        self.git("branch", "-m", "develop")
         self.git("update-ref", "refs/remotes/origin/develop", "HEAD")
         self.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
-        self.assert_integration_merge_allowed("develop")
+        result = self.integration_merge("develop")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("into main", result.stderr)
+
+    def test_default_branch_follows_live_configuration_only_without_a_state_file(self):
+        self.git("config", "init.defaultBranch", "trunk")
+
+        def target():
+            return subprocess.run(
+                [sys.executable, "-c", "import git_guard; print(git_guard.default_branch())"],
+                cwd=self.repo, env={**os.environ, "PYTHONPATH": str(SCRIPT.parent)},
+                capture_output=True, encoding="utf-8", errors="replace", check=True,
+            ).stdout.strip()
+
+        self.assertEqual(target(), "main")
+        (self.repo / ".project" / "STATE.md").unlink()
+        self.assertEqual(target(), "trunk")
 
     def test_integration_merge_honors_the_default_branch_state_records(self):
         # STATE wins over a origin/HEAD that moved after initialization.
