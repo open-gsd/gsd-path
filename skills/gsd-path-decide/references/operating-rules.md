@@ -82,7 +82,9 @@ bundles this file; spawned agents follow their role brief instead.
   `isolation.py attest` may stand in for it: one `.project/`-only commit that
   names the base, the attested HEAD, the declared files that changed, the
   task Verify recorded as passing at that HEAD, and the ruling verbatim.
-  `recover` reports it as `attested`, never as a proven landing.
+  `recover` reports it as `attested`, never as a proven landing. Attestation
+  matches the declared files literally: work that is only below a declared
+  directory can land but cannot be attested.
 - All pipeline work for a milestone lives on `gsd-path/M00N` (M001, M002,
   …) bound in STATE.branch. The next milestone binds a new unused
   `gsd-path/M00N` at the remote default after the previous ship integrates.
