@@ -23,7 +23,12 @@ RECOVERY_KEYS = frozenset({"base", "branch", "kind", "source"})
 
 
 # A cap line that holds a comment marker is not exempt: the comment can hide a governing key.
-CAP_LINES = re.compile(r"(?m)^-[ \t]*(?:max_review_cycles|wave_budget):[^<>\n]*$\n?")
+CAP_LINE = re.compile(r"-[ \t]*(?:max_review_cycles|wave_budget):[^<>]*")
+
+
+def without_cap_lines(config):
+    # Split as review_findings.parse_config does, so no line separator hides a key in a cap line.
+    return "".join(line for line in config.splitlines(keepends=True) if not CAP_LINE.fullmatch(line))
 
 
 def runtime():
@@ -320,7 +325,7 @@ def stale_review_reasons(repo: Path, recovery: dict, waves: set[int]) -> dict[in
     def governing(plan):
         # Non-wave settings govern every wave, including coverage and surfaces. Caps only bound
         # later work and Dependency notes are prose, so neither changes what a passed review judged.
-        return {title: CAP_LINES.sub("", body) if title == "Config" else body
+        return {title: without_cap_lines(body) if title == "Config" else body
                 for title, body in plan.items()
                 if not title.startswith("Wave ") and title != "Dependency notes"}
 

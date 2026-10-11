@@ -189,7 +189,7 @@ class BuildReentryTests(unittest.TestCase):
         plan = self.project / "plan/PLAN.md"
         plan.write_bytes((
             "# Plan — demo\n\n## Config\n\n- max_review_cycles: 3\n- wave_budget: none\n"
-            f"- review_panel: off\n- finding_skeptics: {skeptics}\n\n"
+            "- review_panel: off\n" + (f"- finding_skeptics: {skeptics}\n" if skeptics else "") + "\n"
             "## Wave 1 — Deliver the module\n\nGoal: Deliver the module\nReview depth: full\n\n"
             "## Dependency notes\n\nNone.\n"
         ).encode("utf-8"))
@@ -234,6 +234,24 @@ class BuildReentryTests(unittest.TestCase):
             "restored": [],
             "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
         })
+
+    def assert_separator_in_a_cap_line_drops_wave_reviews(self, separator):
+        plan, review = self.reviewed_plan_recovery(skeptics=None)
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(
+            "- wave_budget: none\n", f"- wave_budget: none{separator}- finding_skeptics: on\n",
+        ).encode("utf-8"))
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertFalse(review.exists())
+        self.assertEqual(approved["recovery_reviews"], {
+            "restored": [],
+            "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
+        })
+
+    def test_form_feed_inside_a_cap_line_drops_wave_reviews(self):
+        self.assert_separator_in_a_cap_line_drops_wave_reviews("\f")
+
+    def test_line_separator_inside_a_cap_line_drops_wave_reviews(self):
+        self.assert_separator_in_a_cap_line_drops_wave_reviews("\u2028")
 
     def test_interrupted_approval_reports_dropped_reviews_on_resume(self):
         from scripts import pipeline_state, state_checkpoint
