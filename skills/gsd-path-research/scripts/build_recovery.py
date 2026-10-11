@@ -22,7 +22,8 @@ MARKER = "build recovery: "
 RECOVERY_KEYS = frozenset({"base", "branch", "kind", "source"})
 
 
-CAP_LINES = re.compile(r"(?m)^-[ \t]*(?:max_review_cycles|wave_budget):.*\n?")
+# A cap line that holds a comment marker is not exempt: the comment can hide a governing key.
+CAP_LINES = re.compile(r"(?m)^-[ \t]*(?:max_review_cycles|wave_budget):[^<>\n]*$\n?")
 
 
 def runtime():

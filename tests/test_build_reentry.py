@@ -184,12 +184,12 @@ class BuildReentryTests(unittest.TestCase):
         failure = self.cli("approve", "--kind", "plan", "--expected-head", self.base, success=False)
         self.assertIn("changed wave must be reviewed after build resumes", failure)
 
-    def reviewed_plan_recovery(self):
+    def reviewed_plan_recovery(self, skeptics="off"):
         """Commit a reviewed wave under a plan with Config and Dependency notes, then open a plan repair."""
         plan = self.project / "plan/PLAN.md"
         plan.write_bytes((
             "# Plan — demo\n\n## Config\n\n- max_review_cycles: 3\n- wave_budget: none\n"
-            "- review_panel: off\n- finding_skeptics: off\n\n"
+            f"- review_panel: off\n- finding_skeptics: {skeptics}\n\n"
             "## Wave 1 — Deliver the module\n\nGoal: Deliver the module\nReview depth: full\n\n"
             "## Dependency notes\n\nNone.\n"
         ).encode("utf-8"))
@@ -215,6 +215,19 @@ class BuildReentryTests(unittest.TestCase):
         plan, review = self.reviewed_plan_recovery()
         plan.write_bytes(plan.read_text(encoding="utf-8")
                          .replace("finding_skeptics: off", "finding_skeptics: on").encode("utf-8"))
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertFalse(review.exists())
+        self.assertEqual(approved["recovery_reviews"], {
+            "restored": [],
+            "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
+        })
+
+    def test_comment_opened_on_a_cap_line_drops_wave_reviews(self):
+        plan, review = self.reviewed_plan_recovery(skeptics="on")
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(
+            "- max_review_cycles: 3\n- wave_budget: none\n- review_panel: off\n- finding_skeptics: on\n",
+            "- wave_budget: none <!--\n- review_panel: off\n- finding_skeptics: on\n- max_review_cycles: 3 -->\n",
+        ).encode("utf-8"))
         approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
         self.assertFalse(review.exists())
         self.assertEqual(approved["recovery_reviews"], {
