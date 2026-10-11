@@ -787,7 +787,7 @@ class DispatchDriverTests(unittest.TestCase):
         trace = root.parent / "t001-verify-runs"
         verify_t001 = f"python3 src/app.py && echo ran >> {shlex.quote(trace.as_posix())}"
         self.fixture(root, wave_t002=2, files_t002=files_t002, verify_t001=verify_t001,
-                     verify_t002=verify_t002 or verify_t001)
+                     verify_t002=(verify_t002 or "{t001}").replace("{t001}", verify_t001))
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         self.assertEqual(trace.read_text(encoding="utf-8").splitlines(), ["ran"])  # the wave 1 landing
         return trace, verify_t001
@@ -853,6 +853,19 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T002"])
         # One line from the wave 1 landing, one from T002's own Verify, none from a regression run.
         self.assertEqual(trace.read_text(encoding="utf-8").splitlines(), ["ran", "ran"])
+
+    def test_own_verify_that_hides_an_earlier_command_failure_does_not_replace_its_rerun(self) -> None:
+        root = self.root
+        # T002's Verify holds T001's command as a fix-task subshell block, and `|| true` drops its failure.
+        self.later_wave_fixture(root, "(\n{t001}\n) || true")
+        head = self.head(root)
+        receipt = self.round(root, "--wait", "60", wave=2, mode="badverify")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        blocked = receipt["blocked"][0]
+        self.assertEqual(blocked["reason"], "regression Verify of T001 failed in the isolate")
+        self.assertEqual(blocked["execution"]["exit_code"], 0)  # the own Verify passed
+        self.assertEqual(self.head(root), head)
+        self.assertNotIn("status: done", (root / ".project/tasks/T002-demo.md").read_text(encoding="utf-8"))
 
     def test_round_without_wait_returns_in_flight_and_settles_later(self) -> None:
         root = self.root
@@ -1616,7 +1629,9 @@ class DispatchDriverTests(unittest.TestCase):
 
     def test_fix_tasks_writes_one_task_per_batch_and_the_next_round_lands_it(self) -> None:
         root = self.root
-        self.fixture(root)
+        trace = root.parent / "t001-verify-runs"  # one line for each run of T001's Verify
+        verify_t001 = f"python3 src/app.py && echo ran >> {shlex.quote(trace.as_posix())}"
+        self.fixture(root, verify_t001=verify_t001)
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
         receipt = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
@@ -1629,7 +1644,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertIn("— found: wrong output, src/app.py:1", text)
         self.assertEqual(text.count("1. The demo command prints hello."), 1)
         self.assertNotIn("2. The demo command prints hello.", text)
-        self.assertEqual(dispatch_driver._common.task_verify_command(text), "set -e\n(\npython3 src/app.py\n)")
+        self.assertEqual(dispatch_driver._common.task_verify_command(text), f"set -e\n(\n{verify_t001}\n)")
         self.assertEqual(receipt["plan_wave"], 2)
         self.assertIn("## Wave 2 — fix wave 1 cycle 1 review findings", (root / ".project/plan/PLAN.md").read_text(encoding="utf-8"))
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review and fix tasks")
@@ -1665,7 +1680,8 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual([item["task"] for item in again["landed"]], ["T003"])
         landed_text = (root / receipt["created"][0]["path"]).read_text(encoding="utf-8")
         self.assertIn("status: done", landed_text)
-        # The fix task's own Verify already runs T001's command in a subshell; landing does not run it again.
+        # The fix task's own Verify runs T001's command in a subshell; the landing ran it one time, not two.
+        self.assertEqual(trace.read_text(encoding="utf-8").splitlines(), ["ran", "ran"])  # wave 1, then the fix
         self.assertNotIn("regression Verify", landed_text)
 
     def test_fix_tasks_lint_explicitly_selects_its_plan_track(self) -> None:

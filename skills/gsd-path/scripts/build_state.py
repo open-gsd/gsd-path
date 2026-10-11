@@ -511,19 +511,23 @@ def regression_verifies(
 
     One entry per distinct command, with every source task that has it. A command
     that the task's own Verify already runs is left out: an identical command, or
-    one inside it as a fix-task subshell block.
+    a dependency's command when the own Verify is exactly the fix-task Verify of
+    the task's dependencies. Text that only contains a command proves nothing.
     """
 
     tasks = [
         _parse_task(path, path.relative_to(repo).as_posix())
         for path in sorted((repo / project_dir / "tasks").glob("*.md"))
     ]
-    task = next((item for item in tasks if item.task_id == task_id), None)
+    by_id = {item.task_id: item for item in tasks}
+    task = by_id.get(task_id)
     if task is None:
         raise BuildStateError("unknown-task", f"task file is missing: {task_id}")
+    composed = [by_id[dependency].verify for dependency in task.deps if dependency in by_id]
+    covered = {own, *(composed if own == _common.fix_verify(composed) else ())}
     sources: Dict[str, List[str]] = {}
     for other in _regression_sources(tasks, task):
-        if other.verify and other.verify != own and _common.verify_subshell(other.verify) not in own:
+        if other.verify and other.verify not in covered:
             sources.setdefault(other.verify, []).append(other.task_id)
     return [{"tasks": task_ids, "command": command} for command, task_ids in sources.items()]
 

@@ -2084,9 +2084,7 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
                 if source not in texts:
                     raise DriverStop(f"fix batch names unknown task {source}")
             task_id = next_task_id(tasks_dir)
-            verify = "set -e\n" + "\n".join(  # each source Verify in its own subshell
-                _common.verify_subshell(command)
-                for command in dict.fromkeys(_common.task_verify_command(texts[source]) for source in sources))
+            verify = _common.fix_verify(_common.task_verify_command(texts[source]) for source in sources)
             heavy = any(re.search(r"(?m)^Heavy:\s*yes", texts[source]) for source in sources)
             criteria = "\n".join(f"{index}. {criterion}" for index, criterion in
                                  enumerate(dict.fromkeys(group["criterion"] for group in batch_groups), 1))

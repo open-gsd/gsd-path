@@ -681,8 +681,8 @@ archive: null
         )
 
     def write_verify_task(self, task_id: str, wave: int, files: tuple[str, ...], command: str, *,
-                          status: str = "done", repo: str = "") -> None:
-        text = task_text(task_id, f"Task {task_id}", wave, (), files, status=status)
+                          status: str = "done", repo: str = "", deps: tuple[str, ...] = ()) -> None:
+        text = task_text(task_id, f"Task {task_id}", wave, deps, files, status=status)
         text = text.replace("\n## Log", f"\n## Verify\n\n```bash\n{command}\n```\n\n## Log")
         self.write_task(task_id, text.replace("files: [", f"repo: {repo}\nfiles: [") if repo else text)
 
@@ -705,22 +705,40 @@ archive: null
                 {"tasks": ["T006"], "command": "check three"},
             ],
         )
-        # The own Verify already runs an identical command, alone or as a fix-task subshell block.
+        # The own Verify already runs an identical command.
         self.assertEqual(
             build_state.regression_verifies(self.repo, "T007", "check one"),
             [{"tasks": ["T006"], "command": "check three"}],
         )
-        self.assertEqual(
-            build_state.regression_verifies(
-                self.repo, "T007", "set -e\n(\ncheck one\n)\n(\ncheck three\n)"
-            ),
-            [],
-        )
+        # Text that holds a command does not prove that it runs or that its failure counts.
+        for own in ("set -e\n(\ncheck one\n) || true\n(\ncheck three\n)",
+                    "set -e\n(\ncheck one\n)\n(\ncheck three\n)"):  # T007 has no deps: not a fix task
+            self.assertEqual(
+                [item["command"] for item in build_state.regression_verifies(self.repo, "T007", own)],
+                ["check one", "check three"],
+                own,
+            )
         # A member task overlaps only tasks of its own repository.
         self.assertEqual(
             build_state.regression_verifies(self.repo, "T010", "check own member"),
             [{"tasks": ["T005"], "command": "check member"}],
         )
+
+    def test_regression_verifies_skips_only_the_sources_of_an_exact_fix_task_verify(self) -> None:
+        self.write_verify_task("T001", 1, ("shared.py",), "check one")
+        self.write_verify_task("T002", 1, ("shared.py",), "check two")
+        self.write_verify_task("T003", 1, ("shared.py",), "check three")
+        self.write_verify_task("T004", 2, ("shared.py",), "unused", status="in-progress", deps=("T001", "T002"))
+        generated = _common.fix_verify(["check one", "check two"])  # what fix-tasks writes for deps T001, T002
+
+        def reruns(own: str) -> list:
+            return [item["command"] for item in build_state.regression_verifies(self.repo, "T004", own)]
+
+        self.assertEqual(reruns(generated), ["check three"])
+        # Any other shape runs every earlier command again.
+        for own in (generated + " || true", generated + "\ntrue", generated.replace("set -e\n", ""),
+                    _common.fix_verify(["check one"]), _common.fix_verify(["check one", "check three"])):
+            self.assertEqual(reruns(own), ["check one", "check two", "check three"], own)
 
     def test_ready_marks_a_task_heavy_when_its_landing_reruns_a_heavy_verify(self) -> None:
         self.write_plan(

@@ -293,8 +293,11 @@ dispatch contract and perform steps 1–5 by hand.
      the isolate. Authoritative Verify is the task's own Verify, then the
      Verify of each `done` task of an earlier wave, in the same repo, that
      shares a declared file with this task. `finish` selects those commands;
-     never select them by hand. A command that the own Verify already runs
-     does not run again. A failed earlier-task Verify blocks the landing as a
+     never select them by hand. An earlier command does not run again in two
+     cases only: it is identical to the own Verify, or the own Verify is the
+     unchanged Verify that `fix-tasks` wrote from the task's `deps` and the
+     command belongs to one of them. A Verify that only contains the command
+     text does not replace the rerun. A failed earlier-task Verify blocks the landing as a
      failed own Verify does. The receipt (`regressions`) and the task Log
      entry `orchestrator regression Verify of <task id>` name the earlier
      task. The ledger records only the own command.
