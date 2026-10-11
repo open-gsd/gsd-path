@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or idea
+    url: https://github.com/open-gsd/gsd-path/discussions
+    about: Ask a question or discuss an idea before you open an issue.
+  - name: Security problem
+    url: https://github.com/open-gsd/gsd-path/security
+    about: Report a vulnerability privately. Do not open a public issue.
