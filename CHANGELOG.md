@@ -14,239 +14,97 @@ test-only changes are not listed; the Git history has them.
 ## [1.5.0] - 2026-10-09
 
 ### Added
-- record runtime hotfix provenance on the declaration
-- add signed self-update
-- add the Skills, Stats, Settings, and Environment pages and the setup wizard
-- register the hosts, project operation, and env routes
-- add project setup operations for the app
-- detect installed coding agents
-- add the env file module for the app's Environment page
-- add the stats route for the app's charts
-- add the project board, project page, and tray popover
-- add the Tauri shell and React setup screens
-- add settings and diagnostics routes
-- install skills from the verified npm release
-- report requirements in the launch check
-- add the launch check for the native app
-- add --require-token to gate POST routes
-- add external-landing mode for forge-neutral ship
-- add Muse Code as a shared-agents host
-- rule on edges and prohibitions at define, gate held-out checks at plan and final
+- **Edge and prohibition rulings at define.** Define walks each success
+  criterion through a fixed list of edge cases and asks what the criterion
+  must never silently become. The owner rules on each item: a success
+  criterion, a `held-out` test, a `judgment`, or dismissed with a reason.
+  `INTENT.md` records the rulings in `## Edge coverage` and `## Prohibitions`,
+  and define is not done while a table is incomplete. Plan gives every
+  `held-out` edge a row in `## Held-out checks` with its task and test file.
+  Final review accepts such a criterion as `met` only when its evidence cites
+  each ruling.
+- **External landing.** `external-landing` is a third integration mode beside
+  `direct` and `pull-request`. Ship publishes the milestone branch and stops
+  at `awaiting-merge` with no GitHub API calls. After the branch is merged, on
+  any forge, the resume step checks the merge commit and records it in the
+  milestone tag.
+- **Muse Code host.** `--muse` installs the skills to `~/.agents/skills`;
+  invoke them with `/path` or `/gsd-path`. Muse Code has no live release
+  evidence yet; see the host trust matrix.
+- **Runtime hotfix provenance.** The Python installer
+  (`python3 scripts/install.py`) accepts `--runtime-provenance-source`,
+  `--runtime-provenance-patch`, and `--runtime-provenance-note` with
+  `--runtime-upgrade` to record where a patched runtime came from. The
+  `gsd-path` command does not accept these flags. The record does not change
+  the digest or the runtime validation (#353).
 
 ### Changed
-- prepare 1.5.0 minor candidate
-- point trust evidence link to current receipts
-- refresh all seven host release receipts
-- Name interactive.diffFilter in HOOKS.md executed-key list
-- align guard, worktree pin, provenance, planner docs
-- sync generated skill resource copies
-- describe daemon hook-op migration and default hosts
-- app: migrate a legacy runtime in the same click as a hook action
-- app: send a legacy runtime to the update, not a hook refresh
-- say macOS app builds are signed and notarized
-- app: prepare 0.1.1, the first signed macOS build
-- prove signing setup keeps keychain on success
-- app: delete signing keychain on setup failure
-- remove stale unsigned-build text after macOS signing
-- app: sign and notarize macOS builds in the release workflow
-- make diagnostic command assertion platform independent
-- clarify patch finding source fields (#326)
-- require maintainer rewrite of drafted changelog entry
-- strengthen alias update regression assertions
-- assert router alias payload refreshes on update
-- rewrite the changelog entries for readers
-- list the release upload script test in RELEASE.md
-- prove the release upload script on macOS, Windows, and Linux runners
-- Sync generated skill resource copies
-- cover dispatch brief bases and in-flight lint regressions
-- describe the desktop app in the README and add its changelog
-- Document round exit-receipt reread in RUNTIME.md
-- Merge validated main integration while preserving PR history
-- Update ADR 0004 for Windows pinned-handle evidence reads
-- sync detect_project skill copies
-- correct app update check and release facts
-- point README page list at route.ts
-- Fix daemon README same-origin list and hosts docstring
-- add app workflows to the RELEASE.md CI table
-- Merge remote-tracking branch 'origin/main' into HEAD
-- build tester installers on app-v tags and run shell tests
-- Revert "fix: treat empty .project directory trees as greenfield (#273) (#292)"
-- Revert "fix: reject Verify commands the host guard would refuse at plan time (#302)"
-- Revert "fix(guard): allow read-only closed-milestone shell between ship and bind-next (#301)"
-- match only real pip commands in the launch tests
-- document INTENT SC heading text for multi-line criteria (#279) (#303)
-- align plugin source wording with npm release source
-- Document daemon version and pid in /status
-- record native app design handoff and React frontend ruling
-- run pinned-runtime reload in subprocess to avoid import pollution
-- merge main: integrate #254/#265 and keep pinned-runtime test cleanup
-- sync skill copies for state_checkpoint landed base fix
-- sync skill copies for landed member base fix
-- double-restore bundled scripts after pinned-runtime test
-- drop pinned-runtime tests from native-attempt PR (#209 owns them)
-- Revert "test: restore bundled scripts after pinned-runtime reload test"
-- restore bundled scripts after pinned-runtime reload test
-- invoke pipeline_state CLI from bundled script path
-- retrigger checks
-- sync skill copies after isolation change
-- revert: keep ca89 dispatch finish path that passes member round tests
-- merge main
-- platform-neutral PowerShell path quoting expectation
-- sync worktree_paths skill copies
-- align package verify graph with main (drop stray check:locks)
-- sync state_checkpoint skill copies
-- expect LF-normalized intent hash for CRLF on-disk files
-- skip WSL drvfs mount probes on Windows CI
-- merge main into cursor/fix-spec-reach-probes-f72c
-- merge main and sync skill resources
-- merge main into cursor/fix-git-worktree-legacy-f72c
-- merge main into cursor/fix-task-briefs-plan-deps-f72c
-- merge main into cursor/fix-windows-member-lock-run-shell-f72c
-- patch os.path.normcase in Windows session path test
-- fix Windows normcase test on Linux CI (create=True, patch sep)
-- sync detect_project copies after listdir_anchored fix
-- update release notes for v1.4.0
-- Point local shard command at py.mjs wrapper
-- shard the Windows Python suite
+- A plan can send an intent correction back to define (#271).
+- One research question can name several dimensions (#288) and can contain
+  inline code (#307).
+- Tasks in the same wave can change the same file when one depends on the
+  other (#353).
+- A wave with a blocked review holds the later waves until its repair tasks
+  pass a new review (#315).
+- Earlier wave review cycles are kept as history. Only the last cycle must
+  agree with the current plan (#274, #278, #317).
+- Docs audit queue numbers stay the same across audits (#299).
+- The guard applies the build-phase rule to shell commands that write product
+  files, such as redirections, `cp`, and `sed -i` (#239).
+- The guard permits more read-only commands: read-only Git with a variable
+  inside double quotes, `cd` to an assigned variable, pipes of permitted
+  archive reads, here-strings, and quoted paths with spaces (#327, #353).
+- A ship commit can have more Git trailers after its required lines (#198).
 
 ### Fixed
-- parse research questions with backticks
-- Fix package-level dispatch resource defaults
-- deny git -c keys whose value git executes
-- close zsh flag and escaped-marker gaps in the git parameter exception
-- review findings on the 353 branch
-- dispatch footguns from the 1.4.0 multi-repo field report
-- dashboard probe resolves the pinned runtime via the project launcher
-- guard hook precision for read-only commands
-- allow same-wave file overlap between dependency-ordered tasks
-- members validate and repair stop rejecting the refs Path creates
-- lint landed member briefs at their member base
-- ignore stale retired bind-next journals
-- recover blocked serial tasks and retire unused verify sidecars
-- preserve code spans in archive validation (#328)
-- allow proven safe shell guard commands
-- tolerate bytecode caches in pinned runtimes
-- validate superseded wave review cycles together
-- prioritize repair waves after blocked review (#315)
-- accept prepared archive ship log events
-- exclude Python bytecode from npm releases
-- stabilize docs audit numbering (#299)
-- allow research questions across multiple dimensions
-- fix installer ownership of prerelease aliases
-- fix installer recognition of suffixed versions
-- Fix dispatch task brief validation bases
-- find release files without globstar in the app release workflow
-- reread task exit receipt before marking orphaned
-- verify Windows pins and drain refused POST bodies
-- list Windows evidence dirs by path while opens stay handle-relative
-- anchor detect_project evidence reads on pinned handles
-- remove the host guard Verify check that PR #305 carried from #302
-- reject Verify commands the host guard would refuse at plan time (#302)
-- tolerate missing lower milestone archives (#269) (#306)
-- treat superseded wave review cycles as history (#274, #278) (#305)
-- allow plan intent corrections to return to define (#304)
-- allow read-only closed-milestone shell between ship and bind-next (#301)
-- Fix final-review HEAD checks to allow runtime-pin commits (#297)
-- require wave evidence line in quick-lane final scope template (#296)
-- tighten task brief path token detection (#281) (#295)
-- Fix multiline review bullet field parsing for final gate and archive (#294)
-- Fix Surfaces parsing to split only on top-level commas (#293)
-- treat empty .project directory trees as greenfield (#273) (#292)
-- isolate pinned-runtime in-process test and reload order
-- parse frontmatter # only as YAML comment (#268) (#289)
-- keep the pinned-runtime reload test out of suite discovery
-- landed member base resolution and missing STATE.md dispatch records
-- resolve landed member base on coordinator or member repo
-- allow dispatch records when STATE.md is absent
-- validate landed member task base in member repo
-- do not refresh native shell when prior attempt is blocked
-- restore finish_task landing flow while keeping native shell refresh
-- validate landed member task bases on coordinator
-- member finish verify logging and force sidecar retirement
-- allow force member sidecar retirement without task-file rejection gate
-- pass task-file when force-retiring member sidecars
-- record member verify on coordinator task and force-retire sidecar
-- resolve landed member bases on coordinator and finish native member dispatches cleanly
-- refresh native dispatch shells on re-activation and prefer live task state at finish
-- exclude check_lock_usage from LK_LOCK self-scan
-- reject Windows symlinks and junctions in handle-based reads
-- lazy pipeline_git import with git fallback for skill bundles
-- prefer isolation import before scripts package
-- treat native shells as pre-spawn, not orphaned
-- phase-gate shell writes only on bound milestone branch in-tree
-- Windows parity for file reads, subprocess, tray, and install
-- record native activations for attempt limits
-- WSL drvfs index.lock workaround for state commits
-- phase-gate shell writes to product files
-- load pinned runtime helpers in dispatch_driver
-- ignore same-wave overlap between landed tasks
-- normalize CRLF in user-edited pipeline text
-- prefer scripts.isolation when scripts/ is on sys.path
-- worktree list without -z and posix show paths
-- allow optional git trailers after ship commit body
-- align gate-plan task brief check with approval checkpoint
-- allow path_config model-policy.json at approval
-- list .project through fresh directory fd on Linux
-- member landing lock and spec command timeout drain
-- copy staged skill entries into reserved directory
+- The installer no longer fails on Node 26 when a skill directory exists
+  (#249), and it updates an install that has a prerelease or build version
+  (#286).
+- The npm package has no Python bytecode (#287). A `__pycache__` directory in
+  a pinned runtime no longer blocks every guarded tool call (#323).
+- The package copy of `dispatch_driver.py` finds its role briefs and
+  templates (#325), and dispatch uses the helpers of the pinned runtime
+  (#209).
+- Native task activations count toward the attempt limit (#179). A task is no
+  longer marked orphaned before its exit receipt is read.
+- A blocked serial task can be recovered, and its unused Verify worktree is
+  removed (#324). `finish` creates a deleted serial Verify worktree again, and
+  serial activation is refused while the parallel worktree of the task is
+  live (#353).
+- Dispatch brief checks accept landed tasks and tasks in progress (#318).
+- Member validate and repair no longer refuse the refs that Path creates, and
+  a landed member task finds its base in the coordinator or the member
+  repository (#353).
+- Plan approval accepts `.project/model-policy.json` and `config.json`
+  (#211) and ignores file overlap between landed tasks (#231). The gate-plan
+  brief check gives the same result as plan approval (#210).
+- Surface names with a comma inside parentheses are not split (#293), and
+  task brief checks no longer read search patterns as file paths (#281).
+- Review fields that continue on the next lines are read by the final gate
+  and the archive (#282).
+- Final review accepts a HEAD that differs only by a runtime pin commit
+  (#297).
+- The archive accepts `#` in frontmatter values (#268), a missing archive of
+  an earlier milestone (#269), and evidence with several code spans (#328).
+- Undo accepts a prepared archive after the ship log entry (#329).
+- Status and route no longer fail on an old bind-next record after a
+  milestone is abandoned (#343).
+- Windows: a member landing lock no longer stops at the 10-second limit, and
+  the pipes of a timed-out command are closed (#248). Files with CRLF line
+  ends no longer put stray characters into briefs (#202).
+- WSL: state commits work on drvfs mounts (#207).
+- Linux: `.project` listings are current on btrfs (#245).
+- Git versions without `worktree list -z` are supported (#212).
 
-### Other
-- fix install command receipts and 1.4.0 trust evidence
-- deny pager.<cmd> config keys that git executes
-- parse runner short options as getopt, deny non-literal option words
-- deny file-valued runner options and non-literal runner operands
-- unwrap command runners so git checks reach payload
-- scope git wrapper denial to exec-prefix programs
-- deny git behind programs the guard does not model
-- deny unresolved git option words and credential helpers
-- deny joined continuations and expanding git option values
-- require literal git subcommand, deny comments in git config
-- deny non-literal git config arguments
-- treat only one ASCII digit as redirection file descriptor
-- allow redirected git config reads, keep digit sets denied
-- deny gpg program keys and redirected git config sets
-- parse git config modes; .git/config append stays open
-- close executed git config keys, persisted form, disabling values
-- narrow zsh flag detector and cover git -C paths
-- keep exact --text allowed under git option prefix rule
-- match denied git options by abbreviated prefix
-- deny parameters in command-valued git options
-- accept only plain name expansions in git parameter exception
-- deny git parameters inside wrapped shell strings
-- fail closed on unrecognized quoting in git parameter exception
-- allow git parameters only inside double-quoted spans
-- deny bare and substituted parameters in read-only git arguments
-- fix guard fail-opens and remaining 353 review findings
-- app: Add guards uses installed agents when no hosts sent
-- narrow macOS signing claim to Privacy & Security approval
-- Correct unsupported Fixed and Security changelog entries
-- assert incomplete builds upload nothing at all
-- Insert new changelog entries above existing entries
-- Restore Windows start step in manual monitor README section
-- Classify directory SKILL.md marker as unverified on Windows
-- Reject symlinked SKILL.md marker in Windows bundle probe
-- Detect junctions at held Windows handles; stat-only file opens
-- stop daemon before install, add .deb update, tray dialog
-- Cause: GitGuardian reported one "Generic High Entropy Secret" in commit be3bd5d4, file daemon/app/src/mocks/environment.ts line 10. The value was `tsk_mock_8f3a91c2d7`, a made-up key for TYPESAFE_API_KEY in the dev-only browser mock. It is not a real credential, so nothing needs rotation. Fix: replaced the value with the plain placeholder `mock-api-key` (one line). No other file uses the old value. No test added: this is mock data, not logic. Verification: `tsc --noEmit` is clean and Vitest passes (14 files, 226 tests). GitGuardian was not run locally, so the check result is not confirmed. Remaining risk: GitGuardian scans each commit of the PR, and commit be3bd5d4 still contains the old string. The check can stay red after this commit. If it does, the owner has two options: mark incident 37796517 as a false positive / test credential in the GitGuardian dashboard, or rewrite the branch history to drop the string from be3bd5d4. I did neither: the dashboard needs the owner's account, and a history rewrite plus push is outside this phase
-- compare with release in use, share plugin state
-- unify update rules, badge count, and env switch
-- Fix hooks-init host flags and member hook state
-- Fix env quoted values, host commands, None phase
-- Remove command line from port owner detail
-- Report program name, pass PATH to children, handle Reopen
-- Serialize boot, refresh PATH, fix port screen and autostart
-- The fix is in place, but the Windows failure is not reproduced locally (macOS); only CI on Windows can confirm it. - **Cause:** `test_foreign_host_refused` got `WinError 10053` on `/api/config/parents`. `do_POST` in `daemon/gsd_daemon/serve.py` sent a refusal (403 or 415) without reading the request body. On Windows, a socket closed with unread data resets the connection, so the client can lose the reply. This is a timing race, which is why only one shard and one route failed. - **Origin:** the same-origin refusal is already on main, so the race is not new in this PR. The token refusal that this PR adds has the same exposure. - **Fix:** `do_POST` now reads the full body (per `Content-Length`) before any reply and gives it to the route handlers through `self.rfile`. It is one change at the top of `do_POST`, plus `import io`. It covers all refusals, the 404, and `/api/refresh`. The check order (origin 403, content type 415, token 403) and the route handlers are unchanged. - **Behavior change:** a negative `Content-Length` is now read as 0. Before, the server waited on the socket. - **Verification:** `python3 -m unittest tests.test_daemon_serve` ran 32 tests, all OK. I added no test, because the existing `PostOriginTests` is the test that fails on Windows. - **Not done:** the ponytail and test-writer skills were not run as separate steps, and the change is not committed; it is one modified file in the worktree
-- Keep unknown config keys, wake poll, mask log credentials
-- Apply settings under scan lock; skip session scan in request
-- Harden daemon settings routes: atomic save, host check, finite prices
-- compare updates with release in use; refuse git-source selection
-- fail loud on unpublished pin; reject prerelease selection
-- Two test defects from this PR are fixed in tests/test_daemon_launch.py. No product code changed. The other failures are not from this change. Caused by this PR (fixed): 1. daemon, verify (18), verify (20): test_other_service_on_port_blocks_without_install failed on Linux. The assertion `runner.ran("pip") == []` matches by substring, so it caught the Linux-only python-venv check `python -c "import ensurepip"`. The assertion now checks that no `python -m venv` command ran, which is the first step of an install. 2. windows (3.9 and 3.12, shard 0): three LegacyAutostartTests run with platform="darwin" and reach `os.getuid()`, which does not exist on Windows. They now skip when `os.getuid` is absent, the same rule tests/test_daemon_install.py uses. Not caused by this PR (no change): - windows (3.9 and 3.12, shard 3): the 3.12 log shows only two test_member_tasks errors; I did not read the 3.9 log. - verify (18): the other 43 errors are in test_member_*, test_pipeline_*, test_workflow_architecture, test_trust_evidence and one test_rebase_recovery test. I did not read the verify (20) log beyond the excerpt. - The intent names all of these suites except test_rebase_recovery as the main-branch pollution from PR #260. These checks stay red until that separate fix lands. Verification: - RED: the CI log shows the Linux failure (`['.../python3', '-c', 'import ensurepip']] != []`) and the Windows AttributeError on `os.getuid`. - GREEN: `python3 -m unittest discover -s tests -p test_daemon_launch.py` ran 30 tests, OK (macOS). The changed test also passes with the installer platform forced to linux. With `os.getuid` removed, LegacyAutostartTests ran 6 tests, OK, 3 skipped. - Sabotage: with the port problem made non-blocking, the changed test fails. - Not run locally: the tests on real Linux or Windows, and the full suite
-- Make the temporary daemon build copy user-writable
-- Report failed legacy cleanup as non-blocking; check venv pip
-- Harden launch check requirements and error reporting
-- record env route flag rule and browser transport
-- record read-only browser and token-gated env rulings
+### Security
+- The guard refuses `git -c` and `git config` keys whose value Git runs as a
+  program, such as `core.fsmonitor`, `core.hooksPath`, editors, pagers,
+  `core.sshCommand`, and credential helpers. It also applies these checks to
+  the command that a command runner runs: `nice`, `nohup`, `timeout`, `sudo`,
+  `watch`, `time`, `env`, `stdbuf`, and `setsid`.
+- Windows: project detection reads evidence through pinned handles, so a
+  replaced parent junction cannot redirect it (#203).
+
 ## [1.4.0] - 2026-09-30
 
 ### Added
