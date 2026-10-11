@@ -2046,11 +2046,14 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         # of the review it set aside carry the same names. They belong to that review, not this one.
         replaced = replaced_review_base(primary, options.project_dir, options.wave, options.cycle)
 
-        def at_base(relative: str) -> Optional[str]:
-            shown = isolation.run_git(primary, "show", f"{replaced}:{relative}") if replaced else None
-            return shown.stdout if shown and shown.returncode == 0 else None
+        def of_replaced_review(relative: str) -> bool:
+            if not replaced or isolation.run_git(primary, "show", f"{replaced}:{relative}").returncode != 0:
+                return False
+            return not isolation.run_git(primary, "log", "--diff-filter=AD", "--format=%H",
+                                         f"{replaced}..HEAD", "--", relative).stdout.strip()
 
-        existing = [item for item in repairs if item["path"].endswith(suffix) and at_base(item["path"]) is None]
+        stale = [item for item in repairs if item["path"].endswith(suffix) and of_replaced_review(item["path"])]
+        existing = [item for item in repairs if item["path"].endswith(suffix) and item not in stale]
         # A landed repair no longer carries its finding: a repeat proves that fix failed and needs the next one.
         # Two repos can carry the same locator, so a repair carries a finding only in its own repo.
         carried = {(item.get("repo"), locator) for item in pending if not item["path"].endswith(suffix)
@@ -2075,10 +2078,10 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         repair_waves = {item["wave"] for item in existing}
         if len(repair_waves) > 1:
             raise DriverStop("repair tasks for this cycle disagree on their wave")
-        base_headings = (at_base(f"{options.project_dir}/plan/PLAN.md") or "").splitlines()
+        stale_waves = {item["wave"] for item in stale}
         repair_heading = next((heading for heading in re.finditer(
             rf"(?m)^## Wave (\d+) — fix wave {options.wave} cycle {options.cycle} review findings$", plan_text)
-            if heading.group(0) not in base_headings), None)
+            if int(heading.group(1)) not in stale_waves), None)
         if repair_waves:
             fix_wave = next(iter(repair_waves))
         elif repair_heading:
