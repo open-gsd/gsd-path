@@ -79,7 +79,9 @@ class RecoveryBaseMilestoneProofTest(unittest.TestCase):
         before = self.state(None)
         current = self.state("terra-dome", phase="ship", status="active")
         self.assertTrue(
-            build_recovery._recovery_base_proves_milestone(before, current, "build")
+            build_recovery._recovery_base_proves_milestone(
+                before, current, "build", active=False
+            )
         )
 
     def test_matching_named_milestones_still_prove(self) -> None:
@@ -93,14 +95,18 @@ class RecoveryBaseMilestoneProofTest(unittest.TestCase):
         before = self.state("older-name")
         current = self.state("terra-dome")
         self.assertFalse(
-            build_recovery._recovery_base_proves_milestone(before, current, "build")
+            build_recovery._recovery_base_proves_milestone(
+                before, current, "build", active=False
+            )
         )
 
     def test_a_branch_mismatch_never_proves_even_with_an_unset_base(self) -> None:
         before = self.state(None, branch="gsd-path/M002")
         current = self.state("terra-dome")
         self.assertFalse(
-            build_recovery._recovery_base_proves_milestone(before, current, "build")
+            build_recovery._recovery_base_proves_milestone(
+                before, current, "build", active=False
+            )
         )
 
 

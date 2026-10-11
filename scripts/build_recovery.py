@@ -58,14 +58,17 @@ def _parse_recovery_record(value: object) -> dict:
     return {**value, "source": source}
 
 
-def _recovery_base_proves_milestone(before, current, source: str) -> bool:
+def _recovery_base_proves_milestone(before, current, source: str, active: bool = True) -> bool:
     if before.branch != current.branch:
         return False
-    if before.milestone != current.milestone and before.milestone is not None:
-        # Issue #374: a base written before define filled STATE.milestone
-        # records null; the bound branch already encodes M00N, so an unset
-        # base milestone still proves identity. A milestone named by the
-        # base must still equal the current one.
+    if before.milestone != current.milestone and (
+        # Issue #374: a legacy base records milestone null when define never
+        # named it. The owner names it at ship, after the build resumed, so
+        # only a closed build recovery accepts an unset base milestone; the
+        # bound branch already encodes M00N. A milestone named by the base
+        # must still equal the current one.
+        active or source != "build" or before.milestone is not None
+    ):
         return False
     if source == "plan":
         return (before.phase, before.status) in {("plan", "active"), ("plan", "blocked")}
@@ -105,7 +108,9 @@ def context(repo: Path, text: str | None = None) -> dict | None:
         if base_text is None:
             raise state.PipelineStateError("build recovery base has no STATE.md")
         before = state._state_from_text(base_text)
-        if not _recovery_base_proves_milestone(before, current, recovery.get("source", "build")):
+        if not _recovery_base_proves_milestone(
+            before, current, recovery.get("source", "build"), recovery["active"]
+        ):
             raise state.PipelineStateError("build recovery base does not prove this blocked milestone")
     return recovery
 
