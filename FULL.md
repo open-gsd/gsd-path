@@ -8,7 +8,8 @@ Complete walkthrough from install to shipped milestone.
 
 **Contents:** [What it is](#what-gsd-path-is) · [Installation](#installation) ·
 [Starting a milestone](#starting-a-milestone) · [Phases](#phases-and-your-role) ·
-[Shipping](#shipping) · [Resume](#resume-and-recovery) · [Troubleshooting](#troubleshooting)
+[Shipping](#shipping) · [Resume](#resume-and-recovery) ·
+[More than one person](#working-with-more-than-one-person) · [Troubleshooting](#troubleshooting)
 
 **Related docs**
 
@@ -408,6 +409,61 @@ its recorded path must be absolute. Incomplete journals from another primary
 still block recovery, and active `collect-artifact` operations still require
 the recorded primary to match. Journal validation and unsafe-file checks remain
 in force; see [the collection helper](scripts/isolation.py).
+
+---
+
+## Working with more than one person
+
+One operator drives a milestone. One checkout holds the bound branch
+`gsd-path/M00N` and the `.project/` state of that milestone. A multi-repo
+milestone does not change this: one coordinator checkout holds the state.
+
+GSD Path does not record or check who approves a gate. The `STATE.md` log
+keeps the date, the phase, and the event. The only name is the Git author of a
+checkpoint commit, and GSD Path does not read it. Agree in your team who
+approves.
+
+**Supported**
+
+- One person runs the router and approves the gates, in one checkout.
+- Other people review and merge the result. Set `pull-request` integration
+  before build. Path opens the pull request and waits until a GitHub user
+  account merges it with a merge commit. Path does not check which user. With
+  `external-landing`, the review is the merge request in your own forge.
+- A second session in the same checkout can ask for status and can run the
+  discussion skill. Status only reads. The discussion helper takes a lock and
+  only appends records.
+- The desktop app and the monitor only read a watched project in the
+  background. Their explicit actions change install and configuration files.
+  They cannot advance a phase. See [daemon/README.md](daemon/README.md).
+
+**Not protected**
+
+- The locks are file locks on one computer, in one clone. They put helper
+  calls in sequence: state changes, approvals, discussion records, and
+  dispatch driver calls. A state change from an old view fails with
+  `expected state does not match`. A second dispatch driver call returns
+  `blocked`.
+- The locks do not cover the files that agents write: the artifacts in
+  `.project/` and the product files. Two sessions that do phase work in one
+  checkout write to the same working tree.
+- The locks do not reach a second clone. Each clone keeps its own `STATE.md`,
+  task landings, and approvals. GSD Path does not merge them. Ship stops
+  (`moved or collides`) when `origin` already has `gsd-path/M00N` from another
+  clone.
+- You cannot share a milestone in progress through the remote. With
+  [guard hooks](HOOKS.md) installed, the pre-push hook refuses `gsd-path/M00N`
+  before its ship commit. It also refuses any other branch that carries the
+  unfinished state. Hooks are optional and local to each clone. A clone
+  without hooks has no such check.
+
+**Do not**
+
+- Do not run the router or a phase skill for one milestone from two clones, or
+  from two sessions at the same time.
+- Do not push `gsd-path/M00N` by hand, and do not merge another branch into
+  it.
+- Do not squash or rebase the integration pull request or merge request.
 
 ---
 
