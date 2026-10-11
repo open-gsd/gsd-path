@@ -273,6 +273,41 @@ Unrecognized or foreign `.project/` state is never auto-migrated — the router 
 
 ---
 
+## Uninstall skills
+
+```bash
+npx @opengsd/gsd-path@latest --uninstall --all --dry-run
+npx @opengsd/gsd-path@latest --uninstall --all
+```
+
+From a git clone, use `node scripts/install.mjs` with the same flags.
+
+- Select the hosts with host flags or `--all`. A selection is necessary.
+- Add `--local`, from the project directory, for project-local skills.
+- `--dry-run` lists each path and removes nothing. A real run lists each
+  removed path.
+- A host that has no GSD Path skills shows `nothing to remove`. This is not an
+  error. A second run removes nothing.
+
+**Removed:** skill directories that GSD Path owns, and Cursor's
+`agents/gsd-path.md`. A directory is owned when it has a GSD Path name
+(`gsd-path`, `gsd-path-*`, the legacy `ogsd` names, or the `path` alias) and
+contains a `VERSION` file or a `SKILL.md` that names `gsd-path`. The `path`
+alias must also pass the ownership rule in
+[What auto-updates](#what-auto-updates). A directory with a GSD Path name
+that is not owned shows as `kept` and stays in place.
+
+**Not removed:** other skills, host settings, `disabled-gsd-skills` backups,
+and all project files: `.project/`, `.gsd-path/`, the `AGENTS.md` block, and
+guard hooks. `--uninstall` with `--project`, `--update`, `--doctor`, or a hook
+or runtime flag stops with an error.
+
+Removal makes no backup. Changes that you made in a GSD Path skill directory
+are lost. Codex, Zed, and Muse use one skills root (with `--local`, also
+Antigravity): an uninstall for one of them removes the skills for all of them.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |

@@ -155,6 +155,25 @@ project settings. Dashboard users can open **Settings → Path settings** for th
 same shipping, model/effort, and future review-panel controls. See
 [Path settings](skills/gsd-path/references/config.md) for precedence and locks.
 
+### Uninstall
+
+```bash
+npx @opengsd/gsd-path@latest --uninstall --all --dry-run
+npx @opengsd/gsd-path@latest --uninstall --all
+```
+
+`--uninstall` removes the installed GSD Path skills from the selected hosts.
+For Cursor it also removes the GSD Path subagent file. Use host flags instead
+of `--all` to select hosts. For project-local skills, run the command from
+your project directory and add `--local`. `--dry-run` shows each path and
+removes nothing.
+
+The command removes only GSD Path skills. It keeps other skills, host
+settings, and `disabled-gsd-skills` backups. It makes no backup: changes that
+you made in a GSD Path skill directory are lost. It does not remove project
+contracts or hooks (`.project/`, `.gsd-path/`, the `AGENTS.md` block, guard
+hooks). See [Uninstall skills](UPDATE.md#uninstall-skills).
+
 ## Desktop app
 
 The **OpenGSD Path app** shows your projects without opening each project's
@@ -442,6 +461,7 @@ node scripts/install.mjs --all --local
 node scripts/install.mjs --all --project /path/to/project
 node scripts/install.mjs --update
 node scripts/install.mjs --all --update --project /path/to/project   # refresh .gsd-path/; keeps contracts
+node scripts/install.mjs --uninstall --all --dry-run                 # preview; removes skills only
 ```
 
 | Flag | User skills root | Invoke |
@@ -461,7 +481,7 @@ OpenCode stable: ask to load and use the `gsd-path` skill.
 `gsd-path` remains the canonical router name; `path` is its short menu alias.
 For a single phase, use `$gsd-path-plan` in Codex or `/gsd-path-plan` on slash hosts.
 
-`scripts/install.py` — Python install, including `--local` and `--update`.
+`scripts/install.py` — Python install, including `--local`, `--update`, and `--uninstall`.
 The Node CLI remains the interactive and npm entry point. See [FULL.md](FULL.md) and
 [UPDATE.md](UPDATE.md) for `--hooks`, `--hooks-refresh`, `--local`, and host notes.
 

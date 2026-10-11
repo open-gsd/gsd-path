@@ -86,8 +86,8 @@ Use the [router and phase invocation table](README.md#install-summary) for your 
 - **Python 3.9+** found as `python3`, `python`, or `py -3`; required for project
   installs, project refresh, and project-state
   doctor checks; optional for global-only Node installs. `scripts/install.py`
-  mirrors global and `--local` install transactions and `--update`; it does not
-  provide the interactive wizard
+  does not provide the interactive wizard; see
+  [README.md](README.md#install-summary) for what it supports
 
 ### Global install (default)
 
