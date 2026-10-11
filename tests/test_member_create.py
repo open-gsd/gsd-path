@@ -241,16 +241,24 @@ class MemberCreateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.strip(), "github.com")
 
-    def test_create_refuses_coordinator_whose_default_branch_is_not_main(self) -> None:
+    def test_create_accepts_coordinator_whose_default_branch_is_not_main(self) -> None:
         path = self.coordinator / ".project" / "STATE.md"
         path.write_text(
             path.read_text(encoding="utf-8").replace("\n---\n", "\ndefault_branch: master\n---\n", 1),
             encoding="utf-8",
         )
-        with self.assertRaisesRegex(members.MembersError, "multi-repo projects support only `main`"):
+        listed = self.create()
+        # A new repository uses main, whatever the coordinator default is.
+        self.assertEqual([(item["name"], item["default_branch"]) for item in listed], [("web", "main")])
+        self.assertEqual(members.validate_members(self.coordinator), listed)
+
+    def test_new_clone_whose_default_branch_is_not_main_is_not_joined(self) -> None:
+        self.gh("repo", "create", "acme/web", "--private", "--add-readme")
+        git(self.remote, "branch", "-m", "main", "trunk")
+        self.calls.clear()
+        with self.assertRaisesRegex(members.MembersError, "remote default must be main"):
             self.create()
-        self.assertEqual(self.calls, [])
-        self.assertFalse(self.checkout.exists())
+        self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
 
     def test_deleted_main_is_not_reused_from_stale_tracking_ref(self) -> None:
         self.gh("repo", "create", "acme/web", "--private", "--add-readme")

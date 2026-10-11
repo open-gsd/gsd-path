@@ -111,9 +111,9 @@ class MemberTests(unittest.TestCase):
             members,
             [
                 {"name": "web", "checkout": str(web), "remote": "https://github.com/acme/web.git",
-                 "integration": "default"},
+                 "integration": "default", "default_branch": "main"},
                 {"name": "sdk", "checkout": str(sdk), "remote": "https://github.com/acme/sdk.git",
-                 "integration": "pull-request"},
+                 "integration": "pull-request", "default_branch": "main"},
             ],
         )
         self.assertEqual((self.coordinator / ".project" / "REPOSITORY.md").read_bytes(), binding)
@@ -124,9 +124,72 @@ class MemberTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout), {"members": []})
         self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
 
-    def test_add_refuses_remote_default_other_than_main(self) -> None:
-        self.assert_refused(self.add("web", self.make_member("web", default="develop")),
-                            "remote default must be main")
+    def members_text(self) -> str:
+        return (self.coordinator / ".project" / "MEMBERS.md").read_text(encoding="utf-8")
+
+    def set_origin_head(self, member: Path, default: str) -> None:
+        git(member, "update-ref", f"refs/remotes/origin/{default}", "HEAD")
+        git(member, "symbolic-ref", "refs/remotes/origin/HEAD", f"refs/remotes/origin/{default}")
+
+    def test_add_records_the_member_default_branch_and_validate_follows_the_record(self) -> None:
+        web = self.make_member("web", default="master")
+        added = self.add("web", web)
+        self.assertEqual(added.returncode, 0, added.stderr)
+        self.assertIn("\nDefault branch: master\n", self.members_text())
+
+        validated = self.run_members("validate")
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+        self.assertEqual(json.loads(validated.stdout)["members"][0]["default_branch"], "master")
+        self.assertEqual(members.member_default_branch(self.coordinator, "web"), "master")
+
+        # The record is the source of truth; a later origin/HEAD does not replace it.
+        recorded = self.members_text()
+        self.set_origin_head(web, "main")
+        moved = self.run_members("validate")
+        self.assertNotEqual(moved.returncode, 0, moved.stdout)
+        self.assertIn("member remote default must be master, got main", moved.stderr)
+        self.assertEqual(self.members_text(), recorded)
+
+    def test_add_records_main_when_origin_head_is_unset(self) -> None:
+        web = self.make_member("web")
+        git(web, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+        added = self.add("web", web)
+        self.assertEqual(added.returncode, 0, added.stderr)
+        self.assertIn("\nDefault branch: main\n", self.members_text())
+        self.assertEqual(self.run_members("validate").returncode, 0)
+
+    def test_add_refuses_a_member_default_branch_that_path_reserves(self) -> None:
+        self.assert_refused(self.add("web", self.make_member("web", default="gsd-path/M001")),
+                            "member default branch 'gsd-path/M001' cannot be recorded")
+
+    def test_add_refuses_a_default_branch_that_was_not_fetched(self) -> None:
+        web = self.make_member("web", default="master")
+        git(web, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+        self.assert_refused(self.add("web", web), "member requires refs/remotes/origin/trunk")
+
+    def test_row_without_default_branch_means_main_and_is_not_rewritten(self) -> None:
+        web = self.make_member("web")
+        self.assertEqual(self.add("web", web).returncode, 0)
+        path = self.coordinator / ".project" / "MEMBERS.md"
+        legacy = self.members_text().replace("Default branch: main\n", "")
+        self.assertNotIn("Default branch", legacy)
+        path.write_bytes(legacy.encode("utf-8"))
+
+        validated = self.run_members("validate")
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+        self.assertNotIn("default_branch", json.loads(validated.stdout)["members"][0])
+        self.assertEqual(members.member_default_branch(self.coordinator, "web"), "main")
+        self.set_origin_head(web, "master")
+        self.assertIn("member remote default must be main, got master", self.run_members("validate").stderr)
+        self.set_origin_head(web, "main")
+
+        # Members of one project can have different default branches.
+        added = self.add("sdk", self.make_member("sdk", default="master"))
+        self.assertEqual(added.returncode, 0, added.stderr)
+        self.assertEqual(self.members_text(), legacy + "\n## sdk\n"
+                         f"Checkout: {self.root / 'sdk'}\nRemote: https://github.com/acme/sdk.git\n"
+                         "Integration: default\nDefault branch: master\n")
+        self.assertEqual(self.run_members("validate").returncode, 0)
 
     def record_coordinator_default(self, name: str) -> None:
         path = self.coordinator / ".project" / "STATE.md"
@@ -134,27 +197,16 @@ class MemberTests(unittest.TestCase):
         path.write_bytes(text.replace("\n---\n", f"\ndefault_branch: {name}\n---\n", 1).encode("utf-8"))
         commit_all(self.coordinator, "record default branch")
 
-    def test_add_refuses_coordinator_whose_default_branch_is_not_main(self) -> None:
-        self.record_coordinator_default("master")
+    def test_coordinator_default_branch_can_differ_from_member_default_branches(self) -> None:
+        self.record_coordinator_default("trunk")
+        for name, default in (("web", "main"), ("sdk", "master")):
+            added = self.add(name, self.make_member(name, default=default))
+            self.assertEqual(added.returncode, 0, added.stderr)
 
-        # A single-repo project with this default still validates.
         validated = self.run_members("validate")
         self.assertEqual(validated.returncode, 0, validated.stderr)
-        self.assertEqual(json.loads(validated.stdout), {"members": []})
-
-        self.assert_refused(
-            self.add("web", self.make_member("web")),
-            "multi-repo projects support only `main` as the coordinator default branch, got `master`",
-        )
-
-    def test_validate_refuses_members_under_coordinator_whose_default_branch_is_not_main(self) -> None:
-        self.assertEqual(self.add("web", self.make_member("web")).returncode, 0)
-        self.record_coordinator_default("master")
-
-        result = self.run_members("validate")
-
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn("multi-repo projects support only `main`", result.stderr)
+        self.assertEqual([member["default_branch"] for member in json.loads(validated.stdout)["members"]],
+                         ["main", "master"])
 
     def test_add_refuses_origin_outside_github(self) -> None:
         member = self.make_member("web", remote="https://gitlab.com/acme/web.git")
@@ -341,12 +393,23 @@ class MemberTests(unittest.TestCase):
             "bad mode": "## web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: squash\n",
             "section heading changed": "# web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\n",
             "unexpected preamble": "extra\n## web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\n",
+            "repeated default branch": "## web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\nDefault branch: main\nDefault branch: master\n",
         }.items():
             with self.subTest(label):
                 path.write_bytes(("# Members\n\n" + body).encode("utf-8"))
                 result = self.run_members("validate")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("MEMBERS.md", result.stderr)
+
+    def test_validate_refuses_a_default_branch_that_cannot_be_recorded(self) -> None:
+        path = self.coordinator / ".project" / "MEMBERS.md"
+        row = "# Members\n\n## web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\n"
+        for value in (" gsd-path/M001", " a b", ""):
+            with self.subTest(value):
+                path.write_bytes(f"{row}Default branch:{value}\n".encode("utf-8"))
+                result = self.run_members("validate")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("MEMBERS.md member web has invalid Default branch", result.stderr)
 
 
     def marker_path(self, member: Path) -> Path:

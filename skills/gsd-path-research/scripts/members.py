@@ -35,6 +35,8 @@ MARKER_SCHEMA = "gsd-path/member/v1"
 MARKER_KEYS = {"schema", "coordinator", "project", "name"}
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 FIELDS = ("Checkout", "Remote", "Integration")
+# Optional: `add` records it one time; a row without it means main.
+DEFAULT_BRANCH_FIELD = "Default branch"
 INTEGRATIONS = ("default", "direct", "pull-request")
 GITHUB_REMOTE_RE = re.compile(
     r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/\s]+)/([^/\s]+)"
@@ -76,15 +78,6 @@ def _coordinator(repo: Path) -> tuple[Path, pipeline_state.PipelineState]:
     if Path(_git(root, "rev-parse", "--show-toplevel")).resolve() != root:
         raise MembersError(f"coordinator is not a Git root: {root}")
     return root, state
-
-
-def _require_main_coordinator(state: pipeline_state.PipelineState) -> None:
-    # ponytail: members stay main-only; issue #372 tracks other default branches.
-    if state.default_branch != "main":
-        raise MembersError(
-            "multi-repo projects support only `main` as the coordinator default branch, "
-            f"got `{state.default_branch}` (STATE default_branch)"
-        )
 
 
 def _remote_identity(remote: str) -> Optional[tuple[str, str]]:
@@ -230,9 +223,10 @@ def read_members(coordinator: Path) -> list[dict[str, str]]:
         if not line.strip():
             continue
         key, separator, value = line.partition(":")
-        if not separator or key not in FIELDS or key.lower() in current:
+        field = key.lower().replace(" ", "_")
+        if not separator or key not in (*FIELDS, DEFAULT_BRANCH_FIELD) or field in current:
             raise MembersError(f"MEMBERS.md line {number}: unexpected line {line!r}")
-        current[key.lower()] = value.strip()
+        current[field] = value.strip()
     if not preamble or preamble[0] != "# Members":
         raise MembersError("MEMBERS.md format error: expected # Members")
     rest = preamble[1:]
@@ -256,17 +250,37 @@ def read_members(coordinator: Path) -> list[dict[str, str]]:
             )
         if not Path(member["checkout"]).is_absolute():
             raise MembersError(f"MEMBERS.md member {member['name']} Checkout must be absolute")
+        if not _common.valid_default_branch(default_branch(member)):
+            raise MembersError(
+                f"MEMBERS.md member {member['name']} has invalid Default branch: {member['default_branch']}"
+            )
     return members
+
+
+def default_branch(member: dict[str, str]) -> str:
+    """The default branch a MEMBERS.md row records; a row without the field means main."""
+    return member.get("default_branch", "main")
+
+
+def member_default_branch(coordinator: Path, name: str) -> str:
+    """The default branch MEMBERS.md records for the member `name`."""
+    for member in read_members(coordinator):
+        if member["name"] == name:
+            return default_branch(member)
+    raise MembersError(f"member {name} is not in MEMBERS.md")
 
 
 def check_member(
     coordinator: Path,
     coordinator_name: str,
     checkout: Path,
-    recorded_remote: Optional[str] = None,
+    recorded: Optional[dict[str, str]] = None,
     refuse_reserved_refs: bool = True,
-) -> str:
-    """Refuse a checkout that cannot join; return its origin URL."""
+) -> tuple[str, str]:
+    """Refuse a checkout that cannot join; return its origin URL and default branch.
+
+    `recorded` is the member's MEMBERS.md row. Without it (`add`), the default
+    branch is the local origin/HEAD, read this one time; an unset ref means main."""
     if checkout.is_symlink() or not checkout.is_dir():
         raise MembersError(f"member checkout is not a real directory: {checkout}")
     checkout = checkout.resolve()
@@ -288,12 +302,21 @@ def check_member(
     remote = _git(checkout, "config", "--get", "remote.origin.url")
     if not GITHUB_REMOTE_RE.fullmatch(remote):
         raise MembersError(f"member requires a GitHub.com origin: {remote}")
-    if recorded_remote is not None and remote != recorded_remote:
-        raise MembersError(f"member origin changed: {recorded_remote} -> {remote}")
-    default = _common.run_git(checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
-    if default.returncode != 0 or default.stdout.strip() != "origin/main":
-        raise MembersError(f"member remote default must be main: {checkout}")
-    require_origin_main(checkout)
+    if recorded is not None and remote != recorded["remote"]:
+        raise MembersError(f"member origin changed: {recorded['remote']} -> {remote}")
+    live = _common.origin_default_branch(checkout)
+    default = live if recorded is None else default_branch(recorded)
+    if live != default:
+        raise MembersError(
+            f"member remote default must be {default}, got {live}: {checkout}; "
+            "run `git remote set-head origin --auto` when the local origin/HEAD is stale"
+        )
+    if not _common.valid_default_branch(default):
+        raise MembersError(
+            f"member default branch {default!r} cannot be recorded in MEMBERS.md: it is a "
+            "GSD Path reserved name or it has a character that the file cannot hold"
+        )
+    require_origin_branch(checkout, default)
     member_state = checkout / ".project" / "STATE.md"
     if member_state.exists() or member_state.is_symlink():
         if member_state.is_symlink() or not member_state.is_file():
@@ -312,7 +335,7 @@ def check_member(
         colliding = [ref for ref in refs if ref.startswith(prefixes)]
         if colliding:
             raise MembersError("member refs collide with coordinator names: " + ", ".join(colliding))
-    return remote
+    return remote, default
 
 
 MEMBER_CLOSE_SCHEMA = "gsd-path/member-close/v1"
@@ -347,12 +370,14 @@ def write_member_close(common: Path, archive_name: str, rows: list[dict]) -> Non
     _common.atomic_write(path, json.dumps({"schema": MEMBER_CLOSE_SCHEMA, "members": rows}, indent=2) + "\n")
 
 
-def require_origin_main(checkout: Path) -> None:
+def require_origin_branch(checkout: Path, branch: str) -> str:
+    """The commit of the member's fetched default branch `branch`."""
     baseline = _common.run_git(
-        checkout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}"
+        checkout, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}^{{commit}}"
     )
     if baseline.returncode != 0:
-        raise MembersError("member requires refs/remotes/origin/main; run git fetch origin")
+        raise MembersError(f"member requires refs/remotes/origin/{branch}; run git fetch origin")
+    return baseline.stdout.strip()
 
 
 def member_ref_prefixes(project: str) -> tuple[str, ...]:
@@ -414,7 +439,8 @@ def _task_members(coordinator: Path) -> set[str]:
 
 def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
     """At build start, lock the members tasks name (MEMBERS.md order) and create
-    each member's bound branch at its origin/main. None when no task names a member."""
+    each member's bound branch at its recorded default branch on origin. None when
+    no task names a member."""
     root, state = _coordinator(coordinator)
     named = _task_members(root)
     lock_path = root / LOCK_PATH
@@ -453,8 +479,8 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
         remote = _git(checkout, "config", "--get", "remote.origin.url")
         if remote != member["remote"]:
             raise MembersError(f"member origin changed: {member['remote']} -> {remote}")
-        require_origin_main(checkout)
-        base = _git(checkout, "rev-parse", "refs/remotes/origin/main^{commit}")
+        default = default_branch(member)
+        base = require_origin_branch(checkout, default)
         existing = _common.run_git(checkout, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
         if existing.returncode == 0:
             tip = existing.stdout.strip()
@@ -467,7 +493,7 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
             elif _common.run_git(checkout, "merge-base", "--is-ancestor", tip, base).returncode == 0:
                 base = tip
             else:
-                raise MembersError(f"member {member['name']} branch {branch} has commits not on origin/main")
+                raise MembersError(f"member {member['name']} branch {branch} has commits not on origin/{default}")
         else:
             missing.append((checkout, base))
         entries.append({"name": member["name"], "branch": branch, "base": base})
@@ -484,6 +510,8 @@ def render(members: Sequence[dict[str, str]]) -> str:
         f"Checkout: {member['checkout']}\n"
         f"Remote: {member['remote']}\n"
         f"Integration: {member['integration']}\n"
+        # A row that never had the field keeps none, so old rows are not rewritten.
+        + (f"{DEFAULT_BRANCH_FIELD}: {member['default_branch']}\n" if "default_branch" in member else "")
         for member in members
     ]
     return "\n".join([HEADER, *sections])
@@ -491,14 +519,13 @@ def render(members: Sequence[dict[str, str]]) -> str:
 
 def add_member(repo: Path, name: str, checkout: Path, integration: str) -> list[dict[str, str]]:
     root, state = _coordinator(repo)
-    _require_main_coordinator(state)
     if state.phase in {"build", "ship"}:
         raise MembersError("members change only at a milestone boundary, not during build or ship")
     if not NAME_RE.fullmatch(name):
         raise MembersError(f"invalid member name: {name!r}")
     members = read_members(root)
     resolved = checkout.resolve()
-    remote = check_member(root, state.project, checkout)
+    remote, default = check_member(root, state.project, checkout)
     common = Path(_git(resolved, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
     identity = _remote_identity(remote)
     for member in members:
@@ -509,7 +536,8 @@ def add_member(repo: Path, name: str, checkout: Path, integration: str) -> list[
             raise MembersError(f"member already recorded: {member['name']}")
     _refuse_foreign_marker(resolved, root, state.project, name)
     members.append(
-        {"name": name, "checkout": str(resolved), "remote": remote, "integration": integration}
+        {"name": name, "checkout": str(resolved), "remote": remote, "integration": integration,
+         "default_branch": default}
     )
     _write_marker(resolved, root, state.project, name)
     _common.atomic_write(root / ".project" / MEMBERS_FILE, render(members))
@@ -532,7 +560,6 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
     A journal in the coordinator Git directory keeps the approved target before any
     external action; a rerun resumes each step and never creates a second repo."""
     root, state = _coordinator(repo)
-    _require_main_coordinator(state)
     if state.phase in {"build", "ship"}:
         raise MembersError("members change only at a milestone boundary, not during build or ship")
     if not NAME_RE.fullmatch(name) or not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+", github):
@@ -572,7 +599,7 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
     listed = [member for member in read_members(root) if member["name"] == name]
     if listed:
         if (len(listed) != 1 or listed[0] != {"name": name, "checkout": str(resolved), "remote": url,
-                                            "integration": integration}
+                                            "integration": integration, "default_branch": "main"}
                 or member_role(resolved) != {"coordinator": root, "project": state.project, "name": name}):
             raise MembersError(f"member already recorded with a different checkout or marker: {name}")
         journal.unlink()
@@ -621,6 +648,10 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
         cloned = _common.run_git(resolved.parent, "clone", "-q", url, str(resolved))
         if cloned.returncode != 0:
             raise MembersError(f"could not clone {url}: {(cloned.stderr or cloned.stdout).strip()}")
+    # ponytail: --create stays main-only, because a new repository uses main;
+    # `add` joins an existing repository with any default branch.
+    if _common.origin_default_branch(resolved) != "main":
+        raise MembersError(f"member remote default must be main: {resolved}")
     recorded["step"] = "join"
     _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
     joined = add_member(root, name, resolved, integration)
@@ -631,11 +662,9 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
 def validate_members(repo: Path) -> list[dict[str, str]]:
     root, state = _coordinator(repo)
     members = read_members(root)
-    if members:
-        _require_main_coordinator(state)
     for member in members:
         checkout = Path(member["checkout"])
-        check_member(root, state.project, checkout, member["remote"], refuse_reserved_refs=False)
+        check_member(root, state.project, checkout, member, refuse_reserved_refs=False)
         try:
             role = member_role(checkout)
         except MembersError as error:
@@ -654,7 +683,7 @@ def repair_members(repo: Path) -> list[dict[str, str]]:
     members = read_members(root)
     for member in members:
         checkout = Path(member["checkout"])
-        check_member(root, state.project, checkout, member["remote"], refuse_reserved_refs=False)
+        check_member(root, state.project, checkout, member, refuse_reserved_refs=False)
         _refuse_foreign_marker(checkout.resolve(), root, state.project, member["name"])
     for member in members:
         checkout = Path(member["checkout"]).resolve()

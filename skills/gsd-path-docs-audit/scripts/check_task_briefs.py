@@ -303,7 +303,7 @@ def _member_bases(root: Path):
                     if locked:
                         cache[name] = (checkout, _resolve_base(checkout, f"refs/heads/{locked[0]['branch']}"))
                     else:
-                        members.require_origin_main(checkout)
+                        members.require_origin_branch(checkout, "main")
                         cache[name] = (checkout, _resolve_base(checkout, "refs/remotes/origin/main"))
             except (members.MembersError, BriefError) as error:
                 raise BriefError(f"member {name} is unavailable: {error}") from error
