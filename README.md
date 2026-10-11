@@ -9,11 +9,19 @@ milestone loop. While a milestone builds, the next one can be planned in
 parallel under `.project/next/` (lookahead); a building milestone can also be
 abandoned on an explicit ruling, archiving its partial work for a re-slice.
 
-**Supported hosts:** Codex, Claude Code, Grok, OpenCode, GitHub Copilot CLI,
-Qwen Code, Antigravity CLI, Cursor, Zed, Kiro, Kimi Code, and Muse Code.
-Support means the installer and dispatch contract exist. See the
-[host trust matrix](https://github.com/open-gsd/gsd-path/blob/main/docs/trust-validation/HOST-MATRIX.md) for live milestone
-proof and each host's guard tier.
+**Hosts with a passing full live milestone for release 1.5.0:** Codex, Claude
+Code, Grok, OpenCode, Antigravity CLI, Cursor, and Kimi Code.
+
+**Hosts with an installer and a dispatch contract, but no live milestone for
+release 1.5.0:** GitHub Copilot CLI (account quota exhausted), Qwen Code, Zed,
+and Kiro (API credits), and Muse Code (no live release evidence recorded yet).
+These hosts are excluded from the release evaluation. Exclusion is not a pass.
+
+With guard hooks installed, only Claude Code and Cursor get a fail-closed
+native guard; every other host relies on Git hooks. The installer also writes a
+native Codex hook, and it runs only after you trust it (see [HOOKS.md](HOOKS.md)).
+The [host trust matrix](https://github.com/open-gsd/gsd-path/blob/main/docs/trust-validation/HOST-MATRIX.md)
+is the source of truth for live milestone proof and each host's guard tier.
 
 <!-- release-docs -->
 **Latest npm release:** [@opengsd/gsd-path@1.5.0](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.5.0) — [release notes](CHANGELOG.md#150---2026-10-09)
