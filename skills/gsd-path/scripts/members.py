@@ -598,8 +598,9 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
         _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
     listed = [member for member in read_members(root) if member["name"] == name]
     if listed:
-        if (len(listed) != 1 or listed[0] != {"name": name, "checkout": str(resolved), "remote": url,
-                                            "integration": integration, "default_branch": "main"}
+        if (len(listed) != 1 or {**listed[0], "default_branch": default_branch(listed[0])} != {
+                    "name": name, "checkout": str(resolved), "remote": url,
+                    "integration": integration, "default_branch": "main"}
                 or member_role(resolved) != {"coordinator": root, "project": state.project, "name": name}):
             raise MembersError(f"member already recorded with a different checkout or marker: {name}")
         journal.unlink()

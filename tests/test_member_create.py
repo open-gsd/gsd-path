@@ -118,6 +118,20 @@ class MemberCreateTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertFalse(self.journal().exists())
 
+    def test_resume_after_join_accepts_a_row_without_the_default_branch_line(self) -> None:
+        self.create()
+        record = self.coordinator / ".project" / "MEMBERS.md"
+        text = record.read_text(encoding="utf-8")
+        record.write_text(text.replace(f"{members.DEFAULT_BRANCH_FIELD}: main\n", ""), encoding="utf-8")
+        self.assertNotIn("default_branch", members.read_members(self.coordinator)[0])
+        self.journal().write_text(json.dumps({
+            "schema": members.MEMBER_CREATE_SCHEMA, "name": "web", "github": "acme/web", "visibility": "private",
+            "checkout": str(self.checkout), "integration": "default", "step": "join"}), encoding="utf-8")
+        self.calls.clear()
+        self.assertEqual(len(self.create()), 1)
+        self.assertEqual(self.calls, [])
+        self.assertFalse(self.journal().exists())
+
     def test_lookup_failure_does_not_create_repository(self) -> None:
         with mock.patch.object(members, "_gh", return_value=subprocess.CompletedProcess([], 1, "", "authentication failed")):
             with self.assertRaisesRegex(members.MembersError, "could not inspect"):
