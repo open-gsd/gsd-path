@@ -92,8 +92,31 @@ class MemberGuardTests(unittest.TestCase):
         git(self.member, "checkout", "-q", "-b", branch)
         (self.member / "app.py").write_bytes(f"print('{branch}')\n".encode("utf-8"))
         sha = commit_all(self.member, f"work on {branch}")
-        git(self.member, "checkout", "-q", "main")
+        git(self.member, "checkout", "-q", "-")
         return sha
+
+    def test_pre_push_measures_member_work_from_the_recorded_default_branch(self) -> None:
+        # A master member. Its origin/main is an older remote branch, not the default.
+        git(self.member, "branch", "-m", "main", "master")
+        (self.member / "app.py").write_bytes("print('published')\n".encode("utf-8"))
+        published = commit_all(self.member, "published on master")
+        git(self.member, "update-ref", "refs/remotes/origin/master", published)
+        git(self.member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master")
+        self.join()
+        work = self.member_commit("gsd-path/acme-M001")
+        feature = self.member_commit("feature/x")
+        feature_line = f"refs/heads/feature/x {feature} refs/heads/feature/x {NULL}"
+
+        allowed = self.push(feature_line)
+        self.assertEqual(allowed.returncode, 0, allowed.stderr)
+        refused = self.push(f"refs/heads/master {work} refs/heads/master {published}")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("carries unpublished acme member work", refused.stderr)
+
+        git(self.member, "update-ref", "-d", "refs/remotes/origin/master")
+        missing = self.push(feature_line)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("member requires refs/remotes/origin/master; run git fetch origin", missing.stderr)
 
     def test_member_commit_ignores_the_member_own_state(self) -> None:
         pre_commit, commit_msg = self.stage_product_commit()

@@ -218,5 +218,32 @@ class MemberUndoTests(unittest.TestCase):
         self.assertEqual(self.bound_tip(), tip)
 
 
+class MasterMemberUndoTests(unittest.TestCase):
+    """Undo checks publication against the default branch that MEMBERS.md records."""
+    member_default = "master"
+    setUp = landing.MemberLandingTests.setUp
+    tearDown = landing.MemberLandingTests.tearDown
+    land = landing.MemberLandingTests.land
+    edit = landing.MemberLandingTests.edit
+    bound_tip = landing.MemberLandingTests.bound_tip
+    landed = MemberUndoTests.landed
+
+    def test_unpublished_landing_of_a_master_member_is_undone(self) -> None:
+        result = self.landed()
+        pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
+        self.assertEqual(git(self.coordinator, "rev-parse", "HEAD"), self.base)
+        self.assertEqual(self.bound_tip(), self.member_base)
+
+    def test_landing_on_the_recorded_default_branch_is_not_undone(self) -> None:
+        result = self.landed()
+        git(self.member, "update-ref", "refs/remotes/origin/master", result["landing"])
+        target = pipeline_undo.preview(self.coordinator)["target"]
+        self.assertIsNone(target["kind"])
+        self.assertRegex(" ".join(target["blocked"]), "landing is already on origin/master")
+        with self.assertRaisesRegex(pipeline_undo.UndoError, "already on origin/master"):
+            pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
+        self.assertEqual(self.bound_tip(), result["landing"])
+
+
 if __name__ == "__main__":
     unittest.main()

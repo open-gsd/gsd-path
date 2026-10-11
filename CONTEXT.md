@@ -65,8 +65,9 @@ _Avoid_: feature branch, worktree branch, `gsd-path/<project-slug>`
 The repository's remote default, with any name. Initialization records the
 name one time in STATE `default_branch`; a STATE file without the field means
 `main`. Ship integrates onto it. New repositories that Path creates keep
-GitHub's `main`. A multi-repo project supports only `main`, for its members
-and its coordinator.
+GitHub's `main`. In a multi-repo project, the Coordinator's STATE holds the
+Coordinator's default branch and `MEMBERS.md` holds each Member's default
+branch; the names can differ.
 _Avoid_: production branch
 
 **Shipped**:
@@ -104,7 +105,9 @@ _Avoid_: main repo, parent repo, workspace
 **Member**:
 A repository listed in the Coordinator's `.project/MEMBERS.md`. Joining adds
 no new tracked Path files to it. Its Path refs carry the Coordinator's project
-name, so they cannot collide with its own Path history.
+name, so they cannot collide with its own Path history. Its `MEMBERS.md` row
+records its default branch one time, when it joins; a row without the
+`Default branch` field means `main`.
 _Avoid_: submodule, child repo, secondary repo
 
 **Surface**:

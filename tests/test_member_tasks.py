@@ -115,6 +115,30 @@ class MemberTaskBriefTests(unittest.TestCase):
                                        verify="test -f src/app.py"))
         self.assertEqual(self.problems(), "")
 
+    def test_member_task_paths_resolve_at_the_recorded_default_branch(self) -> None:
+        # A master member. Its origin/main is an older remote branch without the file.
+        api = self.coordinator.parent / "api"
+        git(self.coordinator.parent, "init", "-q", "-b", "master", str(api))
+        git(api, "commit", "-q", "--allow-empty", "-m", "old")
+        git(api, "update-ref", "refs/remotes/origin/main", "HEAD")
+        (api / "src").mkdir()
+        (api / "src" / "api.py").write_bytes("on master\n".encode("utf-8"))
+        git(api, "add", "-A")
+        git(api, "commit", "-q", "-m", "add api")
+        git(api, "remote", "add", "origin", "https://github.com/acme/api.git")
+        git(api, "update-ref", "refs/remotes/origin/master", "HEAD")
+        git(api, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master")
+        subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
+                        "--name", "api", "--checkout", str(api)],
+                       encoding="utf-8", errors="replace", capture_output=True, check=True)
+
+        self.write("T001", member_task("T001", "src/new.py", "Follow `src/api.py` in the member.",
+                                       repo="api", verify="test -f src/api.py"))
+        self.assertEqual(self.problems(), "")
+
+        git(api, "update-ref", "-d", "refs/remotes/origin/master")
+        self.assertIn("member api is unavailable: member requires refs/remotes/origin/master", self.problems())
+
     def test_member_task_paths_do_not_resolve_in_the_coordinator(self) -> None:
         self.write("T001", member_task("T001", "src/app.py", "Read `lib/server.py` first.",
                                        verify="test -f lib/server.py"))

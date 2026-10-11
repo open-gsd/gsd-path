@@ -113,6 +113,8 @@ executable interface; do not infer multi-repo behavior from host receipts.
 ## Decisions
 
 1. Member remote default must be `main`; `members add` refuses others.
+   Replaced on 2026-10-10 (issue #372): `members add` records the member
+   default branch in `.project/MEMBERS.md`, and each member path reads it.
 2. Each member may set `direct` or `pull-request` in `.project/MEMBERS.md`.
    The milestone mode is the default.
 3. The coordinator may be a product repo or a dedicated program repo.

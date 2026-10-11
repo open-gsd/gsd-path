@@ -35,13 +35,15 @@ class MemberProjectVerifyTests(unittest.TestCase):
         self.fixture(self.root)
         self.member = base / "frontend-checkout"
         self.member.mkdir()
-        git(self.member, "init", "-q", "-b", "main")
+        # Classes that borrow this fixture set member_default for another default branch.
+        default = getattr(self, "member_default", "main")
+        git(self.member, "init", "-q", "-b", default)
         (self.member / "README.md").write_bytes("web\n".encode("utf-8"))
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "init")
         git(self.member, "remote", "add", "origin", "https://github.com/acme/web.git")
-        git(self.member, "update-ref", "refs/remotes/origin/main", "HEAD")
-        git(self.member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        git(self.member, "update-ref", f"refs/remotes/origin/{default}", "HEAD")
+        git(self.member, "symbolic-ref", "refs/remotes/origin/HEAD", f"refs/remotes/origin/{default}")
         state = self.root / ".project" / "STATE.md"
         shipping = state.read_text(encoding="utf-8")
         state.write_bytes(shipping.replace("phase: ship", "phase: plan").encode("utf-8"))
@@ -54,11 +56,11 @@ class MemberProjectVerifyTests(unittest.TestCase):
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "member landing")
         self.member_tip = git(self.member, "rev-parse", "HEAD")
-        git(self.member, "checkout", "-q", "main")
+        git(self.member, "checkout", "-q", default)
         lock = self.root / ".project" / "build" / "members.json"
         lock.parent.mkdir(parents=True, exist_ok=True)
         lock.write_bytes(json.dumps({"schema": "gsd-path/member-lock/v1", "members": [
-            {"name": "web", "branch": "gsd-path/demo-M001", "base": git(self.member, "rev-parse", "main")}]}).encode("utf-8"))
+            {"name": "web", "branch": "gsd-path/demo-M001", "base": git(self.member, "rev-parse", default)}]}).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "member milestone")
         self.head = git(self.root, "rev-parse", "HEAD")

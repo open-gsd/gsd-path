@@ -46,16 +46,18 @@ class MemberPullRequestTests(unittest.TestCase):
             self.pulls[0]["body"] = next(argument.removeprefix("body=") for argument in arguments
                                          if argument.startswith("body="))
             return reply(self.pulls[0])
+        base = next((argument.removeprefix("base=") for argument in arguments if argument.startswith("base=")), None)
         if "POST" in arguments:
             self.posts.append(arguments)
             self.pulls.append({"number": 7, "state": "open", "html_url": URL, "merged_at": None,
-                               "merge_commit_sha": None, "base": {"ref": "main"},
+                               "merge_commit_sha": None, "base": {"ref": base},
                                "body": next(argument.removeprefix("body=") for argument in arguments
                                             if argument.startswith("body=")),
                                "head": {"ref": "gsd-path/demo-M001", "sha": self.member_tip,
                                         "repo": {"full_name": "acme/web"}}})
             return reply(self.pulls[-1])
-        return reply([self.pulls])
+        # GitHub lists only the pull requests that target the requested base.
+        return reply([[pull for pull in self.pulls if pull["base"]["ref"] == base]])
 
     def integrate(self) -> dict:
         with mock.patch.object(integration, "github_repository", return_value="acme/web"), \
@@ -72,7 +74,7 @@ class MemberPullRequestTests(unittest.TestCase):
             "origin/gsd-path/demo-M001")
         if "--squash" in extra:
             git(clone, "commit", "-q", "-m", "Squashed pull request #7")
-        git(clone, "push", "-q", "origin", "main")
+        git(clone, "push", "-q", "origin", "HEAD:refs/heads/" + getattr(self, "member_default", "main"))
         merge = git(clone, "rev-parse", "HEAD")
         self.pulls[0].update(state="closed", merged_at="2026-09-28T00:00:00Z", merge_commit_sha=merge)
         return merge
@@ -163,6 +165,54 @@ class MemberPullRequestTests(unittest.TestCase):
         self.pulls[0]["state"] = "closed"
         with self.assertRaisesRegex(ArchiveError, "closed without merging"):
             self.integrate()
+
+
+class MasterMemberPullRequestTests(unittest.TestCase):
+    """Pull-request member close on a member whose recorded default branch is master."""
+    member_default = "master"
+    fixture = MemberPullRequestTests.fixture
+    setUp = MemberPullRequestTests.setUp
+    remote_ref = MemberPullRequestTests.remote_ref
+    gh = MemberPullRequestTests.gh
+    integrate = MemberPullRequestTests.integrate
+    github_merge = MemberPullRequestTests.github_merge
+
+    def test_pull_request_targets_the_recorded_default_branch_and_is_validated_there(self) -> None:
+        waiting = self.integrate()
+        self.assertEqual((waiting["status"], waiting["pull_request"]), ("awaiting-merge", URL))
+        self.assertEqual(self.integrate()["status"], "awaiting-merge")
+        self.assertEqual(len(self.posts), 1)
+        self.assertIn("base=master", self.posts[0])
+        self.assertIn("title=integrate: demo M001 — merge gsd-path/demo-M001 into master", self.posts[0])
+        self.assertEqual(self.remote_ref("refs/heads/master"), self.main)
+        # A body repair checks the pull request against the same base.
+        self.pulls[0]["body"] = "Missing credit"
+        self.assertEqual(self.integrate()["status"], "awaiting-merge")
+        self.assertEqual(len(self.patches), 1)
+
+        merge = self.github_merge("--no-ff")
+        self.pulls[0]["body"] = "Missing credit"
+        result = self.integrate()
+        self.assertEqual(len(self.patches), 2)
+        self.assertEqual(result["merge"], merge)
+        self.assertEqual(self.remote_ref("refs/heads/master"), merge)
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}^{{commit}}"), merge)
+        with mock.patch.object(integration, "github_repository", return_value="acme/web"), \
+                mock.patch.object(integration, "run_command", side_effect=self.gh):
+            self.assertEqual(integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip),
+                             result)
+
+    def test_merge_that_is_not_on_the_recorded_default_branch_is_refused(self) -> None:
+        self.integrate()
+        # The human merged the bound branch into another branch, then repointed the pull request.
+        self.member_default = "release"
+        git(self.remote, "branch", "release", "master")
+        merge = self.github_merge("--no-ff")
+        self.assertEqual(self.remote_ref("refs/heads/master"), self.main)
+        with self.assertRaisesRegex(ArchiveError, "pull-request merge is not on origin/master first-parent history"):
+            self.integrate()
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), "")
+        self.assertNotEqual(merge, self.main)
 
 
 if __name__ == "__main__":

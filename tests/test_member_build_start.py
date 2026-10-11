@@ -93,6 +93,31 @@ class MemberBuildStartTests(unittest.TestCase):
         self.assertEqual(self.branch("docs"), self.origin_main("docs"))
         self.assertIsNone(self.branch("web"))
 
+    def test_build_start_cuts_the_bound_branch_at_the_recorded_default_branch(self) -> None:
+        # A master member that also has an older origin/main: the record selects the base.
+        api = self.root / "api"
+        git(self.root, "init", "-q", "-b", "master", str(api))
+        for text in ("old", "new"):
+            (api / "README.md").write_bytes(text.encode("utf-8"))
+            git(api, "add", "-A")
+            git(api, "commit", "-q", "-m", text)
+        git(api, "remote", "add", "origin", "https://github.com/acme/api.git")
+        git(api, "update-ref", "refs/remotes/origin/main", "HEAD~1")
+        git(api, "update-ref", "refs/remotes/origin/master", "HEAD")
+        git(api, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master")
+        subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
+                        "--name", "api", "--checkout", str(api)],
+                       encoding="utf-8", errors="replace", capture_output=True, check=True)
+        self.repos["api"] = api
+        master = git(api, "rev-parse", "refs/remotes/origin/master").stdout.strip()
+
+        self.tasks("api")
+        self.start()
+
+        self.assertEqual(self.lock()["members"],
+                         [{"name": "api", "branch": "gsd-path/acme-M001", "base": master}])
+        self.assertEqual(self.branch("api"), master)
+
     def test_coordinator_only_plan_writes_no_lock_and_no_branches(self) -> None:
         self.tasks("", "")
         self.start()
