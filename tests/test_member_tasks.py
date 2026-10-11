@@ -152,6 +152,26 @@ class MemberTaskBriefTests(unittest.TestCase):
         result = check_task_briefs.validate_plan_task_briefs(self.coordinator, self.head, ".project")
         self.assertEqual(result["tasks"], 1)
 
+    def test_landed_task_may_name_a_review_file_that_build_recovery_moved(self) -> None:
+        review = ".project/review/wave-4.cycle4.contract.md"
+        _member_base, task = self.prepare_landed_member_task()
+        context = f"Follow `src/app.py` and fix the findings of `{review}`."
+        self.write("T001", task.replace("Follow `src/app.py`.", context))
+        (self.coordinator / review).parent.mkdir()
+        (self.coordinator / review).write_bytes("# Review\n".encode("utf-8"))
+        check_task_briefs.validate_plan_task_briefs(self.coordinator, self.head, ".project")
+        # prepare-build-recovery sets the old reviews aside.
+        (self.coordinator / ".project" / "review").rename(self.coordinator / ".project" / "plan" / "review")
+        result = check_task_briefs.validate_plan_task_briefs(self.coordinator, self.head, ".project")
+        self.assertEqual(result["tasks"], 1)
+        # A task that is not landed is still checked before its dispatch.
+        self.write("T002", member_task("T002", "src/next.py", context.replace("src/app.py", "src/next.py"),
+                                       verify="test -f src/next.py"))
+        with self.assertRaises(check_task_briefs.BriefError) as raised:
+            check_task_briefs.validate_plan_task_briefs(self.coordinator, self.head, ".project")
+        self.assertEqual(str(raised.exception),
+                         f"T002: ## Context names a path missing at the layer base: {review}")
+
     def test_invalid_landed_member_bases_are_rejected_by_both_plan_validators(self) -> None:
         member_base, task = self.prepare_landed_member_task()
         blob = git(self.member, "rev-parse", f"{member_base}:src/app.py")

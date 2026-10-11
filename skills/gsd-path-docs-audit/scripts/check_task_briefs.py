@@ -100,13 +100,15 @@ def _supplied_contract(repo: Path, task: Path, token: str) -> bool:
     return path.is_file() and path.resolve() == repo.resolve() / token
 
 
+def _pipeline_workspace_path(repo: Path, task: Path, token: str) -> bool:
+    track = _project_track(task, repo)
+    return track is not None and token.startswith(
+        tuple(f"{track}/{name}/" for name in PIPELINE_WORKSPACE_DIRS))
+
+
 def _pipeline_workspace_file(repo: Path, task: Path, token: str) -> bool:
     """Pipeline-owned paths may exist only in the working tree before checkpoint."""
-    track = _project_track(task, repo)
-    if track is None:
-        return False
-    prefixes = tuple(f"{track}/{name}/" for name in PIPELINE_WORKSPACE_DIRS)
-    if not any(token.startswith(prefix) for prefix in prefixes):
+    if not _pipeline_workspace_path(repo, task, token):
         return False
     path = repo / token
     return path.is_file() and path.resolve() == repo.resolve() / token
@@ -397,6 +399,8 @@ def _lint_task(
                 and token not in supplied
                 and not _supplied_contract(repo, path, token)
                 and not _pipeline_workspace_file(repo, path, token)
+                # A landed brief is history: the pipeline moves its own files (build recovery, archive) later.
+                and not (task_id in (landed_bases or {}) and _pipeline_workspace_path(repo, path, token))
                 and not _base_exists(git_root, base, token)
             ):
                 problems.append(f"## {name} names a path missing at the layer base: {token}")

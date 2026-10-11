@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import shutil
@@ -6,7 +7,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from scripts import _common, build_state, dispatch_driver, isolation
 from tests.test_dispatch_driver import ROLE_BRIEF, SCRIPT, TASK_TEMPLATE
 import tests.test_dispatch_driver as driver_tests
 
@@ -62,6 +65,82 @@ class MemberRoundTests(unittest.TestCase):
             capture_output=True, encoding="utf-8", errors="replace", env=env)
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
+
+    def blocked_wave(self) -> None:
+        """Both tasks land, then the wave 1 cycle 1 review fails each task on its own criterion."""
+        self.assertEqual(self.round()["status"], "done")
+        lines = ["# Review — wave 1, cycle 1", "", "Wave verdict: blocked", "Cycle: 1", "Depth: full", "Tasks reviewed: 2"]
+        for task, criterion in (("T001", "The demo command prints hello."), ("T002", "The demo test suite is green.")):
+            lines += ["", f"## {task} — Demo task {task}: fail", "", f"- ❌ {criterion} — found: wrong output\n  fix: correct it"]
+        review = self.root / ".project/review/wave-1.cycle1.md"
+        review.parent.mkdir(exist_ok=True)
+        review.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
+
+    def two_repo_finding(self) -> dict:
+        """Findings where the owners of one failed criterion are in the coordinator and in the member."""
+        findings = dispatch_driver.review_findings.compute(self.root, ".project", 1, 1)
+        group = dict(findings["groups"][0], tasks=["T001", "T002"])
+        self.assertEqual(group["locator"], "t001_ac1")
+        return dict(findings, groups=[group], fix_batches=[
+            {"locators": ["t001_ac1"], "files": ["src/app.py"]},
+            {"locators": ["t001_ac1"], "files": ["tests/test_app.py"], "repo": "web"}])
+
+    def fix_task(self, item: dict) -> tuple:
+        text = (self.root / item["path"]).read_text(encoding="utf-8")
+        fields = isolation.task_frontmatter(text)[0]
+        return fields.get("repo"), fields["deps"], fields["files"], _common.task_verify_command(text)
+
+    def test_fix_tasks_writes_a_lint_clean_member_fix_task_and_carries_findings_by_repo(self) -> None:
+        self.blocked_wave()
+        completed = subprocess.run([sys.executable, "-B", str(SCRIPT), "fix-tasks", "--wave", "1", "--cycle", "1",
+                                    "--repo", str(self.root)], capture_output=True, encoding="utf-8", errors="replace")
+        self.assertTrue(completed.stdout.strip(), completed.stderr)
+        receipt = json.loads(completed.stdout)
+        self.assertEqual(receipt["status"], "created", receipt)
+        self.assertEqual([step["exit_code"] for step in receipt["steps"] if step["script"] == "check_task_briefs.py"], [0])
+        coordinator, member = receipt["created"]
+        self.assertEqual((coordinator["task"], coordinator["locators"], "repo" in coordinator), ("T003", ["t001_ac1"], False))
+        self.assertEqual((member["task"], member["locators"], member["repo"]), ("T004", ["t002_ac1"], "web"))
+        self.assertEqual(self.fix_task(coordinator), (None, ["T001"], ["src/app.py"], "set -e\n(\npython3 src/app.py\n)"))
+        self.assertEqual(self.fix_task(member),
+                         ("web", ["T002"], ["tests/test_app.py"], "set -e\n(\npython3 tests/test_app.py\n)"))
+        self.assertEqual({task["id"]: task.get("repo") for task in build_state.ready(str(self.root))["ready"]},
+                         {"T003": None, "T004": "web"})
+        # Cycle 2 repeats t001_ac1 for both repos. T003 carries it only for the coordinator.
+        findings = self.two_repo_finding()
+        with mock.patch.object(dispatch_driver.review_findings, "compute", return_value=findings):
+            repeat = dispatch_driver.fix_tasks(self.root, argparse.Namespace(project_dir=".project", wave=1, cycle=2))
+        self.assertEqual(repeat["status"], "created", repeat)
+        self.assertEqual(repeat["carried"], [findings["fix_batches"][0]])
+        self.assertEqual([(item["task"], item["repo"]) for item in repeat["created"]], [("T005", "web")])
+        self.assertEqual(self.fix_task(repeat["created"][0]),
+                         ("web", ["T002"], ["tests/test_app.py"], "set -e\n(\npython3 tests/test_app.py\n)"))
+
+    def test_fix_tasks_resumes_the_member_half_of_a_two_repo_finding(self) -> None:
+        self.blocked_wave()
+        findings = self.two_repo_finding()
+        write = _common.atomic_write
+
+        def interrupt(path, text):
+            if path.name == "T004-fix-wave-1-cycle-1.md":
+                raise dispatch_driver.DriverStop("interrupted second batch")
+            return write(path, text)
+
+        options = argparse.Namespace(project_dir=".project", wave=1, cycle=1)
+        with mock.patch.object(dispatch_driver.review_findings, "compute", return_value=findings):
+            with mock.patch.object(_common, "atomic_write", side_effect=interrupt):
+                self.assertEqual(dispatch_driver.fix_tasks(self.root, options)["status"], "blocked")
+            receipt = dispatch_driver.fix_tasks(self.root, options)
+            again = dispatch_driver.fix_tasks(self.root, options)
+        self.assertEqual(receipt["status"], "created", receipt)
+        self.assertEqual([(item["task"], item.get("repo")) for item in receipt["existing"]], [("T003", None)])
+        self.assertEqual([(item["task"], item["repo"]) for item in receipt["created"]], [("T004", "web")])
+        self.assertEqual(self.fix_task(receipt["existing"][0]),
+                         (None, ["T001"], ["src/app.py"], "set -e\n(\npython3 src/app.py\n)"))
+        self.assertEqual(self.fix_task(receipt["created"][0]),
+                         ("web", ["T002"], ["tests/test_app.py"], "set -e\n(\npython3 tests/test_app.py\n)"))
+        self.assertEqual(again["status"], "exists", again)
+        self.assertEqual([(item["task"], item.get("repo")) for item in again["existing"]], [("T003", None), ("T004", "web")])
 
     def test_round_lands_a_coordinator_task_and_a_member_task(self) -> None:
         receipt = self.round()

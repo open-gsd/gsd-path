@@ -503,23 +503,31 @@ dispatch contract and perform steps 1–5 by hand.
      again.
    - Otherwise batch `fix_batches` into complete fix tasks from the task
      template — one task per batch, never one per finding — each carrying
-     its groups' failed criteria and observed evidence verbatim. A group
+     its groups' failed criteria and observed evidence verbatim. Each batch
+     is in one repo: a batch with `repo` is for that member and its fix task
+     has `repo: <member>`; a batch without `repo` is for the coordinator. A
+     finding whose source tasks are in two repos gives one batch for each
+     repo. A group
      with `repeat` true is evidence its earlier fix failed, never a new
      finding; a re-review never spawns a duplicate fix task for a finding
-     that a fix task not yet `done` already carries. A repeat after its fix
+     that a fix task not yet `done` already carries in the same repo. A
+     repeat after its fix
      landed gets the next fix task. After a build recovery, a changed wave
      is reviewed again from cycle 1; the fix tasks and PLAN.md repair wave
      of the review that recovery set aside do not count for the new one.
      Write each fix task to `.project/tasks/` with `wave`
      set to the current wave or a newly appended `## Wave N` heading in
-     PLAN.md before dispatch. Its dependencies include every source task in
-     the batch; its files match the batch. In `## Review findings`, use one
+     PLAN.md before dispatch. Its dependencies include every source task of
+     the batch that is in the same repo, and its Verify runs the Verify of
+     those tasks; its files are the batch files or a subset of them, never
+     none. In `## Review findings`, use one
      `### <locator>` block per group, `Criterion: <verbatim criterion>`, and
      every observation verbatim. Run the repair through the same isolated
      layer loop, even when its appended wave repairs an earlier blocked wave.
      After landing, call `review_findings.py repair-evidence --repo <primary>
      --wave <source wave> --cycle <source cycle> --task <repair id>` and save
-     its JSON as the repair evidence for the next review. The helper validates
+     its JSON as the repair evidence for the next review. The helper selects
+     the batch by the repair's locators and repo, then validates
      the carried batch, original and repair landings, isolated product scope,
      unchanged source reports and reusable Verify. On success, brief the next
      original-wave review with this receipt and the reviewer role's
@@ -529,8 +537,10 @@ dispatch contract and perform steps 1–5 by hand.
      the evidence blocker rather than redispatching an already proven fix.
      When the blocker cannot be resolved, for example `repair base contains
      unlinked changes to original product` because a later wave changed the
-     same files, run the next review cycle of the source wave in full at the
-     current HEAD, without the receipt.
+     same files, or `repair has no reusable passing Verify at its landing`
+     for a member repair, which the helper does not prove, run the next
+     review cycle of the source wave in full at the current HEAD, without the
+     receipt.
    At the cap, record all attempts in the STATE.md log and ask the user —
    through an interactive user-input tool when available — after linking
    the resolved absolute blocking wave review, every deep lens file for the

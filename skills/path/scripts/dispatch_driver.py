@@ -2037,7 +2037,8 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
             text = path.read_text(encoding="utf-8")
             fields, _ = isolation.task_frontmatter(text)
             repairs.append({"task": fields["id"], "path": path.relative_to(primary).as_posix(),
-                            "wave": int(fields["wave"]), "locators": re.findall(r"(?m)^### (.+)$", _common.section_body(text, "Review findings") or "")})
+                            "wave": int(fields["wave"]), "locators": re.findall(r"(?m)^### (.+)$", _common.section_body(text, "Review findings") or ""),
+                            **({"repo": fields["repo"]} if fields.get("repo") else {})})
             if fields["status"] != "done":
                 pending.append(repairs[-1])
         suffix = f"-fix-wave-{options.wave}-cycle-{options.cycle}.md"
@@ -2051,7 +2052,9 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
 
         existing = [item for item in repairs if item["path"].endswith(suffix) and at_base(item["path"]) is None]
         # A landed repair no longer carries its finding: a repeat proves that fix failed and needs the next one.
-        carried = {locator for item in pending if not item["path"].endswith(suffix) for locator in item["locators"]}
+        # Two repos can carry the same locator, so a repair carries a finding only in its own repo.
+        carried = {(item.get("repo"), locator) for item in pending if not item["path"].endswith(suffix)
+                   for locator in item["locators"]}
         findings = review_findings.compute(primary, options.project_dir, options.wave, options.cycle)
         receipt["findings"] = findings
         escalation = [key for key in ("structural_blockers", "skeptic_groups", "cap_reached", "all_refuted")
@@ -2086,9 +2089,10 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
             raise DriverStop("repair tasks disagree with the PLAN repair wave")
         receipt["existing"] = existing
         for batch in findings["fix_batches"]:
-            if any(set(batch["locators"]) <= set(item["locators"]) for item in existing):
+            repo = batch.get("repo")  # a member name, or None for the coordinator
+            if any(item.get("repo") == repo and set(batch["locators"]) <= set(item["locators"]) for item in existing):
                 continue
-            if all(locator in carried for locator in batch["locators"]):
+            if all((repo, locator) in carried for locator in batch["locators"]):
                 receipt["carried"].append(batch)
                 continue
             batch_groups = [groups[locator] for locator in batch["locators"]]
@@ -2096,6 +2100,8 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
             for source in sources:
                 if source not in texts:
                     raise DriverStop(f"fix batch names unknown task {source}")
+            # One task changes one repo: the fix depends on, and runs the Verify of, the source tasks of its repo.
+            sources = [source for source in sources if isolation.task_frontmatter(texts[source])[0].get("repo") == repo]
             task_id = next_task_id(tasks_dir)
             verify = "set -e\n" + "\n".join(  # each source Verify in its own subshell
                 f"(\n{command}\n)" for command in dict.fromkeys(_common.task_verify_command(texts[source]) for source in sources))
@@ -2106,6 +2112,7 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
                 f"### {group['locator']}\nCriterion: {group['criterion']}\n"
                 + "\n".join(f"- {item['text']}" for item in group["observations"]) for group in batch_groups)
             files = "\n".join(f"  - {path}" for path in batch["files"])
+            member = f"repo: {repo}\n" if repo else ""  # the task template puts `repo:` before `files:`
             title = f"Fix wave {options.wave} cycle {options.cycle} review findings in {', '.join(sources)}"
             text = f"""---
 id: {task_id}
@@ -2117,7 +2124,7 @@ agent: null
 base: null
 worktree: null
 task_branch: null
-files:
+{member}files:
 {files}
 ---
 
@@ -2167,7 +2174,7 @@ Heavy: {'yes' if heavy else 'no'}
             _common.atomic_write(path, text)
             receipt["created"].append({"task": task_id, "path": path.relative_to(primary).as_posix(),
                                        "wave": fix_wave, "deps": sources, "files": batch["files"],
-                                       "locators": batch["locators"]})
+                                       "locators": batch["locators"], **({"repo": repo} if repo else {})})
         rows = []
         for item in [*existing, *receipt["created"]]:
             fields, _ = isolation.task_frontmatter((primary / item["path"]).read_text(encoding="utf-8"))
