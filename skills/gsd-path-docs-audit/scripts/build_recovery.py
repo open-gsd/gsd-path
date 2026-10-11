@@ -22,6 +22,10 @@ MARKER = "build recovery: "
 RECOVERY_KEYS = frozenset({"base", "branch", "kind", "source"})
 
 
+# Only the value of a cap line is exempt; a comment or a line separator after it stays in the compared text.
+CAP_VALUE = re.compile(r"(?m)^(-[ \t]*(?:max_review_cycles|wave_budget):)[ \t\w.,$/:]*")
+
+
 def runtime():
     if __package__:
         from scripts import pipeline_state
@@ -289,61 +293,78 @@ def validate_plan(repo: Path) -> None:
         intent = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/intent/INTENT.md")
         if state._read_real_file(repo / ".project/intent/INTENT.md", "INTENT.md") != intent:
             raise state.PipelineStateError("plan repair cannot change approved intent")
-    unchanged = unchanged_waves(repo, recovery)
-    for path in (repo / ".project/review").iterdir():
-        match = re.match(r"wave-([1-9]\d*)[.]", path.name)
-        if match and int(match[1]) not in unchanged:
-            raise state.PipelineStateError("changed wave must be reviewed after build resumes")
+    if stale_review_reasons(repo, recovery, _review_waves(repo / ".project/review")):
+        raise state.PipelineStateError("changed wave must be reviewed after build resumes")
 
 
-def unchanged_waves(repo: Path, recovery: dict) -> set[int]:
-    """Reuse evidence only when its intent, wave contract, and task bytes match."""
+def _review_waves(directory: Path) -> set[int]:
+    return {int(match[1]) for path in directory.iterdir()
+            if (match := re.match(r"wave-([1-9]\d*)[.]", path.name))}
+
+
+def stale_review_reasons(repo: Path, recovery: dict, waves: set[int]) -> dict[int, str]:
+    """Say why a wave's preserved review is stale; a wave not returned has matching intent, plan, and task bytes."""
     state = runtime()
     project = repo / ".project"
     old_intent = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/intent/INTENT.md")
     if state._read_real_file(project / "intent/INTENT.md", "INTENT.md") != old_intent:
-        return set()
+        return dict.fromkeys(waves, "INTENT.md changed")
     old_plan = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/plan/PLAN.md") or ""
     new_plan = state._read_real_file(project / "plan/PLAN.md", "PLAN.md")
+    panel_lines = r"(?m)^-[ \t]*review_panel:.*$"
+    if re.findall(panel_lines, old_plan) != re.findall(panel_lines, new_plan):
+        return dict.fromkeys(waves, "PLAN.md `review_panel` setting changed")
 
     def sections(text):
         return {match[1]: match[2] for match in re.finditer(
             r"(?ms)^## ([^\n]+)\n(.*?)(?=^## |\Z)", text,
         )}
 
+    def governing(plan):
+        # Non-wave settings govern every wave, including coverage and surfaces. Caps only bound
+        # later work and Dependency notes are prose, so neither changes what a passed review judged.
+        return {title: CAP_VALUE.sub(r"\1", body) if title == "Config" else body
+                for title, body in plan.items()
+                if not title.startswith("Wave ") and title != "Dependency notes"}
+
     old_sections, new_sections = sections(old_plan), sections(new_plan)
-    # Non-wave settings govern every wave, including coverage and surfaces.
-    if ({k: v for k, v in old_sections.items() if not k.startswith("Wave ")}
-            != {k: v for k, v in new_sections.items() if not k.startswith("Wave ")}):
-        return set()
+    old_governing, new_governing = governing(old_sections), governing(new_sections)
+    for title in sorted(old_governing.keys() | new_governing.keys()):
+        if old_governing.get(title) != new_governing.get(title):
+            return dict.fromkeys(waves, f"PLAN.md section `{title}` changed")
     old_tasks = checkpoint_runtime()._task_contracts_at(repo, recovery["base"], ".project/tasks")
     current = settled_tasks(repo)
-    unchanged = set()
-    for title, body in new_sections.items():
-        match = re.match(r"Wave ([1-9]\d*)\b", title)
-        if not match or old_sections.get(title) != body:
+    reasons = {}
+    for wave in waves:
+        section = {title: body for title, body in new_sections.items() if re.match(rf"Wave {wave}\b", title)}
+        if not section or any(old_sections.get(title) != body for title, body in section.items()):
+            reasons[wave] = f"PLAN.md section `Wave {wave}` changed"
             continue
-        wave = match[1]
         before = {Path(path).name: text for path, text in old_tasks.values()
-                  if task_fields(text, path).get("wave") == wave}
-        after = {name: text for name, (text, fields) in current.items() if fields.get("wave") == wave}
-        if before and before == after:
-            unchanged.add(int(wave))
-    return unchanged
+                  if task_fields(text, path).get("wave") == str(wave)}
+        after = {name: text for name, (text, fields) in current.items() if fields.get("wave") == str(wave)}
+        if not before or before != after:
+            reasons[wave] = f"wave {wave} task contracts changed"
+    return reasons
 
 
-def restore_unchanged_reviews(repo: Path) -> None:
+def restore_unchanged_reviews(repo: Path) -> dict | None:
+    """Restore reusable wave reviews and report every preserved wave, so a dropped review is visible at approval."""
     recovery = context(repo)
     if not recovery or not recovery["active"]:
-        return
-    unchanged = unchanged_waves(repo, recovery)
-    for path in review_backup(repo, recovery).iterdir():
+        return None
+    backup = review_backup(repo, recovery)
+    waves = _review_waves(backup)
+    reasons = stale_review_reasons(repo, recovery, waves)
+    for path in backup.iterdir():
         match = re.match(r"wave-([1-9]\d*)[.]", path.name)
-        if match and int(match[1]) in unchanged:
+        if match and int(match[1]) not in reasons:
             destination = repo / ".project/review" / path.name
             content = path.read_text(encoding="utf-8")
             if not destination.exists() or runtime()._read_real_file(destination, destination.name) != content:
                 runtime()._atomic_write(destination, content)
+    return {"restored": sorted(waves - reasons.keys()),
+            "review_again": [{"wave": wave, "reason": reasons[wave]} for wave in sorted(reasons)]}
 
 
 def inventory_checkpoint(repo: Path, head: str) -> bool:

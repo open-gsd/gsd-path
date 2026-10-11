@@ -223,6 +223,10 @@ def _approval_journal(repo: Path, journal: Mapping[str, object]) -> dict[str, ob
         expected_keys.add("baseline_before")
         if not isinstance(journal.get("baseline_before"), str):
             raise PipelineStateError("checkpoint journal has an invalid re-slice baseline")
+    if "recovery_reviews" in journal:
+        expected_keys.add("recovery_reviews")
+        if journal.get("kind") != "plan" or not isinstance(journal["recovery_reviews"], dict):
+            raise PipelineStateError("checkpoint journal has an invalid recovery review report")
     if set(journal) != expected_keys:
         raise PipelineStateError("checkpoint journal has invalid fields")
     if journal.get("schema") != CHECKPOINT_SCHEMA or journal.get("repo") != str(repo):
@@ -423,7 +427,7 @@ def _resume_checkpoint_locked(
         raise PipelineStateError("approval checkpoint returned the wrong commit")
     _unlink_checkpoint_journal(journal_path)
     state = pipeline_state._state_from_text(str(transaction["state_after"]))
-    return {
+    approved: dict[str, object] = {
         "schema": CHECKPOINT_SCHEMA,
         "status": "approved",
         "kind": transaction["kind"],
@@ -432,6 +436,9 @@ def _resume_checkpoint_locked(
         "paths": committed.get("paths"),
         "state": state.json(),
     }
+    if "recovery_reviews" in transaction:
+        approved["recovery_reviews"] = transaction["recovery_reviews"]
+    return approved
 
 
 def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
@@ -578,8 +585,9 @@ def checkpoint_approval(
         state, state_before, state_path = pipeline_state.load_state(resolved, project_dir)
         changes, event, subject, body = _approval_details(kind, state, selected_milestone)
         _validate_plan_briefs(resolved, kind, project_dir)
+        recovery_reviews = None
         if kind == "plan" and project_dir == ".project":
-            pipeline_state._build_recovery().restore_unchanged_reviews(resolved)
+            recovery_reviews = pipeline_state._build_recovery().restore_unchanged_reviews(resolved)
         expected = {
             "phase": state.phase,
             "status": state.status,
@@ -641,6 +649,8 @@ def checkpoint_approval(
         }
         if baseline_before is not None:
             journal["baseline_before"] = baseline_before
+        if recovery_reviews is not None:
+            journal["recovery_reviews"] = recovery_reviews
         pipeline_state._write_json(journal_path, journal)
         return _resume_checkpoint_locked(resolved, project, journal_path, journal)
 
