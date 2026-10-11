@@ -189,6 +189,11 @@ def task_verify_command(task_text: str) -> str:
     return block.group("block").removesuffix("\n") if block else ""
 
 
+def verify_subshell(command: str) -> str:
+    """One Verify command as a subshell block; a fix task joins these under `set -e`."""
+    return f"(\n{command}\n)"
+
+
 def latest_verify_entry(entries: list, command: str, commit: str,
                         repo: Optional[str] = None) -> Optional[dict]:
     """Rows are keyed by (command, repo, commit); a row without `repo` is a coordinator row."""

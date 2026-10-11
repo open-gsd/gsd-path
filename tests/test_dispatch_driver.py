@@ -234,7 +234,8 @@ class DispatchDriverTests(unittest.TestCase):
                 process.wait(timeout=60)
 
     def fixture(self, root: Path, deps_t002: str = "[]", wave_t002: int = 1,
-                state: tuple = ("build", "active")) -> str:
+                state: tuple = ("build", "active"), files_t002: str = "tests/test_app.py",
+                verify_t001: str = "", verify_t002: str = "") -> str:
         run_git(root, "init", "-b", "gsd-path/M001")
         # Finish automatic housekeeping before TemporaryDirectory removes Git objects.
         run_git(root, "config", "gc.autoDetach", "false")
@@ -242,8 +243,11 @@ class DispatchDriverTests(unittest.TestCase):
         run_git(root, "config", "user.email", "test@example.test")
         handoffs = test_handoffs.HandoffValidationTests()
         handoffs.write_plan_handoff(root)
+        if verify_t001:
+            handoffs.write_coverage_task(root, "T001", "- SC1", acceptance="1. The demo command prints hello.",
+                                         verify=verify_t001)
         handoffs.write_coverage_task(root, "T002", "- SC2", acceptance="1. The demo test suite is green.",
-                                     deps=deps_t002, wave=wave_t002)
+                                     deps=deps_t002, wave=wave_t002, files=files_t002, verify=verify_t002)
         if wave_t002 != 1:
             plan = root / ".project/plan/PLAN.md"
             text = plan.read_text(encoding="utf-8").replace(
@@ -252,7 +256,7 @@ class DispatchDriverTests(unittest.TestCase):
                 "\n## Intent coverage",
                 f"\n## Wave {wave_t002} — demo tests\n\nGoal: Prove the demo tests.\n"
                 "Review depth: full\n\n| Task | Title | Deps | Files |\n|------|-------|------|-------|\n"
-                "| T002 | Demo task T002 | — | tests/test_app.py |\n\n## Intent coverage", 1)
+                f"| T002 | Demo task T002 | — | {files_t002} |\n\n## Intent coverage", 1)
             plan.write_bytes(text.encode("utf-8"))
         handoffs.write_state(root, *state)
         (root / "fake_coder.py").write_bytes(FAKE_CODER.encode("utf-8"))
@@ -777,6 +781,78 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.round(root, "--wait", "60", wave=2)
         self.assertEqual(receipt["wave"], 2)
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T002"])
+
+    def later_wave_fixture(self, root: Path, verify_t002: str, files_t002: str = "src/app.py") -> tuple:
+        """T001 in wave 1 and T002 in wave 2. Each run of T001's Verify adds one line to the trace file."""
+        trace = root.parent / "t001-verify-runs"
+        verify_t001 = f"python3 src/app.py && echo ran >> {shlex.quote(trace.as_posix())}"
+        self.fixture(root, wave_t002=2, files_t002=files_t002, verify_t001=verify_t001,
+                     verify_t002=verify_t002 or verify_t001)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(trace.read_text(encoding="utf-8").splitlines(), ["ran"])  # the wave 1 landing
+        return trace, verify_t001
+
+    def test_later_wave_task_that_breaks_an_earlier_verify_is_blocked_and_names_it(self) -> None:
+        root = self.root
+        self.later_wave_fixture(root, "test -f src/app.py")
+        head = self.head(root)
+        # The wave 2 coder leaves src/app.py in place but makes it exit 1: T002's Verify passes, T001's fails.
+        receipt = self.round(root, "--wait", "60", wave=2, mode="badverify")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        blocked = receipt["blocked"][0]
+        self.assertEqual(blocked["task_id"], "T002")
+        self.assertEqual(blocked["reason"], "regression Verify of T001 failed in the isolate")
+        self.assertEqual(blocked["execution"]["exit_code"], 0)
+        self.assertEqual([(item["tasks"], item["exit_code"]) for item in blocked["regressions"]],
+                         [(["T001"], 1)])
+        self.assertEqual(self.head(root), head)
+        text = (root / ".project/tasks/T002-demo.md").read_text(encoding="utf-8")
+        self.assertNotIn("status: done", text)
+        self.assertIn("orchestrator Verify (sidecar gsd-path-verify/task-t002-verify): pass, exit 0", text)
+        self.assertIn("orchestrator regression Verify of T001 (sidecar gsd-path-verify/task-t002-verify): "
+                      "fail, exit 1", text)
+        ledger = (root / ".project/build/verify-ledger.jsonl").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(ledger), 1)  # the wave 1 landing only
+
+    def test_later_wave_task_lands_when_the_earlier_verify_still_passes(self) -> None:
+        root = self.root
+        trace, verify_t001 = self.later_wave_fixture(root, "test -f src/app.py")
+        receipt = self.round(root, "--wait", "60", wave=2)
+        self.assertEqual(receipt["status"], "done", receipt)
+        landed = receipt["landed"][0]
+        self.assertEqual(landed["task"], "T002")
+        self.assertEqual(trace.read_text(encoding="utf-8").splitlines(), ["ran", "ran"])  # T001's Verify ran again
+        self.assertEqual([(item["tasks"], item["command"], item["exit_code"]) for item in landed["regressions"]],
+                         [(["T001"], verify_t001, 0)])
+        text = (root / ".project/tasks/T002-demo.md").read_text(encoding="utf-8")
+        self.assertIn("status: done", text)
+        self.assertIn("orchestrator regression Verify of T001 (sidecar gsd-path-verify/task-t002-verify): "
+                      "pass, exit 0", text)
+        # The ledger records the task's own command at its landing, never the earlier task's command.
+        lookup = dispatch_driver.build_state.verify_lookup
+        own = lookup(str(root), "test -f src/app.py", landed["commit"])
+        self.assertTrue(own["reuse"], own)
+        self.assertNotIn("regressions", own["entry"]["execution"])
+        self.assertFalse(lookup(str(root), verify_t001, landed["commit"])["hit"])
+
+    def test_later_wave_task_without_a_shared_file_runs_only_its_own_verify(self) -> None:
+        root = self.root
+        trace, _ = self.later_wave_fixture(root, "test -f tests/test_app.py", files_t002="tests/test_app.py")
+        receipt = self.round(root, "--wait", "60", wave=2)
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual([item["task"] for item in receipt["landed"]], ["T002"])
+        self.assertEqual(trace.read_text(encoding="utf-8").splitlines(), ["ran"])  # T001's Verify did not run again
+        self.assertNotIn("regression Verify",
+                         (root / ".project/tasks/T002-demo.md").read_text(encoding="utf-8"))
+
+    def test_earlier_verify_identical_to_the_own_verify_runs_once_at_landing(self) -> None:
+        root = self.root
+        trace, _ = self.later_wave_fixture(root, "")  # T002 edits src/app.py and has T001's Verify command
+        receipt = self.round(root, "--wait", "60", wave=2)
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual([item["task"] for item in receipt["landed"]], ["T002"])
+        # One line from the wave 1 landing, one from T002's own Verify, none from a regression run.
+        self.assertEqual(trace.read_text(encoding="utf-8").splitlines(), ["ran", "ran"])
 
     def test_round_without_wait_returns_in_flight_and_settles_later(self) -> None:
         root = self.root
@@ -1587,7 +1663,10 @@ class DispatchDriverTests(unittest.TestCase):
         again = self.round(root, "--wait", "60", wave=2)
         self.assertEqual(again["status"], "done", again)
         self.assertEqual([item["task"] for item in again["landed"]], ["T003"])
-        self.assertIn("status: done", (root / receipt["created"][0]["path"]).read_text(encoding="utf-8"))
+        landed_text = (root / receipt["created"][0]["path"]).read_text(encoding="utf-8")
+        self.assertIn("status: done", landed_text)
+        # The fix task's own Verify already runs T001's command in a subshell; landing does not run it again.
+        self.assertNotIn("regression Verify", landed_text)
 
     def test_fix_tasks_lint_explicitly_selects_its_plan_track(self) -> None:
         self.fixture(self.root)

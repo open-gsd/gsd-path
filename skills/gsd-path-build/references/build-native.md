@@ -263,7 +263,8 @@ dispatch contract and perform steps 1–5 by hand.
    defective task contract before establishing the round base. Run ready work
    up to capacity. Verify commands marked `Heavy: yes` (`verify_heavy` in the
    ready set) run one at a time across every concurrent task, including the
-   step 5 rerun; light ones are unconstrained. Do not wait for the whole
+   step 5 rerun; light ones are unconstrained. `verify_heavy` is also true
+   when step 5 reruns a heavy Verify of an earlier task. Do not wait for the whole
    round before unlocking dependents: each task landing in step 5 re-opens
    step 2, and a newly ready
    task dispatches in a fresh round at the current clean HEAD while unrelated
@@ -289,7 +290,15 @@ dispatch contract and perform steps 1–5 by hand.
      native child tools; no child command is needed. It reproduces serial work
      in its prepared sidecar, runs authoritative Verify, records exact output,
      lands through `isolation.py`, records eligible ledger evidence, and retires
-     the isolate. A `landed` receipt proves those steps; do not run them again
+     the isolate. Authoritative Verify is the task's own Verify, then the
+     Verify of each `done` task of an earlier wave, in the same repo, that
+     shares a declared file with this task. `finish` selects those commands;
+     never select them by hand. A command that the own Verify already runs
+     does not run again. A failed earlier-task Verify blocks the landing as a
+     failed own Verify does. The receipt (`regressions`) and the task Log
+     entry `orchestrator regression Verify of <task id>` name the earlier
+     task. The ledger records only the own command.
+     A `landed` receipt proves those steps; do not run them again
      or author another implementation narrative. A blocked receipt preserves
      its failure evidence and follows the recovery rule, never a manual bypass.
      Keep the pre-finish declared-path check above. Each landing re-opens step 2

@@ -94,6 +94,7 @@ class Task:
     verify_heavy: bool
     repo: str = ""
     review_findings: bool = False
+    verify: str = ""
 
 
 @dataclass(frozen=True)
@@ -248,6 +249,7 @@ def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None)
         verify_heavy=_verify_heavy(text, label),
         repo=str(fields.get("repo") or ""),
         review_findings=REVIEW_FINDINGS_HEADING in _sections(text),
+        verify=_common.task_verify_command(text),
     )
 
 
@@ -492,6 +494,40 @@ def _overlap(left: Task, right: Task) -> List[str]:
     return sorted(set(left.files) & set(right.files))
 
 
+def _regression_sources(tasks: Sequence[Task], task: Task) -> List[Task]:
+    """Done tasks of an earlier wave that share a declared file with this task."""
+
+    return [
+        other
+        for other in tasks
+        if other.status == "done" and other.wave < task.wave and _overlap(task, other)
+    ]
+
+
+def regression_verifies(
+    repo: Path, task_id: str, own: str, project_dir: str = DEFAULT_PROJECT_DIR
+) -> List[Dict[str, object]]:
+    """Return the earlier-wave Verify commands that a landing of this task must also pass.
+
+    One entry per distinct command, with every source task that has it. A command
+    that the task's own Verify already runs is left out: an identical command, or
+    one inside it as a fix-task subshell block.
+    """
+
+    tasks = [
+        _parse_task(path, path.relative_to(repo).as_posix())
+        for path in sorted((repo / project_dir / "tasks").glob("*.md"))
+    ]
+    task = next((item for item in tasks if item.task_id == task_id), None)
+    if task is None:
+        raise BuildStateError("unknown-task", f"task file is missing: {task_id}")
+    sources: Dict[str, List[str]] = {}
+    for other in _regression_sources(tasks, task):
+        if other.verify and other.verify != own and _common.verify_subshell(other.verify) not in own:
+            sources.setdefault(other.verify, []).append(other.task_id)
+    return [{"tasks": task_ids, "command": command} for command, task_ids in sources.items()]
+
+
 def _blocked_wave_reviews(project: Project) -> Dict[int, int]:
     """Return waves whose highest canonical review cycle has a blocked lens."""
 
@@ -646,7 +682,9 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
                 "deps": list(task.deps),
                 "files": list(task.files),
                 "task_file": task.task_file,
-                "verify_heavy": task.verify_heavy,
+                # The landing also runs each regression Verify, so a heavy one makes the task heavy.
+                "verify_heavy": task.verify_heavy
+                or any(other.verify_heavy for other in _regression_sources(project.tasks, task)),
                 **({"repo": task.repo} if task.repo else {}),
             }
             for task in selectable

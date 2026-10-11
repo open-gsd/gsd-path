@@ -96,6 +96,9 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   this task's work is skipped. That command must name a path from `files`,
   and must not be PLAN.md's project Verify unless an SC this task owns names
   that command. Criteria and Verify are the contract; Approach is guidance.
+  A task that lists a file of an earlier-wave task must also pass that
+  task's Verify to land. When it changes that behavior on purpose, list the
+  tests that Verify runs in its `files`.
 - In a multi-repo milestone (`.project/MEMBERS.md` lists members), each task
   changes exactly one repo. Give a member task `repo: <member>`; its `files`
   and Verify are relative to that member's root, and its Verify runs there.

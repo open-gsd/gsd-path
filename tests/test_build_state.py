@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts import _common, isolation
+from scripts import _common, build_state, isolation
 
 # Git for Windows bash, never the System32 WSL launcher CreateProcess finds first.
 BASH = _common.find_bash()
@@ -678,6 +678,81 @@ archive: null
         self.assertEqual(
             {task["id"]: task["verify_heavy"] for task in payload["ready"]},
             {"T001": True, "T002": False},
+        )
+
+    def write_verify_task(self, task_id: str, wave: int, files: tuple[str, ...], command: str, *,
+                          status: str = "done", repo: str = "") -> None:
+        text = task_text(task_id, f"Task {task_id}", wave, (), files, status=status)
+        text = text.replace("\n## Log", f"\n## Verify\n\n```bash\n{command}\n```\n\n## Log")
+        self.write_task(task_id, text.replace("files: [", f"repo: {repo}\nfiles: [") if repo else text)
+
+    def test_regression_verifies_names_done_earlier_wave_tasks_that_share_a_file(self) -> None:
+        self.write_verify_task("T001", 1, ("shared.py",), "check one")
+        self.write_verify_task("T002", 1, ("other.py",), "check other")  # no shared file
+        self.write_verify_task("T003", 2, ("shared.py", "more.py"), "check one")  # the same command as T001
+        self.write_verify_task("T004", 3, ("shared.py",), "check pending", status="pending")
+        self.write_verify_task("T005", 3, ("shared.py",), "check member", repo="api")  # another repository
+        self.write_verify_task("T006", 3, ("shared.py",), "check three")
+        self.write_verify_task("T007", 4, ("shared.py", "new.py"), "check own", status="in-progress")
+        self.write_verify_task("T008", 4, ("shared.py",), "check same wave")
+        self.write_verify_task("T009", 5, ("shared.py",), "check later wave")
+        self.write_verify_task("T010", 4, ("shared.py",), "check own member", status="in-progress", repo="api")
+
+        self.assertEqual(
+            build_state.regression_verifies(self.repo, "T007", "check own"),
+            [
+                {"tasks": ["T001", "T003"], "command": "check one"},
+                {"tasks": ["T006"], "command": "check three"},
+            ],
+        )
+        # The own Verify already runs an identical command, alone or as a fix-task subshell block.
+        self.assertEqual(
+            build_state.regression_verifies(self.repo, "T007", "check one"),
+            [{"tasks": ["T006"], "command": "check three"}],
+        )
+        self.assertEqual(
+            build_state.regression_verifies(
+                self.repo, "T007", "set -e\n(\ncheck one\n)\n(\ncheck three\n)"
+            ),
+            [],
+        )
+        # A member task overlaps only tasks of its own repository.
+        self.assertEqual(
+            build_state.regression_verifies(self.repo, "T010", "check own member"),
+            [{"tasks": ["T005"], "command": "check member"}],
+        )
+
+    def test_ready_marks_a_task_heavy_when_its_landing_reruns_a_heavy_verify(self) -> None:
+        self.write_plan(
+            (
+                (("T001", "Heavy", (), ("one.py",)),),
+                (
+                    ("T002", "Edits the heavy file", (), ("one.py",)),
+                    ("T003", "Unrelated", (), ("two.py",)),
+                ),
+            )
+        )
+        def with_verify(text: str, heavy: str) -> str:
+            return text.replace("\n## Log", f"\n## Verify\n\n```bash\ntest -f one.py\n```\nHeavy: {heavy}\n\n## Log")
+
+        self.write_task("T001", with_verify(task_text("T001", "Heavy", 1, (), ("one.py",)), "yes"))
+        self.write_task(
+            "T002", with_verify(task_text("T002", "Edits the heavy file", 2, (), ("one.py",)), "no")
+        )
+        self.write_task("T003", task_text("T003", "Unrelated", 2, (), ("two.py",)))
+        base = self.commit_all("plan")
+        active = task_text("T001", "Heavy", 1, (), ("one.py",), status="in-progress", agent="builder",
+                           base=base, worktree=str(self.repo), log=("created", "implementation complete"))
+        self.write_task("T001", with_verify(active, "yes"))
+        (self.repo / "one.py").write_bytes("done = True\n".encode("utf-8"))
+        isolation.land(self.repo, self.repo, base, "T001", "Heavy", ".project/tasks/T001-task.md", ["one.py"])
+
+        result, payload = self.cli("ready")
+
+        self.assertEqual(result.returncode, 0, payload)
+        self.assertEqual(
+            {task["id"]: task["verify_heavy"] for task in payload["ready"]},
+            {"T002": True, "T003": False},
         )
 
     def test_verify_ledger_records_and_looks_up_runs(self) -> None:
