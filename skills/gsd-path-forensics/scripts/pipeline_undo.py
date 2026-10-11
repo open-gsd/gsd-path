@@ -22,6 +22,7 @@ from datetime import date
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
 import tempfile
+import traceback
 from pathlib import Path, PurePosixPath
 from typing import Optional, Sequence
 
@@ -53,7 +54,7 @@ def _load_pipeline_modules():
     try:
         from scripts import archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint
         return archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint
-    except ModuleNotFoundError as error:
+    except ImportError as error:  # a foreign `scripts` package
         if error.name not in {
             "scripts",
             "scripts.archive_milestone",
@@ -62,6 +63,13 @@ def _load_pipeline_modules():
             "scripts.pipeline_state",
             "scripts.state_checkpoint",
         }:
+            raise
+        # A plain ImportError raised while a `scripts` module loaded is not a
+        # foreign package. A missing module falls back, as before.
+        if not isinstance(error, ModuleNotFoundError) and any(
+            frame.f_globals.get("__name__", "").startswith("scripts.")
+            for frame, _ in traceback.walk_tb(error.__traceback__)
+        ):
             raise
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared))

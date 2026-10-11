@@ -13,6 +13,7 @@ import json
 import os
 import shlex
 import sys
+import traceback
 
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
@@ -86,7 +87,7 @@ def _load_diagnose_modules():
             pipeline_git,
             pipeline_state,
         )
-    except ModuleNotFoundError as error:
+    except ImportError as error:  # a foreign `scripts` package
         if error.name not in {
             "scripts",
             "scripts.archive_milestone",
@@ -97,6 +98,13 @@ def _load_diagnose_modules():
             "scripts.pipeline_git",
             "scripts.pipeline_state",
         }:
+            raise
+        # A plain ImportError raised while a `scripts` module loaded is not a
+        # foreign package. A missing module falls back, as before.
+        if not isinstance(error, ModuleNotFoundError) and any(
+            frame.f_globals.get("__name__", "").startswith("scripts.")
+            for frame, _ in traceback.walk_tb(error.__traceback__)
+        ):
             raise
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared))
@@ -147,8 +155,15 @@ else:
             raise
         try:
             from scripts import pipeline_undo
-        except ModuleNotFoundError as error:
+        except ImportError as error:  # a foreign `scripts` package
             if error.name not in {"scripts", "scripts.pipeline_undo"}:
+                raise
+            # A plain ImportError raised while a `scripts` module loaded is not a
+            # foreign package. A missing module falls back, as before.
+            if not isinstance(error, ModuleNotFoundError) and any(
+                frame.f_globals.get("__name__", "").startswith("scripts.")
+                for frame, _ in traceback.walk_tb(error.__traceback__)
+            ):
                 raise
             shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
             if str(shared) not in sys.path:

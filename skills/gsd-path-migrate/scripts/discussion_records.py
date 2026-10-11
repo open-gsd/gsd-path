@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import sys
+import traceback
 
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
@@ -33,13 +34,20 @@ def _load_pipeline_modules():
     try:
         from scripts import archive_milestone, pipeline_state, _common
         return _common, archive_milestone, pipeline_state
-    except ModuleNotFoundError as error:
+    except ImportError as error:  # a foreign `scripts` package
         if error.name not in {
             "scripts",
             "scripts.archive_milestone",
             "scripts.pipeline_state",
             "scripts._common",
         }:
+            raise
+        # A plain ImportError raised while a `scripts` module loaded is not a
+        # foreign package. A missing module falls back, as before.
+        if not isinstance(error, ModuleNotFoundError) and any(
+            frame.f_globals.get("__name__", "").startswith("scripts.")
+            for frame, _ in traceback.walk_tb(error.__traceback__)
+        ):
             raise
         shared_scripts = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared_scripts))
