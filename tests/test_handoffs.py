@@ -1949,7 +1949,73 @@ Surfaces: none
 
             with self.assertRaises(check_handoffs.HandoffError) as failure:
                 check_handoffs.validate_plan(root)
-            self.assertIn("same-wave file overlap", str(failure.exception))
+            self.assertEqual(
+                str(failure.exception),
+                "same-wave file overlap between T001 and T002: src/app.py",
+            )
+
+    def write_plan_pair(
+        self, root: Path, left: str, right: str, *, deps: str = "[]", repo: str = ""
+    ) -> None:
+        """Write a Wave 1 plan: T001 declares `left`, T002 declares `right`."""
+        self.write_plan_handoff(root)
+        self.write_plan_coverage(
+            root,
+            task_rows=(
+                f"| T001 | Demo task T001 | — | {left} |\n"
+                f"| T002 | Demo task T002 | {deps.strip('[]') or '—'} | {right} |\n"
+            ),
+        )
+        self.write_coverage_task(root, "T001", "- SC1", files=left)
+        self.write_coverage_task(
+            root,
+            "T002",
+            "- SC2",
+            acceptance="1. The demo test suite is green.",
+            deps=deps,
+            files=right,
+        )
+        if repo:
+            path = root / ".project/tasks/T002-demo.md"
+            path.write_bytes(
+                path.read_text(encoding="utf-8")
+                .replace("files:", f"repo: {repo}\nfiles:", 1)
+                .encode("utf-8")
+            )
+
+    def test_plan_rejects_a_declared_directory_and_a_path_below_it(self) -> None:
+        for child in ("fixtures/set/a.json", "fixtures/set/deep/b.json"):
+            with self.subTest(child=child), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_pair(root, child, "fixtures/set")
+
+                with self.assertRaises(check_handoffs.HandoffError) as failure:
+                    check_handoffs.validate_plan(root)
+                self.assertEqual(
+                    str(failure.exception),
+                    f"same-wave file overlap between T001 and T002: {child}",
+                )
+
+    def test_plan_allows_a_sibling_of_a_declared_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_pair(root, "fixtures/set", "fixtures/setx.json")
+
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+
+    def test_plan_allows_a_directory_and_a_path_below_it_in_different_repos(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_pair(root, "fixtures/set", "fixtures/set/a.json", repo="web")
+
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+
+    def test_plan_allows_a_dependent_path_below_a_declared_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_pair(root, "fixtures/set", "fixtures/set/a.json", deps="[T001]")
+
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
 
     def test_plan_allows_same_wave_overlap_between_landed_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

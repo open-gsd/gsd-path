@@ -2922,6 +2922,31 @@ class RecoverTests(unittest.TestCase):
         report = self.recover()
         self.assertEqual((report["verdict"], report["commit"]), ("recovered", commit))
 
+    def test_land_and_recover_accept_a_new_file_under_a_directory_at_the_base(self) -> None:
+        (self.repo / "fixtures/set").mkdir(parents=True)
+        (self.repo / "fixtures/set/old.json").write_bytes(b"{}\n")
+        git(self.repo, "add", "fixtures")
+        files = self.declare_directory()
+        self.assertEqual(git(self.repo, "cat-file", "-t", f"{self.base}:fixtures/set"), "tree")
+        self.write_task(
+            "in-progress", self.base, agent="coder", worktree=str(self.repo), files=files
+        )
+        (self.repo / "fixtures/set/a.json").write_bytes(b"{}\n")
+        with (self.repo / ".project/tasks/T001.md").open("a") as log:
+            log.write("- done\n")
+
+        commit = isolation.land(
+            self.repo, self.repo, self.base, "T001", "add greeting",
+            ".project/tasks/T001.md", list(files),
+        )["commit"]
+
+        self.assertEqual(
+            git(self.repo, "show", "--name-only", "--format=", commit).splitlines(),
+            [".project/tasks/T001.md", "fixtures/set/a.json"],
+        )
+        report = self.recover()
+        self.assertEqual((report["verdict"], report["commit"]), ("recovered", commit))
+
     def test_recovery_rejects_a_sibling_of_a_declared_directory(self) -> None:
         files = self.declare_directory()
         self.write_task("done", self.base, agent="coder", files=files, log="- done\n")

@@ -182,6 +182,24 @@ def section_body(text: str, heading: str) -> Optional[str]:
     return match.group("body") if match else None
 
 
+def overlapping_paths(left: Sequence[str], right: Sequence[str]) -> List[str]:
+    """Return the sorted paths that two task `files` lists both cover.
+
+    An entry covers itself and the paths below it. For a declared directory
+    and a path below it, the result names the lower path. The callers have no
+    task base, so this does not ask if an entry is a file: the task-brief
+    lint rejects a path below a file at the base.
+    """
+    return sorted(
+        {
+            max(one, other, key=len)
+            for one in left
+            for other in right
+            if one == other or one.startswith(other + "/") or other.startswith(one + "/")
+        }
+    )
+
+
 def task_verify_command(task_text: str) -> str:
     """The Verify shell text, excluding the closing fence's separator newline."""
     body = section_body(task_text, "Verify")
