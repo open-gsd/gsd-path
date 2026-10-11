@@ -1147,6 +1147,133 @@ test("update with nothing installed fails cleanly", async () => {
   }
 });
 
+test("uninstall removes owned skills for one host and keeps everything else", async () => {
+  const claudeRoot = path.join(root, "claude", "skills");
+  const grokRoot = path.join(root, "grok", "skills");
+  await runInstall([installer.targetPlan("claude", claudeRoot), installer.targetPlan("grok", grokRoot)]);
+  // A user's own "path" skill has no GSD Path marker; "gsd-path-mine" is no installed skill.
+  const foreignAlias = path.join(claudeRoot, "path");
+  fs.rmSync(foreignAlias, { recursive: true });
+  fs.mkdirSync(foreignAlias);
+  fs.writeFileSync(path.join(foreignAlias, "SKILL.md"), "my path skill, not gsd-path\n");
+  const unproven = path.join(claudeRoot, "gsd-path-mine");
+  fs.mkdirSync(unproven);
+  fs.writeFileSync(path.join(unproven, "notes.md"), "my notes\n");
+  fs.mkdirSync(path.join(claudeRoot, "my-skill"));
+  fs.writeFileSync(path.join(claudeRoot, "my-skill", "SKILL.md"), "mine\n");
+  fs.writeFileSync(path.join(root, "claude", "settings.json"), "{}\n");
+
+  const results = installer.uninstall([installer.targetPlan("claude", claudeRoot)]);
+
+  assert.deepEqual(fs.readdirSync(claudeRoot).sort(), ["gsd-path-mine", "my-skill", "path"]);
+  assert.equal(fs.readFileSync(path.join(foreignAlias, "SKILL.md"), "utf8"), "my path skill, not gsd-path\n");
+  assert.equal(fs.readFileSync(path.join(unproven, "notes.md"), "utf8"), "my notes\n");
+  assert.equal(fs.readFileSync(path.join(claudeRoot, "my-skill", "SKILL.md"), "utf8"), "mine\n");
+  assert.equal(fs.readFileSync(path.join(root, "claude", "settings.json"), "utf8"), "{}\n");
+  assert.deepEqual(fs.readdirSync(grokRoot).sort(), [...installer.SKILL_NAMES].sort());
+  const owned = installer.SKILL_NAMES.filter((name) => name !== "path").sort();
+  assert.deepEqual(results, [
+    `claude: kept ${unproven} (not owned by GSD Path)`,
+    `claude: kept ${foreignAlias} (not owned by GSD Path)`,
+    ...owned.map((name) => `claude: removed ${path.join(claudeRoot, name)}`),
+  ]);
+});
+
+test("uninstall dry run lists every path and removes nothing", async () => {
+  const claudeRoot = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", claudeRoot)]);
+  const tree = () => fs.readdirSync(root, { recursive: true }).sort();
+  const before = tree();
+
+  const results = installer.uninstall([installer.targetPlan("claude", claudeRoot)], { dryRun: true });
+
+  assert.deepEqual(
+    results,
+    [...installer.SKILL_NAMES].sort().map((name) => `claude: would remove ${path.join(claudeRoot, name)}`)
+  );
+  assert.deepEqual(tree(), before);
+});
+
+test("uninstall twice is a no-op and a host with nothing installed is not an error", async () => {
+  const claudeRoot = path.join(root, "claude", "skills");
+  const grokRoot = path.join(root, "grok", "skills");
+  const plans = [installer.targetPlan("claude", claudeRoot), installer.targetPlan("grok", grokRoot)];
+  await runInstall([plans[0]]);
+
+  const first = installer.uninstall(plans);
+  assert.equal(first.length, installer.SKILL_NAMES.length + 1);
+  assert.equal(first.at(-1), `grok: nothing to remove (${grokRoot})`);
+
+  assert.deepEqual(installer.uninstall(plans), [
+    `claude: nothing to remove (${claudeRoot})`,
+    `grok: nothing to remove (${grokRoot})`,
+  ]);
+  assert.deepEqual(fs.readdirSync(claudeRoot), []);
+  assert.ok(!fs.existsSync(path.join(root, "grok")), "a missing root must not be created");
+});
+
+test("uninstall removes the Cursor subagent and keeps other agents", async () => {
+  const cursorRoot = path.join(root, "cursor", "skills");
+  const agents = path.join(root, "cursor", "agents");
+  await runInstall([installer.targetPlan("cursor", cursorRoot)]);
+  fs.writeFileSync(path.join(agents, "mine.md"), "my agent\n");
+
+  const results = installer.uninstall([installer.targetPlan("cursor", cursorRoot)]);
+
+  assert.deepEqual(fs.readdirSync(agents), ["mine.md"]);
+  assert.deepEqual(fs.readdirSync(cursorRoot), []);
+  assert.equal(results.at(-1), `cursor: removed ${path.join(agents, installer.CURSOR_AGENT_FILENAME)}`);
+});
+
+test("--uninstall --local removes this project's skills and keeps the global install", async () => {
+  const project = path.join(root, "local-project");
+  const globalRoot = path.join(root, "global-claude", "skills");
+  fs.mkdirSync(project);
+  const run = (...args) => installer.main(
+    ["--claude", "--source-root", source, "--no-color", ...args],
+    { ...env, CLAUDE_CONFIG_DIR: path.dirname(globalRoot) }
+  );
+  const previous = process.cwd();
+  process.chdir(project);
+  try {
+    assert.equal(await run(), 0);
+    assert.equal(await run("--local"), 0);
+
+    assert.equal(await run("--uninstall", "--local"), 0);
+    assert.deepEqual(fs.readdirSync(path.join(project, ".claude", "skills")), []);
+    assert.deepEqual(fs.readdirSync(globalRoot).sort(), [...installer.SKILL_NAMES].sort());
+
+    assert.equal(await run("--uninstall"), 0);
+    assert.deepEqual(fs.readdirSync(globalRoot), []);
+  } finally {
+    process.chdir(previous);
+  }
+});
+
+test("--uninstall refuses --update, install-only flags, --project, and a missing target", async () => {
+  const claudeRoot = path.join(root, "claude", "skills");
+  await runInstall([installer.targetPlan("claude", claudeRoot)]);
+  const cli = (...args) => spawnSync(process.execPath, [
+    path.join(REPO_ROOT, "scripts/install.mjs"), "--uninstall", "--claude-root", claudeRoot, "--no-color", ...args,
+  ], { encoding: "utf8", env: { ...process.env, ...env } });
+
+  for (const flag of ["--update", "--hooks", "--hooks-init", "--hooks-refresh", "--hooks-refresh-full",
+    "--runtime-restore", "--runtime-upgrade", "--runtime-migrate", "--doctor", "--member-of"]) {
+    const refused = cli("--claude", ...(flag === "--member-of" ? [flag, root] : [flag]));
+    assert.equal(refused.status, 2, flag + refused.stdout);
+    assert.match(refused.stderr, new RegExp(`--uninstall cannot be combined with ${flag}\\n`));
+  }
+  const project = cli("--claude", "--project", root);
+  assert.equal(project.status, 2, project.stdout);
+  assert.match(project.stderr, /--uninstall removes installed skills only; project contracts and hooks are not removed/);
+  const untargeted = cli();
+  assert.equal(untargeted.status, 2, untargeted.stdout);
+  assert.match(untargeted.stderr, /select at least one target or --all/);
+  assert.deepEqual(fs.readdirSync(claudeRoot).sort(), [...installer.SKILL_NAMES].sort());
+
+  assert.match(cli("--help").stdout, /--uninstall +remove installed GSD Path skills/);
+});
+
 test("cli parses target flags and requires a selection", () => {
   const values = installer.parseCli(["--all", "--dry-run", "--local", "--claude-root", "/tmp/x"]);
   assert.equal(values.all, true);

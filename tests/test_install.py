@@ -395,6 +395,127 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("no existing GSD Path skills found to update", error)
 
+    def test_uninstall_removes_owned_skills_and_keeps_everything_else(self):
+        claude = self.root / "claude" / "skills"
+        grok = self.root / "grok" / "skills"
+        plans = [install.TargetPlan("claude", claude), install.TargetPlan("grok", grok)]
+        install.install(self.source, plans)
+        # A user's own "path" skill has no GSD Path marker; "gsd-path-mine" is no installed skill.
+        foreign = claude / "path"
+        shutil.rmtree(foreign)
+        foreign.mkdir()
+        (foreign / "SKILL.md").write_bytes(b"my path skill, not gsd-path\n")
+        unproven = claude / "gsd-path-mine"
+        unproven.mkdir()
+        (unproven / "notes.md").write_bytes(b"my notes\n")
+        (claude / "my-skill").mkdir()
+        (claude.parent / "settings.json").write_bytes(b"{}\n")
+
+        results = install.uninstall(plans[:1])
+
+        self.assertEqual(
+            ["gsd-path-mine", "my-skill", "path"], sorted(entry.name for entry in claude.iterdir())
+        )
+        self.assertEqual(b"my path skill, not gsd-path\n", (foreign / "SKILL.md").read_bytes())
+        self.assertEqual(b"my notes\n", (unproven / "notes.md").read_bytes())
+        self.assertEqual(b"{}\n", (claude.parent / "settings.json").read_bytes())
+        self.assertEqual(
+            sorted(install.SKILL_NAMES), sorted(entry.name for entry in grok.iterdir())
+        )
+        owned = sorted(name for name in install.SKILL_NAMES if name != "path")
+        self.assertEqual(
+            [
+                f"claude: kept {unproven} (not owned by GSD Path)",
+                f"claude: kept {foreign} (not owned by GSD Path)",
+                *(f"claude: removed {claude / name}" for name in owned),
+            ],
+            results,
+        )
+
+    def test_uninstall_dry_run_lists_every_path_and_removes_nothing(self):
+        claude = self.root / "claude" / "skills"
+        plans = [install.TargetPlan("claude", claude)]
+        install.install(self.source, plans)
+        before = sorted(self.root.rglob("*"))
+
+        results = install.uninstall(plans, dry_run=True)
+
+        self.assertEqual(
+            [f"claude: would remove {claude / name}" for name in sorted(install.SKILL_NAMES)],
+            results,
+        )
+        self.assertEqual(before, sorted(self.root.rglob("*")))
+
+    def test_uninstall_twice_is_a_no_op_and_removes_the_cursor_subagent(self):
+        cursor = self.root / "cursor" / "skills"
+        grok = self.root / "grok" / "skills"
+        plans = [install.TargetPlan("cursor", cursor), install.TargetPlan("grok", grok)]
+        install.install(self.source, plans[:1])
+        agents = cursor.parent / "agents"
+        (agents / "mine.md").write_bytes(b"my agent\n")
+
+        first = install.uninstall(plans)
+
+        self.assertEqual(
+            [
+                f"cursor: removed {agents / install.CURSOR_AGENT_FILENAME}",
+                f"grok: nothing to remove ({grok})",
+            ],
+            first[-2:],
+        )
+        self.assertEqual(["mine.md"], [entry.name for entry in agents.iterdir()])
+        self.assertEqual(
+            [f"cursor: nothing to remove ({cursor})", f"grok: nothing to remove ({grok})"],
+            install.uninstall(plans),
+        )
+        self.assertEqual([], list(cursor.iterdir()))
+        self.assertFalse(grok.parent.exists(), "a missing root must not be created")
+
+    def test_uninstall_cli_local_scope_and_usage_errors(self):
+        project = self.root / "project"
+        project.mkdir()
+        global_root = self.root / "global-claude" / "skills"
+        environment = {"CLAUDE_CONFIG_DIR": str(global_root.parent)}
+
+        def run(*arguments):
+            return self.run_main(
+                ["--claude", "--source-root", str(self.source), *arguments], environment
+            )
+
+        previous = Path.cwd()
+        try:
+            os.chdir(project)
+            self.assertEqual(0, run()[0])
+            self.assertEqual(0, run("--local")[0])
+            for flag in (
+                "--update", "--hooks", "--hooks-init", "--hooks-refresh", "--hooks-refresh-full",
+                "--runtime-restore", "--runtime-upgrade", "--runtime-migrate", "--doctor", "--member-of",
+            ):
+                extra = [flag, str(self.root)] if flag == "--member-of" else [flag]
+                status, _, error = run("--uninstall", "--local", *extra)
+                self.assertEqual(2, status, flag)
+                self.assertIn(f"--uninstall cannot be combined with {flag}\n", error)
+            status, _, error = run("--uninstall", "--local", "--project", str(project))
+            self.assertEqual(2, status)
+            self.assertIn(
+                "--uninstall removes installed skills only; project contracts and hooks are not removed",
+                error,
+            )
+            local_root = project / ".claude" / "skills"
+            self.assertEqual(
+                sorted(install.SKILL_NAMES), sorted(entry.name for entry in local_root.iterdir())
+            )
+
+            status, output, error = run("--uninstall", "--local")
+            self.assertEqual(0, status, error)
+            self.assertRegex(output, r"claude: removed \S+gsd-path-build\n")
+            self.assertEqual([], list(local_root.iterdir()))
+            self.assertEqual(
+                sorted(install.SKILL_NAMES), sorted(entry.name for entry in global_root.iterdir())
+            )
+        finally:
+            os.chdir(previous)
+
     def test_all_local_install_and_update_share_agent_bundle(self):
         project = self.root / "project"
         project.mkdir()
@@ -4081,6 +4202,14 @@ class InstallerParityTests(unittest.TestCase):
             ["--claude", "--local", "--project", "."],
             ["--claude", "--local", "--project", "."],
         ],
+        "uninstall": [
+            ["--claude", "--cursor", "--local"],
+            ["--claude", "--cursor", "--grok", "--local", "--uninstall", "--dry-run"],
+            ["--claude", "--cursor", "--grok", "--local", "--uninstall"],
+            ["--claude", "--cursor", "--grok", "--local", "--uninstall"],
+            ["--claude", "--local", "--uninstall", "--update"],
+            ["--claude", "--local", "--uninstall", "--project", "."],
+        ],
     }
     INSTALLERS = {
         "node": ["node", str(PROJECT_ROOT / "scripts" / "install.mjs")],
@@ -4106,7 +4235,8 @@ class InstallerParityTests(unittest.TestCase):
                 # identically instead of through the Windows code page.
                 encoding="utf-8",
                 capture_output=True,
-                env={**os.environ, "NO_COLOR": "1", "PYTHONIOENCODING": "utf-8"},
+                env={**os.environ, "NO_COLOR": "1", "PYTHONIOENCODING": "utf-8",
+                     "HOME": str(self.root / "home"), "USERPROFILE": str(self.root / "home")},
             )
             outputs.append((result.returncode, self.result_lines(result, project)))
         return outputs, self.snapshot(project)

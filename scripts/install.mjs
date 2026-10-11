@@ -1560,6 +1560,51 @@ export async function install(sourceRoot, plans, options = {}) {
   return results;
 }
 
+// The desktop app's rule: a VERSION stamp or a SKILL.md that names gsd-path.
+function isInstalledSkill(skillDir) {
+  if (isFile(path.join(skillDir, "VERSION"))) return true;
+  try {
+    return fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8").includes("gsd-path");
+  } catch {
+    return false;
+  }
+}
+
+// Removes installed skills only. Project contracts and hooks stay.
+export function uninstall(plans, { dryRun = false } = {}) {
+  const found = deploymentPlans(plans).map((plan) => {
+    const owned = [];
+    const kept = [];
+    for (const name of isDirectory(plan.root) ? fs.readdirSync(plan.root).sort() : []) {
+      if (!isManagedName(name)) continue;
+      const entry = path.join(plan.root, name);
+      (isManagedInstallEntry(plan.root, name) && isInstalledSkill(entry) ? owned : kept).push(entry);
+    }
+    const agent = path.join(path.dirname(plan.root), "agents", CURSOR_AGENT_FILENAME);
+    if (plan.profile === "cursor" && isFile(agent)) owned.push(agent);
+    return { label: plan.targets.join("+"), root: plan.root, owned, kept };
+  });
+  const results = [];
+  const ownership = acquireInstallLocks(
+    dryRun ? [] : found.filter(({ owned }) => owned.length).map(({ root }) => root)
+  );
+  try {
+    for (const { label, root, owned, kept } of found) {
+      for (const entry of kept) results.push(`${label}: kept ${entry} (not owned by GSD Path)`);
+      for (const entry of owned) {
+        if (!dryRun) removePath(entry);
+        results.push(`${label}: ${dryRun ? "would remove" : "removed"} ${entry}`);
+      }
+      if (!owned.length) results.push(`${label}: nothing to remove (${root})`);
+    }
+  } catch (error) {
+    throw new InstallerError(`uninstall stopped: ${messageOf(error)}; fix the cause and run it again`);
+  } finally {
+    releaseInstallLocks(ownership.locks, ownership.createdDirectories);
+  }
+  return results;
+}
+
 // Documented project-relative skill roots (verified against each host's
 // official skills docs). Codex, Zed, Muse, and Antigravity all discover the
 // project-level .agents/skills standard directory.
@@ -1580,10 +1625,16 @@ export function detectInstalls(targets, rootFor) {
   return plans;
 }
 
+const UNINSTALL_CONFLICTS = [
+  "update", "hooks", "hooks-init", "hooks-refresh", "hooks-refresh-full",
+  "runtime-restore", "runtime-upgrade", "runtime-migrate", "doctor", "member-of",
+];
+
 export function parseCli(argv) {
   const options = {
     all: { type: "boolean", default: false },
     update: { type: "boolean", default: false },
+    uninstall: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
     local: { type: "boolean", default: false },
     project: { type: "string" },
@@ -1670,13 +1721,16 @@ function usage() {
     "Docs: DOCS.md (hub) · QUICK.md (first run) · FULL.md · UPDATE.md\n\n" +
     "usage: gsd-path            (no flags on a terminal opens the interactive wizard)\n" +
     "       gsd-path [--all] [--update] [--local] [--dry-run] [--project PATH]\n" +
-    "              [--hooks] [--hooks-init] [--hooks-refresh] [--hooks-refresh-full] [target flags]\n\n" +
+    "              [--hooks] [--hooks-init] [--hooks-refresh] [--hooks-refresh-full] [target flags]\n" +
+    "       gsd-path --uninstall [--all] [--local] [--dry-run] [target flags]\n\n" +
     "  First install:  gsd-path --all --dry-run && gsd-path --all\n" +
     "  New repo:       gsd-path --all --project /path/to/repo\n" +
     "  Update skills:  gsd-path --update   (or npx @opengsd/gsd-path@latest --update)\n\n" +
     `targets: ${flags}\n` +
     "  --update              refresh existing installs in place; with --project also\n" +
     "                        keeps its selected runtime and project contracts\n" +
+    "  --uninstall           remove installed GSD Path skills from the selected targets;\n" +
+    "                        keeps other skills, host settings, project contracts, and hooks\n" +
     "  --local               install into this project's per-host skill dirs\n" +
     "  --project PATH        write project contracts and status runtime; requires Python 3.9+\n" +
     "  --doctor              read-only health check of installs, hooks, and state\n" +
@@ -1727,6 +1781,20 @@ export async function main(argv, env = process.env) {
     : path.resolve(SCRIPT_DIRECTORY, "..");
   const project =
     values.project !== undefined ? absolutePath(values.project) : null;
+  if (values.uninstall) {
+    const conflicts = UNINSTALL_CONFLICTS.filter((name) => values[name]).map((name) => `--${name}`);
+    if (conflicts.length) {
+      ui.error(`--uninstall cannot be combined with ${conflicts.join(", ")}`);
+      return 2;
+    }
+    if (project !== null) {
+      ui.error(
+        "--uninstall removes installed skills only; project contracts and hooks are not removed " +
+          "(.project/, .gsd-path/, the AGENTS.md block, guard hooks). Run it without --project."
+      );
+      return 2;
+    }
+  }
   const migrateAndUpdate = values["runtime-migrate"] && values.update;
   if (migrateAndUpdate && (project === null || values["runtime-restore"] || values["runtime-upgrade"] || values.doctor || values["hooks-init"] || values["hooks-refresh"] || values["hooks-refresh-full"])) {
     ui.error("--runtime-migrate --update requires --project and cannot be combined with another runtime, doctor, or hook operation");
@@ -1822,7 +1890,10 @@ export async function main(argv, env = process.env) {
     }
   }
   const sourceRootForInstall = sourceRoot;
-  const scope = local ? `project ${values.update ? "update in" : "install into"} ${process.cwd()}` : `global ${values.update ? "update" : "install"}`;
+  const [verb, localVerb] = values.uninstall
+    ? ["uninstall", "uninstall from"]
+    : values.update ? ["update", "update in"] : ["install", "install into"];
+  const scope = local ? `project ${localVerb} ${process.cwd()}` : `global ${verb}`;
   const mode = scope + (values["dry-run"] ? " · dry run" : "");
   ui.banner(mode);
   let plans;
@@ -1855,7 +1926,7 @@ export async function main(argv, env = process.env) {
   }
   const spin = ui.spinner("Preparing");
   try {
-    const results = await install(sourceRootForInstall, plans, {
+    const results = values.uninstall ? uninstall(plans, { dryRun: values["dry-run"] }) : await install(sourceRootForInstall, plans, {
       project,
       dryRun: values["dry-run"],
       env,
@@ -1870,6 +1941,8 @@ export async function main(argv, env = process.env) {
     }
     const closing = values["dry-run"]
       ? "Dry run — nothing was written."
+      : values.uninstall
+        ? "Done. Restart active agent sessions."
       : values.update
         ? "Updated. Previous copies are in each root's disabled-gsd-skills backup."
         : "Done. Restart active agent sessions, then invoke the router explicitly.";

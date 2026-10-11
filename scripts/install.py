@@ -3283,6 +3283,56 @@ def install(
     return results
 
 
+def _is_installed_skill(skill_dir: Path) -> bool:
+    """The desktop app's rule: a VERSION stamp or a SKILL.md that names gsd-path."""
+    if (skill_dir / "VERSION").is_file():
+        return True
+    try:
+        return "gsd-path" in (skill_dir / "SKILL.md").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
+def uninstall(plans: Sequence[TargetPlan], dry_run: bool = False) -> List[str]:
+    """Remove installed skills only. Project contracts and hooks stay."""
+    found = []
+    for plan in _deployment_plans(plans):
+        owned, kept = [], []
+        names = sorted(entry.name for entry in plan.root.iterdir()) if plan.root.is_dir() else []
+        for name in names:
+            if not _is_managed_name(name):
+                continue
+            entry = plan.root / name
+            if _is_managed_install_entry(plan.root, name) and _is_installed_skill(entry):
+                owned.append(entry)
+            else:
+                kept.append(entry)
+        agent = plan.root.parent / "agents" / CURSOR_AGENT_FILENAME
+        if plan.profile == "cursor" and agent.is_file():
+            owned.append(agent)
+        found.append(("+".join(plan.targets), plan.root, owned, kept))
+    results = []
+    locks, created = _acquire_install_locks(
+        [] if dry_run else [root for _, root, owned, _ in found if owned]
+    )
+    try:
+        for label, root, owned, kept in found:
+            results.extend(f"{label}: kept {entry} (not owned by GSD Path)" for entry in kept)
+            for entry in owned:
+                if not dry_run:
+                    _remove_path(entry)
+                results.append(f"{label}: {'would remove' if dry_run else 'removed'} {entry}")
+            if not owned:
+                results.append(f"{label}: nothing to remove ({root})")
+    except OSError as error:
+        raise InstallerError(
+            f"uninstall stopped: {error}; fix the cause and run it again"
+        ) from error
+    finally:
+        _release_install_locks(locks, created)
+    return results
+
+
 def _runtime_provenance(arguments, source_root: Path):
     """Owner-recorded provenance from --runtime-provenance-* upgrade flags.
 
@@ -3308,6 +3358,12 @@ def _runtime_provenance(arguments, source_root: Path):
     return recorded
 
 
+UNINSTALL_CONFLICTS = (
+    "update", "hooks", "hooks-init", "hooks-refresh", "hooks-refresh-full",
+    "runtime-restore", "runtime-upgrade", "runtime-migrate", "doctor", "member-of",
+)
+
+
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(description=__doc__)
     for target in TARGETS:
@@ -3316,6 +3372,12 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--adapter-request", action="store_true", help=argparse.SUPPRESS)
     argument_parser.add_argument("--all", action="store_true", dest="all_targets")
     argument_parser.add_argument("--update", action="store_true")
+    argument_parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="remove installed GSD Path skills from the selected targets; "
+        "keeps other skills, host settings, project contracts, and hooks",
+    )
     argument_parser.add_argument("--local", action="store_true")
     argument_parser.add_argument("--dry-run", action="store_true")
     argument_parser.add_argument("--project", type=Path)
@@ -3370,6 +3432,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     project = (
         absolute_path(arguments.project) if arguments.project is not None else None
     )
+    if arguments.uninstall:
+        conflicts = [
+            f"--{name}" for name in UNINSTALL_CONFLICTS
+            if getattr(arguments, name.replace("-", "_"))
+        ]
+        if conflicts:
+            print(f"error: --uninstall cannot be combined with {', '.join(conflicts)}", file=sys.stderr)
+            return 2
+        if project is not None:
+            print(
+                "error: --uninstall removes installed skills only; project contracts and hooks "
+                "are not removed (.project/, .gsd-path/, the AGENTS.md block, guard hooks). "
+                "Run it without --project.",
+                file=sys.stderr,
+            )
+            return 2
     runtime_action = next((action for action in ("restore", "upgrade", "migrate")
                            if getattr(arguments, "runtime_" + action)), None)
     provenance = _runtime_provenance(arguments, source_root)
@@ -3517,7 +3595,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
         return 1
     try:
-        for result in install(
+        for result in uninstall(plans, arguments.dry_run) if arguments.uninstall else install(
             source_root,
             plans,
             project,
