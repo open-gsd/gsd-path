@@ -101,9 +101,9 @@ README's Windows notes). **Always** restart the agent session after install.
 
 Full roots and invocation table: [README.md](README.md#install-summary).
 
-**Python installer:** `scripts/install.py` supports global and `--local`
-installs plus `--update`. The Node CLI remains the interactive wizard and npm
-entry point.
+**Python installer:** `scripts/install.py`; see
+[README.md](README.md#install-summary) for what it supports. The Node CLI
+remains the interactive wizard and npm entry point.
 Help: `node scripts/install.mjs --help`
 
 ---
