@@ -42,9 +42,15 @@ no coding-agent host.
 ## Rules for a change
 
 - **Edit the canonical file.** Helper scripts live in `scripts/`. Shared
-  references and templates live in `skills/gsd-path/`. Each phase contract
-  lives in `skills/gsd-path-<phase>/SKILL.md`. The other copies under
-  `skills/` are generated. After an edit, run
+  references live in `skills/gsd-path/references/`, and shared templates
+  live in `skills/gsd-path/templates/`. The dispatch contract is the
+  exception: it lives in `platforms/shared-agents/dispatch.md`. Each skill
+  contract lives in `skills/gsd-path/SKILL.md` or
+  `skills/gsd-path-<phase>/SKILL.md`. Every other copy of these files under
+  `skills/` is generated, and sync overwrites it. This includes
+  `skills/gsd-path/references/dispatch.md`, the phase files such as
+  `skills/gsd-path/BUILD.md`, each `scripts/` directory under `skills/`,
+  and all of `skills/path/`. After an edit, run
   `python3 scripts/sync_skill_resources.py`, and commit the result.
   `npm run test:sync` fails when a copy is out of date.
 - **Keep the file lists equal.** The `files` list in `package.json` must
