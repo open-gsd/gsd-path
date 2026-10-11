@@ -1217,7 +1217,9 @@ class IsolationTests(unittest.TestCase):
 
     def refuse_crlf_staging(self, repo: Path) -> None:
         """Make `git add` fail for a CRLF file; status and diff only warn."""
-        git(repo, "config", "core.autocrlf", "input")
+        # An attribute, not core.autocrlf: the test runner sets that in the
+        # environment, and the environment overrides repository config.
+        self.write(repo, ".git/info/attributes", "* text eol=lf\n")
         git(repo, "config", "core.safecrlf", "true")
 
     def test_land_staging_failure_reports_git_stderr(self) -> None:
