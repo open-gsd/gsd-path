@@ -758,6 +758,53 @@ wave: 1   # inline comment
             self.assertIn("STATE.md is invalid", prepare.stderr)
             self.assertEqual(self.snapshot_worktree(repo), before)
 
+    def test_legacy_unnamed_milestone_archives_once_the_owner_names_it(self) -> None:
+        # Issue #374: an old blocked-build checkpoint recorded milestone null.
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state = repo / ".project" / "STATE.md"
+            unnamed = state.read_text(encoding="utf-8").replace("milestone: demo", "milestone: null")
+            state.write_bytes(
+                unnamed.replace("phase: ship", "phase: build")
+                .replace("status: active", "status: blocked").encode("utf-8")
+            )
+            self.git(repo, "commit", "-q", "-am", "build: checkpoint blocked build")
+            record = json.dumps({
+                "base": self.git(repo, "rev-parse", "HEAD").stdout.strip(),
+                "branch": "gsd-path/M001", "kind": "plan", "source": "build",
+            }, sort_keys=True)
+            unnamed += (
+                f"- 2026-08-02 — plan — build recovery: {record}\n"
+                "- 2026-08-03 — build — build started\n"
+            )
+            state.write_bytes(unnamed.encode("utf-8"))
+            self.git(repo, "commit", "-q", "-am", "build: resume after plan repair")
+            self.restamp_final_review(repo)
+
+            def run(script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+                return self.run_command(
+                    sys.executable, str(PROJECT_ROOT / "scripts" / script), *arguments,
+                    "--repo", str(repo), cwd=PROJECT_ROOT,
+                )
+
+            refused = run("archive_milestone.py", "prepare", "--slug", "demo")
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("STATE.md does not name a milestone", refused.stderr)
+
+            state.write_bytes(unnamed.replace("milestone: null", "milestone: demo").encode("utf-8"))
+            status = run("pipeline_state.py", "status")
+            self.assertEqual(status.returncode, 0, status.stderr)
+            self.assertEqual(json.loads(status.stdout)["state"]["milestone"], "demo")
+            self.prepare_archive(repo)
+            for command in ("status", "route"):
+                routed = run("pipeline_state.py", command)
+                self.assertEqual(routed.returncode, 0, routed.stderr)
+            rendered = self.render_manifest(repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            checked = self.preflight(repo)
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+
     def test_prepare_rejects_existing_archive_zero_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -846,6 +893,43 @@ wave: 1   # inline comment
                     result = self.render_manifest(repo)
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("non-placeholder evidence", result.stderr)
+
+    def test_render_manifest_checks_evidence_when_a_task_repeats_a_criterion_number(self) -> None:
+        # Issue #374: a landed task with a repeated number must still archive.
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(
+                repo,
+                acceptance="1. demo works\n2. demo keeps its log\n2. demo exits zero",
+            )
+            wave = repo / ".project/review/wave-1.cycle1.md"
+            old = "- ✅ demo works — focused Verify passed"
+            observed = (
+                f"{old}\n"
+                "- ✅ demo keeps its log — log has 3 lines\n"
+                "- ✅ demo exits zero — exit status 0"
+            )
+            original = wave.read_text(encoding="utf-8")
+            wave.write_bytes(original.replace(old, observed).encode("utf-8"))
+            archive = self.prepare_archive(repo)
+            result = self.render_manifest(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Review cycles used: 1", (archive / "MANIFEST.md").read_text(encoding="utf-8"))
+            result = self.preflight(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            wave = archive / "review/wave-1.cycle1.md"
+            for criterion in ("demo keeps its log", "demo exits zero"):
+                for evidence in (criterion, f"{criterion} — none", f"{criterion} — <observed result>"):
+                    with self.subTest(evidence=evidence):
+                        wave.write_bytes(
+                            original.replace(old, f"{observed}\n- ✅ {evidence}").encode("utf-8")
+                        )
+                        result = self.render_manifest(repo)
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn(
+                            "wave-1.cycle1.md task T001 lacks non-placeholder evidence",
+                            result.stderr,
+                        )
 
     def test_render_manifest_counts_attested_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

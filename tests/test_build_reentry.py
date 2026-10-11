@@ -228,6 +228,48 @@ class BuildReentryTests(unittest.TestCase):
         )
         self.assertIn("recovery must preserve milestone identity", failure)
 
+    def unnamed_base(self):
+        """Issue #374: a legacy define left the milestone unnamed at this checkpoint."""
+        state = self.project / "STATE.md"
+        state.write_bytes(state.read_bytes().replace(b"milestone: demo", b"milestone: null"))
+        self.base = self.commit()
+
+    def name_milestone(self, old, new):
+        state = self.project / "STATE.md"
+        state.write_bytes(state.read_bytes().replace(
+            f"milestone: {old}".encode("utf-8"), f"milestone: {new}".encode("utf-8"),
+        ))
+
+    def close_plan_repair(self):
+        self.reopen("plan")
+        self.cli("prepare-build-recovery")
+        self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.move("build", "active", "build started")
+
+    def test_naming_a_legacy_milestone_after_recovery_closes_keeps_status_alive(self):
+        from scripts import dispatch_driver
+        self.unnamed_base()
+        self.close_plan_repair()
+        records = dispatch_driver.records_root(self.repo)
+        self.name_milestone("null", "demo")
+        self.assertEqual(self.cli("validate")["state"]["milestone"], "demo")
+        self.assertEqual(self.cli("route")["route"]["phase"], "build")
+        self.assertEqual(self.cli("status")["state"]["milestone"], "demo")
+        self.assertEqual(dispatch_driver.records_root(self.repo), records)
+
+    def test_naming_a_legacy_milestone_during_recovery_still_fails_the_proof(self):
+        self.unnamed_base()
+        self.reopen("plan")
+        self.name_milestone("null", "demo")
+        for command in ("route", "status"):
+            self.assertIn("does not prove this blocked milestone", self.cli(command, success=False))
+
+    def test_renaming_a_named_milestone_after_recovery_closes_still_fails_the_proof(self):
+        self.close_plan_repair()
+        self.name_milestone("demo", "different")
+        for command in ("route", "status"):
+            self.assertIn("does not prove this blocked milestone", self.cli(command, success=False))
+
     def test_unsettled_reviewer_blocks_recovery(self):
         from scripts import dispatch_driver
         record = dispatch_driver.records_root(self.repo) / "reviews/wave-1/attempt-1/state.json"

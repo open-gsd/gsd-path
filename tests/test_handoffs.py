@@ -2440,6 +2440,59 @@ Tasks reviewed: 2
                 with self.assertRaisesRegex(check_handoffs.HandoffError, "placeholder"):
                     check_handoffs.validate_wave(root, review=relative)
 
+    def test_wave_command_checks_evidence_when_a_task_repeats_a_criterion_number(self) -> None:
+        # Issue #374: landed task bytes are frozen, so a repeated number must
+        # not stop the review gate. The plan gate still rejects the number.
+        script = Path(__file__).resolve().parents[1] / "scripts/check_handoffs.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_coverage_task(
+                root, "T001", "- SC1",
+                acceptance=(
+                    "1. The demo command prints hello.\n"
+                    "2. The demo keeps its log.\n"
+                    "2. The demo exits zero."
+                ),
+            )
+
+            def run(phase: str, *arguments: str) -> subprocess.CompletedProcess:
+                return subprocess.run(
+                    [sys.executable, "-B", str(script), phase, "--repo", str(root), *arguments],
+                    capture_output=True, encoding="utf-8", errors="replace",
+                )
+
+            planned = run("plan")
+            self.assertNotEqual(planned.returncode, 0, planned.stdout)
+            self.assertIn("repeated numbered item 2", planned.stderr)
+
+            relative = self.write_wave_review(root)
+            review = root / relative
+            old = "- ✅ The demo command prints hello. — ran hello.py"
+            observed = (
+                f"{old}\n"
+                "- ✅ The demo keeps its log. — log has 3 lines\n"
+                "- ✅ The demo exits zero. — exit status 0"
+            )
+            original = review.read_text(encoding="utf-8")
+            review.write_bytes(original.replace(old, observed).encode("utf-8"))
+            passed = run("wave", "--review", relative)
+            self.assertEqual(passed.returncode, 0, passed.stderr)
+            for criterion in ("The demo keeps its log.", "The demo exits zero."):
+                for evidence, reason in (
+                    (criterion, "evidence is empty"),
+                    (f"{criterion} — none", "evidence is empty"),
+                    (f"{criterion} — <observed result>", "placeholder"),
+                ):
+                    with self.subTest(evidence=evidence):
+                        review.write_bytes(
+                            original.replace(old, f"{observed}\n- ✅ {evidence}").encode("utf-8")
+                        )
+                        failed = run("wave", "--review", relative)
+                        self.assertNotEqual(failed.returncode, 0, failed.stdout)
+                        self.assertIn(f"{relative.rsplit('/', 1)[1]} task T001", failed.stderr)
+                        self.assertIn(reason, failed.stderr)
+
     def test_wave_rejects_placeholder_task_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
