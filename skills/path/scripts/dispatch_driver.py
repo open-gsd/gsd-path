@@ -27,7 +27,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO, Callable, Dict, List, Optional
+from typing import BinaryIO, Callable, Dict, List, Optional, Tuple
 
 try:
     from scripts import (_common, archive_milestone, build_state, discussion_validate, isolation,
@@ -640,6 +640,15 @@ def run_verify(command: str, cwd: Path) -> Dict[str, object]:
     return {"exit_code": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr}
 
 
+def landing_verify(command: str, regressions: List[Dict[str, object]],
+                   cwd: Path) -> Tuple[Dict[str, object], List[Dict[str, object]]]:
+    """The task's own Verify, then every regression Verify when the own one passes."""
+    execution = run_verify(command, cwd)
+    if execution["exit_code"]:
+        return execution, []
+    return execution, [{**item, **run_verify(str(item["command"]), cwd)} for item in regressions]
+
+
 def state_from_task(primary: Path, task_id: str) -> Dict[str, object]:
     """A finish-able state derived from the task frontmatter alone, for coders dispatched by hand."""
     tasks_dir = primary / ".project/tasks"
@@ -701,6 +710,8 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
     command = _common.task_verify_command(task_path.read_text(encoding="utf-8"))
     if not command:
         raise DriverStop("task has no Verify command", task=task_id)
+    # A later task can break an earlier task that shares a file; that task's Verify also decides this landing.
+    regressions = build_state.regression_verifies(primary, task_id, command)
     if state["mode"] == "serial":
         sidecar = state["sidecar"]
         ensured = isolation.ensure_verify_sidecar(primary, base, str(sidecar["branch"]))
@@ -710,30 +721,37 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
             isolation.reproduce_verify_sidecar(sidecar_path, tree)
         except isolation.IsolationError as error:
             raise DriverStop(str(error), task=task_id) from error
-        execution = run_verify(command, sidecar_path)
+        execution, reruns = landing_verify(command, regressions, sidecar_path)
         location = f"sidecar {sidecar['branch']}"
         isolation.clean_verify(primary, sidecar_path, base, str(sidecar["branch"]))
         isolation.retire(primary, sidecar_path, str(sidecar["branch"]), False)
     else:
-        execution = run_verify(command, worktree)
+        execution, reruns = landing_verify(command, regressions, worktree)
         location = f"isolate {state['task_branch']}"
     passed = execution["exit_code"] == 0
+    broken = [item for item in reruns if item["exit_code"]]
     execution.update({"worktree": str(worktree), "location": location})
     evidence_dir = (Path(str(state["_path"])).parent if state.get("_path")
                     else records_root(primary) / task_id / f"manual-{now().replace(':', '')}")
     evidence_dir.mkdir(parents=True, exist_ok=True)
     _common.atomic_write(evidence_dir / "verify.json",
-                         json.dumps(execution, indent=2, sort_keys=True) + "\n")
+                         json.dumps({**execution, "regressions": reruns}, indent=2, sort_keys=True) + "\n")
     execution["evidence"] = str(evidence_dir / "verify.json")
-    output = "\n".join(f"  {line}" for line in tail(execution["stdout"] + execution["stderr"]).splitlines())
-    append_log(task_path, f"- {now()[:10]} — orchestrator Verify ({location}): "
-                          f"{'pass' if passed else 'fail'}, exit {execution['exit_code']}"
-                          + (f"; output tail:\n  ```\n{output}\n  ```" if output else ""))
-    if not passed:
+    for label, run in [("Verify", execution),
+                       *((f"regression Verify of {', '.join(item['tasks'])}", item) for item in reruns)]:
+        output = "\n".join(f"  {line}" for line in tail(run["stdout"] + run["stderr"]).splitlines())
+        append_log(task_path, f"- {now()[:10]} — orchestrator {label} ({location}): "
+                              f"{'fail' if run['exit_code'] else 'pass'}, exit {run['exit_code']}"
+                              + (f"; output tail:\n  ```\n{output}\n  ```" if output else ""))
+    if not passed or broken:
         if state["mode"] == "parallel":
             isolation.deactivate_task(worktree, task_id, str(state["task_branch"]))
         elif state["mode"] == "member":
             isolation.deactivate_member_task(primary, str(state["member"]), task_id)
+        if passed:
+            names = ", ".join(name for item in broken for name in item["tasks"])
+            raise DriverStop(f"regression Verify of {names} failed in the isolate", task=task_id,
+                             execution=execution, regressions=broken)
         raise DriverStop("Verify failed in the isolate", task=task_id, execution=execution)
     if state["mode"] == "member":
         member = str(state["member"])
@@ -746,7 +764,7 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
             build_state.verify_record(str(primary), command, landing, "pass", execution=execution, member=member)
         isolation.retire_member_task(primary, member, task_id)
         return {"task": task_id, "commit": str(landed["commit"]), "mode": "member",
-                "landing": landing, "verify": execution, "ledger": ledger}
+                "landing": landing, "verify": execution, "regressions": reruns, "ledger": ledger}
     landed = isolation.land(primary, worktree, base, task_id, str(state["title"]), task_file,
                             list(state["files"]))
     commit = str(landed["commit"])
@@ -756,7 +774,7 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
         build_state.verify_record(str(primary), command, commit, "pass", execution=execution)
     isolation.retire(primary, worktree, state.get("task_branch") or None, False)
     return {"task": task_id, "commit": commit, "mode": landed["mode"], "verify": execution,
-            "ledger": ledger}
+            "regressions": reruns, "ledger": ledger}
 
 
 # --- shared by round and review --------------------------------------------
@@ -2066,8 +2084,7 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
                 if source not in texts:
                     raise DriverStop(f"fix batch names unknown task {source}")
             task_id = next_task_id(tasks_dir)
-            verify = "set -e\n" + "\n".join(  # each source Verify in its own subshell
-                f"(\n{command}\n)" for command in dict.fromkeys(_common.task_verify_command(texts[source]) for source in sources))
+            verify = _common.fix_verify(_common.task_verify_command(texts[source]) for source in sources)
             heavy = any(re.search(r"(?m)^Heavy:\s*yes", texts[source]) for source in sources)
             criteria = "\n".join(f"{index}. {criterion}" for index, criterion in
                                  enumerate(dict.fromkeys(group["criterion"] for group in batch_groups), 1))

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts import _common, isolation
+from scripts import _common, build_state, isolation
 
 # Git for Windows bash, never the System32 WSL launcher CreateProcess finds first.
 BASH = _common.find_bash()
@@ -679,6 +679,176 @@ archive: null
             {task["id"]: task["verify_heavy"] for task in payload["ready"]},
             {"T001": True, "T002": False},
         )
+
+    def write_verify_task(self, task_id: str, wave: int, files: tuple[str, ...], command: str, *,
+                          status: str = "done", repo: str = "", deps: tuple[str, ...] = ()) -> None:
+        text = task_text(task_id, f"Task {task_id}", wave, deps, files, status=status)
+        text = text.replace("\n## Log", f"\n## Verify\n\n```bash\n{command}\n```\n\n## Log")
+        self.write_task(task_id, text.replace("files: [", f"repo: {repo}\nfiles: [") if repo else text)
+
+    def test_regression_verifies_names_done_earlier_wave_tasks_that_share_a_file(self) -> None:
+        self.write_verify_task("T001", 1, ("shared.py",), "check one")
+        self.write_verify_task("T002", 1, ("other.py",), "check other")  # no shared file
+        self.write_verify_task("T003", 2, ("shared.py", "more.py"), "check one")  # the same command as T001
+        self.write_verify_task("T004", 3, ("shared.py",), "check pending", status="pending")
+        self.write_verify_task("T005", 3, ("shared.py",), "check member", repo="api")  # another repository
+        self.write_verify_task("T006", 3, ("shared.py",), "check three")
+        self.write_verify_task("T007", 4, ("shared.py", "new.py"), "check own", status="in-progress")
+        self.write_verify_task("T008", 4, ("shared.py",), "check same wave")
+        self.write_verify_task("T009", 5, ("shared.py",), "check later wave")
+        self.write_verify_task("T010", 4, ("shared.py",), "check own member", status="in-progress", repo="api")
+
+        self.assertEqual(
+            build_state.regression_verifies(self.repo, "T007", "check own"),
+            [
+                {"tasks": ["T001", "T003"], "command": "check one"},
+                {"tasks": ["T006"], "command": "check three"},
+            ],
+        )
+        # The own Verify already runs an identical command.
+        self.assertEqual(
+            build_state.regression_verifies(self.repo, "T007", "check one"),
+            [{"tasks": ["T006"], "command": "check three"}],
+        )
+        # Text that holds a command does not prove that it runs or that its failure counts.
+        for own in ("set -e\n(\ncheck one\n) || true\n(\ncheck three\n)",
+                    "set -e\n(\ncheck one\n)\n(\ncheck three\n)"):  # T007 has no deps: not a fix task
+            self.assertEqual(
+                [item["command"] for item in build_state.regression_verifies(self.repo, "T007", own)],
+                ["check one", "check three"],
+                own,
+            )
+        # A member task overlaps only tasks of its own repository.
+        self.assertEqual(
+            build_state.regression_verifies(self.repo, "T010", "check own member"),
+            [{"tasks": ["T005"], "command": "check member"}],
+        )
+
+    def test_regression_verifies_skips_only_the_sources_of_an_exact_fix_task_verify(self) -> None:
+        self.write_verify_task("T001", 1, ("shared.py",), "check one")
+        self.write_verify_task("T002", 1, ("shared.py",), "check two")
+        self.write_verify_task("T003", 1, ("shared.py",), "check three")
+        self.write_verify_task("T004", 2, ("shared.py",), "unused", status="in-progress", deps=("T001", "T002"))
+        generated = _common.fix_verify(["check one", "check two"])  # what fix-tasks writes for deps T001, T002
+
+        def reruns(own: str) -> list:
+            return [item["command"] for item in build_state.regression_verifies(self.repo, "T004", own)]
+
+        self.assertEqual(reruns(generated), ["check three"])
+        # Any other shape runs every earlier command again.
+        for own in (generated + " || true", generated + "\ntrue", generated.replace("set -e\n", ""),
+                    _common.fix_verify(["check one"]), _common.fix_verify(["check one", "check three"])):
+            self.assertEqual(reruns(own), ["check one", "check two", "check three"], own)
+
+    def test_ready_marks_a_task_heavy_when_its_landing_reruns_a_heavy_verify(self) -> None:
+        self.write_plan(
+            (
+                (("T001", "Heavy", (), ("one.py",)),),
+                (
+                    ("T002", "Edits the heavy file", (), ("one.py",)),
+                    ("T003", "Unrelated", (), ("two.py",)),
+                ),
+            )
+        )
+        def with_verify(text: str, heavy: str) -> str:
+            return text.replace("\n## Log", f"\n## Verify\n\n```bash\ntest -f one.py\n```\nHeavy: {heavy}\n\n## Log")
+
+        self.write_task("T001", with_verify(task_text("T001", "Heavy", 1, (), ("one.py",)), "yes"))
+        self.write_task(
+            "T002", with_verify(task_text("T002", "Edits the heavy file", 2, (), ("one.py",)), "no")
+        )
+        self.write_task("T003", task_text("T003", "Unrelated", 2, (), ("two.py",)))
+        base = self.commit_all("plan")
+        active = task_text("T001", "Heavy", 1, (), ("one.py",), status="in-progress", agent="builder",
+                           base=base, worktree=str(self.repo), log=("created", "implementation complete"))
+        self.write_task("T001", with_verify(active, "yes"))
+        (self.repo / "one.py").write_bytes("done = True\n".encode("utf-8"))
+        isolation.land(self.repo, self.repo, base, "T001", "Heavy", ".project/tasks/T001-task.md", ["one.py"])
+
+        result, payload = self.cli("ready")
+
+        self.assertEqual(result.returncode, 0, payload)
+        self.assertEqual(
+            {task["id"]: task["verify_heavy"] for task in payload["ready"]},
+            {"T002": True, "T003": False},
+        )
+
+    def shared_source_plan(self, *wave_two: tuple) -> None:
+        """Wave 1 is landed: T001 owns one.py and two.py, T002 owns three.py. Wave 2 is pending."""
+        wave_one = (("T001", "Source", (), ("one.py", "two.py")), ("T002", "Other source", (), ("three.py",)))
+        self.write_plan((wave_one, wave_two))
+        for wave, rows in ((1, wave_one), (2, wave_two)):
+            for task_id, title, deps, files in rows:
+                self.write_task(task_id, task_text(task_id, title, wave, deps, files))
+        self.commit_all("plan")
+        for task_id, title, _, files in wave_one:
+            self.land_serial(task_id, title, 1, (), files)
+
+    def land_serial(self, task_id: str, title: str, wave: int, deps: tuple, files: tuple) -> None:
+        base = run_git(self.repo, "rev-parse", "HEAD")
+        self.write_task(task_id, task_text(task_id, title, wave, deps, files, status="in-progress",
+                                           agent="builder", base=base, worktree=str(self.repo),
+                                           log=("created", "implementation complete")))
+        (self.repo / files[0]).write_bytes(f"owner = '{task_id}'\n".encode("utf-8"))
+        isolation.land(self.repo, self.repo, base, task_id, title, f".project/tasks/{task_id}-task.md", list(files))
+
+    def ready_ids(self) -> list:
+        result, payload = self.cli("ready")
+        self.assertEqual(result.returncode, 0, payload)
+        return [task["id"] for task in payload["ready"]]
+
+    def test_ready_returns_one_of_the_tasks_that_share_a_regression_source(self) -> None:
+        # T003 and T004 have no file in common, and each one shares a file with T001.
+        self.shared_source_plan(
+            ("T003", "Edits one", (), ("one.py",)),
+            ("T004", "Edits two", (), ("two.py",)),
+            ("T005", "Unrelated", (), ("four.py",)),
+        )
+
+        self.assertEqual(self.ready_ids(), ["T003", "T005"])
+        self.land_serial("T003", "Edits one", 2, (), ("one.py",))
+        # T004 starts from a base that has T003, so its rerun of T001's Verify sees both edits.
+        self.assertEqual(self.ready_ids(), ["T004", "T005"])
+        self.land_serial("T004", "Edits two", 2, (), ("two.py",))
+        self.land_serial("T005", "Unrelated", 2, (), ("four.py",))
+        _, payload = self.cli("ready")
+        self.assertIsNone(payload["current_wave"], payload)  # the wave finished one task at a time
+
+    def test_ready_returns_together_tasks_that_share_different_regression_sources(self) -> None:
+        self.shared_source_plan(
+            ("T003", "Edits one", (), ("one.py",)),
+            ("T004", "Edits three", (), ("three.py",)),
+        )
+
+        self.assertEqual(self.ready_ids(), ["T003", "T004"])
+
+    def test_ready_holds_a_task_while_a_dispatched_task_shares_its_regression_source(self) -> None:
+        # T003 becomes ready after T004 was dispatched: T003 has the lower id but T004 goes first.
+        self.shared_source_plan(
+            ("T003", "Edits one", ("T005",), ("one.py",)),
+            ("T004", "Edits two", (), ("two.py",)),
+            ("T005", "Unrelated", (), ("four.py",)),
+        )
+        self.assertEqual(self.ready_ids(), ["T004", "T005"])
+        # A parallel round leaves the primary task file pending; the task branch shows the dispatch.
+        run_git(self.repo, "branch", "gsd-path-task/T004")
+        self.land_serial("T005", "Unrelated", 2, (), ("four.py",))
+
+        self.assertEqual(self.ready_ids(), ["T004"])  # T003's dependency landed, and T003 still waits
+        run_git(self.repo, "branch", "-D", "gsd-path-task/T004")
+        self.land_serial("T004", "Edits two", 2, (), ("two.py",))
+        self.assertEqual(self.ready_ids(), ["T003"])
+
+    def test_ready_holds_a_task_while_an_in_progress_task_shares_its_regression_source(self) -> None:
+        self.shared_source_plan(
+            ("T003", "Edits one", (), ("one.py",)),
+            ("T004", "Edits two", (), ("two.py",)),
+        )
+        base = run_git(self.repo, "rev-parse", "HEAD")
+        self.write_task("T004", task_text("T004", "Edits two", 2, (), ("two.py",), status="in-progress",
+                                           agent="builder", base=base, worktree=str(self.repo)))
+
+        self.assertEqual(self.ready_ids(), [])  # T003 waits for the serial task T004
 
     def test_verify_ledger_records_and_looks_up_runs(self) -> None:
         (self.repo / "seed.txt").write_bytes("seed\n".encode("utf-8"))

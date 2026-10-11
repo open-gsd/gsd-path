@@ -25,7 +25,7 @@ import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import BinaryIO, Iterator, List, Optional, Sequence
+from typing import BinaryIO, Iterable, Iterator, List, Optional, Sequence
 
 # Chosen by what imports, not os.name, so tests can emulate Windows on POSIX.
 try:
@@ -187,6 +187,11 @@ def task_verify_command(task_text: str) -> str:
     body = section_body(task_text, "Verify")
     block = VERIFY_BLOCK_PATTERN.search(body) if body is not None else None
     return block.group("block").removesuffix("\n") if block else ""
+
+
+def fix_verify(commands: Iterable[str]) -> str:
+    """The Verify of a fix task: each distinct source Verify in its own subshell, under `set -e`."""
+    return "set -e\n" + "\n".join(f"(\n{command}\n)" for command in dict.fromkeys(commands))
 
 
 def latest_verify_entry(entries: list, command: str, commit: str,

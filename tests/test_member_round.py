@@ -97,15 +97,41 @@ class MemberRoundTests(unittest.TestCase):
         self.assertEqual(git(self.member, "rev-parse", "gsd-path/demo-M001"),
                          git(self.member, "rev-parse", "main"))
 
-    def round_with_mode(self, mode: str) -> dict:
+    def round_with_mode(self, mode: str, wave: int = 1) -> dict:
         env = dict(os.environ, FAKE_MODE=mode, GSD_PATH_WORKTREE_ROOT=str(self.workspace))
         completed = subprocess.run(
-            [sys.executable, "-B", str(SCRIPT), "round", "--wave", "1", "--child-command",
+            [sys.executable, "-B", str(SCRIPT), "round", "--wave", str(wave), "--child-command",
              f"{sys.executable} {self.root / 'fake_coder.py'}", "--role-brief", str(ROLE_BRIEF),
              "--task-template", str(TASK_TEMPLATE), "--wait", "60", "--repo", str(self.root)],
             capture_output=True, encoding="utf-8", errors="replace", env=env)
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
+
+    def test_member_task_that_breaks_an_earlier_member_verify_is_blocked(self) -> None:
+        # T003 in wave 2 edits the file of T002 in the same member. Its own Verify passes; T002's fails.
+        driver_tests.test_handoffs.HandoffValidationTests().write_coverage_task(
+            self.root, "T003", "- None", wave=2, files="tests/test_app.py", verify="test -f tests/test_app.py")
+        task = self.root / ".project/tasks/T003-demo.md"
+        task.write_bytes(task.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1).encode("utf-8"))
+        plan = self.root / ".project/plan/PLAN.md"
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(
+            "\n## Intent coverage",
+            "\n## Wave 2 — demo edit\n\nGoal: Edit the demo tests.\nReview depth: full\n\n"
+            "| Task | Title | Deps | Files |\n|------|-------|------|-------|\n"
+            "| T003 | Demo task T003 | — | tests/test_app.py |\n\n## Intent coverage", 1).encode("utf-8"))
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "plan: T003 edits the T002 file in the web member")
+        self.assertEqual(self.round()["status"], "done")
+        tip = git(self.member, "rev-parse", "gsd-path/demo-M001")
+
+        receipt = self.round_with_mode("badverify", wave=2)
+
+        self.assertEqual(receipt["status"], "blocked", json.dumps(receipt, indent=1)[:4000])
+        blocked = receipt["blocked"][0]
+        self.assertEqual(blocked["reason"], "regression Verify of T002 failed in the isolate")
+        self.assertEqual(blocked["execution"]["exit_code"], 0)
+        self.assertEqual([(item["tasks"], item["exit_code"]) for item in blocked["regressions"]], [(["T002"], 1)])
+        self.assertEqual(git(self.member, "rev-parse", "gsd-path/demo-M001"), tip)  # the member got no landing
 
     def test_round_finishes_a_pending_member_landing_journal(self) -> None:
         from unittest import mock

@@ -94,6 +94,7 @@ class Task:
     verify_heavy: bool
     repo: str = ""
     review_findings: bool = False
+    verify: str = ""
 
 
 @dataclass(frozen=True)
@@ -248,6 +249,7 @@ def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None)
         verify_heavy=_verify_heavy(text, label),
         repo=str(fields.get("repo") or ""),
         review_findings=REVIEW_FINDINGS_HEADING in _sections(text),
+        verify=_common.task_verify_command(text),
     )
 
 
@@ -420,7 +422,8 @@ def _recovery_reports(project: Project) -> Dict[str, Mapping[str, object]]:
     return reports
 
 
-def _validate_ready_metadata(project: Project) -> None:
+def _validate_ready_metadata(project: Project) -> Dict[str, Mapping[str, object]]:
+    """Validate every task against its recovery report; return the reports by task id."""
     by_id = {task.task_id: task for task in project.tasks}
     recovery = _recovery_reports(project)
     seen_worktrees: Dict[str, str] = {}
@@ -484,12 +487,51 @@ def _validate_ready_metadata(project: Project) -> None:
             if report.get("verdict") not in LANDED_VERDICTS:
                 reason = report.get("reason", "landing commit is not proven")
                 _invalid_state(task, str(reason))
+    return recovery
 
 
 def _overlap(left: Task, right: Task) -> List[str]:
     if left.repo != right.repo:
         return []
     return sorted(set(left.files) & set(right.files))
+
+
+def _regression_sources(tasks: Sequence[Task], task: Task) -> List[Task]:
+    """Done tasks of an earlier wave that share a declared file with this task."""
+
+    return [
+        other
+        for other in tasks
+        if other.status == "done" and other.wave < task.wave and _overlap(task, other)
+    ]
+
+
+def regression_verifies(
+    repo: Path, task_id: str, own: str, project_dir: str = DEFAULT_PROJECT_DIR
+) -> List[Dict[str, object]]:
+    """Return the earlier-wave Verify commands that a landing of this task must also pass.
+
+    One entry per distinct command, with every source task that has it. A command
+    that the task's own Verify already runs is left out: an identical command, or
+    a dependency's command when the own Verify is exactly the fix-task Verify of
+    the task's dependencies. Text that only contains a command proves nothing.
+    """
+
+    tasks = [
+        _parse_task(path, path.relative_to(repo).as_posix())
+        for path in sorted((repo / project_dir / "tasks").glob("*.md"))
+    ]
+    by_id = {item.task_id: item for item in tasks}
+    task = by_id.get(task_id)
+    if task is None:
+        raise BuildStateError("unknown-task", f"task file is missing: {task_id}")
+    composed = [by_id[dependency].verify for dependency in task.deps if dependency in by_id]
+    covered = {own, *(composed if own == _common.fix_verify(composed) else ())}
+    sources: Dict[str, List[str]] = {}
+    for other in _regression_sources(tasks, task):
+        if other.verify and other.verify not in covered:
+            sources.setdefault(other.verify, []).append(other.task_id)
+    return [{"tasks": task_ids, "command": command} for command, task_ids in sources.items()]
 
 
 def _blocked_wave_reviews(project: Project) -> Dict[int, int]:
@@ -527,7 +569,7 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
     """Return task readiness, optionally accepting build/done for completion checks."""
 
     project = _load_project(repo, project_dir, ("active", "done") if allow_done else ("active",))
-    _validate_ready_metadata(project)
+    reports = _validate_ready_metadata(project)
     by_id = {task.task_id: task for task in project.tasks}
     unfinished_waves = sorted({task.wave for task in project.tasks if task.status != "done"})
     current_wave = unfinished_waves[0] if unfinished_waves else None
@@ -626,6 +668,19 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
             {"wave": current_wave, "tasks": stalled},
         )
 
+    # Tasks that share a regression source land one at a time, each from the landing of the one
+    # before, so the source's Verify runs on their combined edits. A parallel round leaves the
+    # primary task file pending: a retained isolate shows that the task is already dispatched.
+    sources = {task.task_id: {other.task_id for other in _regression_sources(project.tasks, task)}
+               for task in concurrent}
+    started = [task for task in selectable if reports[task.task_id].get("verdict") != "none"]
+    claimed = {source for task in active + started for source in sources[task.task_id]}
+    dispatchable = []
+    for task in selectable:
+        if task in started or not sources[task.task_id] & claimed:
+            dispatchable.append(task)
+            claimed |= sources[task.task_id]
+
     typed: Dict[str, object] = {}
     if repair_for_wave is not None:
         typed["repair_for_wave"] = repair_for_wave
@@ -646,10 +701,12 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
                 "deps": list(task.deps),
                 "files": list(task.files),
                 "task_file": task.task_file,
-                "verify_heavy": task.verify_heavy,
+                # The landing also runs each regression Verify, so a heavy one makes the task heavy.
+                "verify_heavy": task.verify_heavy
+                or any(other.verify_heavy for other in _regression_sources(project.tasks, task)),
                 **({"repo": task.repo} if task.repo else {}),
             }
-            for task in selectable
+            for task in dispatchable
         ],
     }
 
