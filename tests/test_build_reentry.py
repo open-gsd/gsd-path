@@ -262,6 +262,29 @@ class BuildReentryTests(unittest.TestCase):
             "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
         })
 
+    def test_cap_value_that_closes_an_open_comment_drops_wave_reviews(self):
+        from scripts import review_findings
+        plan, review = self.reviewed_plan_recovery(skeptics=None, cap=(
+            "<!--\n- max_review_cycles: 3>\n- finding_skeptics: on\n-->\n"))
+        before = review_findings.parse_config(plan.read_text(encoding="utf-8"))
+        plan.write_bytes(plan.read_text(encoding="utf-8")
+                         .replace("max_review_cycles: 3>", "max_review_cycles: 3-->").encode("utf-8"))
+        self.assertNotEqual(review_findings.parse_config(plan.read_text(encoding="utf-8")), before)
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertFalse(review.exists())
+        self.assertEqual(approved["recovery_reviews"], {
+            "restored": [],
+            "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
+        })
+
+    def test_cost_cap_edit_keeps_wave_reviews(self):
+        plan, review = self.reviewed_plan_recovery()
+        plan.write_bytes(plan.read_text(encoding="utf-8")
+                         .replace("wave_budget: none", "wave_budget: $5/wave").encode("utf-8"))
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertEqual(review.read_text(encoding="utf-8"), "Previously recorded wave evidence\n")
+        self.assertEqual(approved["recovery_reviews"], {"restored": [1], "review_again": []})
+
     def assert_separator_in_a_cap_line_drops_wave_reviews(self, separator):
         plan, review = self.reviewed_plan_recovery(skeptics=None)
         plan.write_bytes(plan.read_text(encoding="utf-8").replace(

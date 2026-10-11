@@ -23,7 +23,7 @@ RECOVERY_KEYS = frozenset({"base", "branch", "kind", "source"})
 
 
 # Only the value of a cap line is exempt; a comment or a line separator after it stays in the compared text.
-CAP_VALUE = re.compile(r"(?m)^(-[ \t]*(?:max_review_cycles|wave_budget):)[ \t\w.,-]*")
+CAP_VALUE = re.compile(r"(?m)^(-[ \t]*(?:max_review_cycles|wave_budget):)[ \t\w.,$/:]*")
 
 
 def runtime():
