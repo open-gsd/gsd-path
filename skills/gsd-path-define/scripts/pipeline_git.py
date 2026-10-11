@@ -99,7 +99,8 @@ def ship_subject(archive_name: str) -> str:
 
 
 def integrate_subject(archive_name: str, default_branch: str) -> str:
-    if not default_branch or default_branch.startswith("origin/"):
+    # The bare name, under the rule that records it; `origin/trunk` is a legal bare name.
+    if not _common.valid_default_branch(default_branch):
         raise PipelineGitError(f"default branch is invalid: {default_branch}")
     number = milestone_number(archive_name)
     return (

@@ -281,6 +281,18 @@ class PipelineGitTests(unittest.TestCase):
             )
         )
 
+    def test_integrate_subject_takes_each_name_that_state_can_record(self) -> None:
+        # A bare name can start with `origin/`; its remote ref is `origin/origin/trunk`.
+        self.assertEqual(
+            pipeline_git.integrate_subject("001-phase-0-1", "origin/trunk"),
+            "integrate: M001 — merge gsd-path/M001 into origin/trunk",
+        )
+        for name in ("", "gsd-path/M002", "we#ird"):
+            with self.subTest(name=name), self.assertRaisesRegex(
+                pipeline_git.PipelineGitError, "default branch is invalid"
+            ):
+                pipeline_git.integrate_subject("001-phase-0-1", name)
+
     def test_task_commit_message(self) -> None:
         self.assertEqual(
             pipeline_git.task_commit_subject("T009", " Verify snapshot "),
@@ -356,6 +368,21 @@ class PipelineGitTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(result.stdout)["status"], "bound")
+            self.assertEqual(
+                run_git(repo, "branch", "--show-current").stdout.strip(), "gsd-path/M001"
+            )
+            self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), base)
+
+    def test_bind_initial_binds_at_a_default_branch_named_like_a_remote_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, repo, base = make_remote_repo(tmp, "origin/trunk")
+            run_git(repo, "remote", "set-head", "origin", "origin/trunk")
+            detect_project.initialize(repo, ROOT / "skills/gsd-path/templates/state.md")
+            self.assertEqual(pipeline_state.load_state(repo)[0].default_branch, "origin/trunk")
+
+            result = self.bind_initial(repo, "origin/origin/trunk", base)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(
                 run_git(repo, "branch", "--show-current").stdout.strip(), "gsd-path/M001"
             )
