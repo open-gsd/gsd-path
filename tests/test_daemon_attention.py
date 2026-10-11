@@ -278,6 +278,12 @@ class AttentionTests(unittest.TestCase):
         self.assertEqual(self.failed_refs(), ["wave-1.cycle1.md"])
         self.assertEqual(probe.probe_project(self.root).health, "red")
 
+    def test_newer_cycle_with_an_empty_verdict_line_keeps_the_blocked_cycle(self) -> None:
+        make_project(self.root)
+        # "Wave verdict:" with no value: the verdict pattern reads the next line's first word.
+        self.write_wave_reviews((1, 1, "", "blocked"), (1, 2, "", " "))
+        self.assertEqual(self.failed_refs(), ["wave-1.cycle1.md"])
+
     def test_review_cycles_compare_as_numbers(self) -> None:
         make_project(self.root)
         self.write_wave_reviews((1, 9, "", "blocked"), (1, 10, "", "pass"))

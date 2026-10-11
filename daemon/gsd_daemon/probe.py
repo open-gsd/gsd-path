@@ -50,6 +50,7 @@ META_LINE_RE = re.compile(r"^(?:\*\*)?[A-Za-z][A-Za-z /()-]*(?:\*\*)?\s*:")
 
 STALE_AFTER_S = 12 * 3600
 NEGATIVE_REVIEW_VERDICTS = {"blocked", "fail", "failed", "not-met", "unverifiable"}
+WAVE_VERDICTS = {"pass", "blocked"}  # the values the runtime accepts for a wave review
 NEGATIVE_CRITERION_VERDICTS = {"not-met", "unverifiable"}
 
 STATE_KEYS = (
@@ -680,12 +681,13 @@ def _human_age(seconds: float) -> str:
 def _superseded_reviews(reviews: List[dict]) -> set:
     """Wave review files that a later cycle of the same wave and lens replaces.
 
-    A cycle with no verdict (a review still being written) replaces nothing.
+    Only a cycle with a valid wave verdict replaces an older one: a review that
+    is still being written, with no verdict or an empty verdict line, does not.
     """
     cycles: Dict[tuple, Dict[int, object]] = {}
     for review in reviews:
         match = WAVE_REVIEW_FILE_RE.match(str(review.get("file")))
-        if match and review.get("verdict"):
+        if match and str(review.get("verdict")).lower() in WAVE_VERDICTS:
             wave, cycle, lens = match.groups()
             cycles.setdefault((int(wave), lens), {})[int(cycle)] = review.get("file")
     return {name for found in cycles.values()
