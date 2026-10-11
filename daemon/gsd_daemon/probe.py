@@ -678,11 +678,14 @@ def _human_age(seconds: float) -> str:
 
 
 def _superseded_reviews(reviews: List[dict]) -> set:
-    """Wave review files that a later cycle of the same wave and lens replaces."""
+    """Wave review files that a later cycle of the same wave and lens replaces.
+
+    A cycle with no verdict (a review still being written) replaces nothing.
+    """
     cycles: Dict[tuple, Dict[int, object]] = {}
     for review in reviews:
         match = WAVE_REVIEW_FILE_RE.match(str(review.get("file")))
-        if match:
+        if match and review.get("verdict"):
             wave, cycle, lens = match.groups()
             cycles.setdefault((int(wave), lens), {})[int(cycle)] = review.get("file")
     return {name for found in cycles.values()

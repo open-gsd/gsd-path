@@ -239,8 +239,9 @@ class AttentionTests(unittest.TestCase):
         review_dir.mkdir()
         for wave, cycle, lens, verdict in reviews:
             (review_dir / f"wave-{wave}.cycle{cycle}{lens}.md").write_bytes(
-                f"# Review — wave {wave}, cycle {cycle}\n\n"
-                f"Wave verdict: {verdict}\nCycle: {cycle}\n".encode("utf-8"),
+                (f"# Review — wave {wave}, cycle {cycle}\n\n"
+                 + (f"Wave verdict: {verdict}\n" if verdict else "")
+                 + f"Cycle: {cycle}\n").encode("utf-8"),
             )
 
     def failed_refs(self) -> list:
@@ -270,6 +271,17 @@ class AttentionTests(unittest.TestCase):
             (1, 2, ".adversarial", "pass"),
         )
         self.assertEqual(self.failed_refs(), ["wave-1.cycle1.contract.md"])
+
+    def test_newer_cycle_without_a_verdict_keeps_the_blocked_cycle(self) -> None:
+        make_project(self.root)
+        self.write_wave_reviews((1, 1, "", "blocked"), (1, 2, "", None))
+        self.assertEqual(self.failed_refs(), ["wave-1.cycle1.md"])
+        self.assertEqual(probe.probe_project(self.root).health, "red")
+
+    def test_review_cycles_compare_as_numbers(self) -> None:
+        make_project(self.root)
+        self.write_wave_reviews((1, 9, "", "blocked"), (1, 10, "", "pass"))
+        self.assertEqual(self.failed_refs(), [])
 
     def test_stale_active_project_amber(self) -> None:
         make_project(self.root)
