@@ -142,6 +142,11 @@ dispatch contract and perform steps 1–5 by hand.
    order, or overlap-check tasks in prose. Readiness is continuous, not
    layered: a task becomes selectable the moment its last dependency lands,
    even while unrelated tasks still run, so rerun `ready` after each landing.
+   Two tasks that each share a file with the same `done` task of an earlier
+   wave never run together: `ready` returns one and holds the other until the
+   first is `done`. The second then starts from a base that has the first
+   landing, and the step 5 rerun of the earlier Verify checks both edits. A
+   task with a retained isolate keeps its turn.
    A `NEEDS-ORCHESTRATOR` block stays unselectable until its `Orchestrator
    answer` is recorded in the task Log and the task is back to `pending`.
    An all-done wave whose latest canonical review cycle has any blocked lens

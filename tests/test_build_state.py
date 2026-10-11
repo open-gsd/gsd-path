@@ -773,6 +773,83 @@ archive: null
             {"T002": True, "T003": False},
         )
 
+    def shared_source_plan(self, *wave_two: tuple) -> None:
+        """Wave 1 is landed: T001 owns one.py and two.py, T002 owns three.py. Wave 2 is pending."""
+        wave_one = (("T001", "Source", (), ("one.py", "two.py")), ("T002", "Other source", (), ("three.py",)))
+        self.write_plan((wave_one, wave_two))
+        for wave, rows in ((1, wave_one), (2, wave_two)):
+            for task_id, title, deps, files in rows:
+                self.write_task(task_id, task_text(task_id, title, wave, deps, files))
+        self.commit_all("plan")
+        for task_id, title, _, files in wave_one:
+            self.land_serial(task_id, title, 1, (), files)
+
+    def land_serial(self, task_id: str, title: str, wave: int, deps: tuple, files: tuple) -> None:
+        base = run_git(self.repo, "rev-parse", "HEAD")
+        self.write_task(task_id, task_text(task_id, title, wave, deps, files, status="in-progress",
+                                           agent="builder", base=base, worktree=str(self.repo),
+                                           log=("created", "implementation complete")))
+        (self.repo / files[0]).write_bytes(f"owner = '{task_id}'\n".encode("utf-8"))
+        isolation.land(self.repo, self.repo, base, task_id, title, f".project/tasks/{task_id}-task.md", list(files))
+
+    def ready_ids(self) -> list:
+        result, payload = self.cli("ready")
+        self.assertEqual(result.returncode, 0, payload)
+        return [task["id"] for task in payload["ready"]]
+
+    def test_ready_returns_one_of_the_tasks_that_share_a_regression_source(self) -> None:
+        # T003 and T004 have no file in common, and each one shares a file with T001.
+        self.shared_source_plan(
+            ("T003", "Edits one", (), ("one.py",)),
+            ("T004", "Edits two", (), ("two.py",)),
+            ("T005", "Unrelated", (), ("four.py",)),
+        )
+
+        self.assertEqual(self.ready_ids(), ["T003", "T005"])
+        self.land_serial("T003", "Edits one", 2, (), ("one.py",))
+        # T004 starts from a base that has T003, so its rerun of T001's Verify sees both edits.
+        self.assertEqual(self.ready_ids(), ["T004", "T005"])
+        self.land_serial("T004", "Edits two", 2, (), ("two.py",))
+        self.land_serial("T005", "Unrelated", 2, (), ("four.py",))
+        _, payload = self.cli("ready")
+        self.assertIsNone(payload["current_wave"], payload)  # the wave finished one task at a time
+
+    def test_ready_returns_together_tasks_that_share_different_regression_sources(self) -> None:
+        self.shared_source_plan(
+            ("T003", "Edits one", (), ("one.py",)),
+            ("T004", "Edits three", (), ("three.py",)),
+        )
+
+        self.assertEqual(self.ready_ids(), ["T003", "T004"])
+
+    def test_ready_holds_a_task_while_a_dispatched_task_shares_its_regression_source(self) -> None:
+        # T003 becomes ready after T004 was dispatched: T003 has the lower id but T004 goes first.
+        self.shared_source_plan(
+            ("T003", "Edits one", ("T005",), ("one.py",)),
+            ("T004", "Edits two", (), ("two.py",)),
+            ("T005", "Unrelated", (), ("four.py",)),
+        )
+        self.assertEqual(self.ready_ids(), ["T004", "T005"])
+        # A parallel round leaves the primary task file pending; the task branch shows the dispatch.
+        run_git(self.repo, "branch", "gsd-path-task/T004")
+        self.land_serial("T005", "Unrelated", 2, (), ("four.py",))
+
+        self.assertEqual(self.ready_ids(), ["T004"])  # T003's dependency landed, and T003 still waits
+        run_git(self.repo, "branch", "-D", "gsd-path-task/T004")
+        self.land_serial("T004", "Edits two", 2, (), ("two.py",))
+        self.assertEqual(self.ready_ids(), ["T003"])
+
+    def test_ready_holds_a_task_while_an_in_progress_task_shares_its_regression_source(self) -> None:
+        self.shared_source_plan(
+            ("T003", "Edits one", (), ("one.py",)),
+            ("T004", "Edits two", (), ("two.py",)),
+        )
+        base = run_git(self.repo, "rev-parse", "HEAD")
+        self.write_task("T004", task_text("T004", "Edits two", 2, (), ("two.py",), status="in-progress",
+                                           agent="builder", base=base, worktree=str(self.repo)))
+
+        self.assertEqual(self.ready_ids(), [])  # T003 waits for the serial task T004
+
     def test_verify_ledger_records_and_looks_up_runs(self) -> None:
         (self.repo / "seed.txt").write_bytes("seed\n".encode("utf-8"))
         first = self.commit_all("seed")

@@ -422,7 +422,8 @@ def _recovery_reports(project: Project) -> Dict[str, Mapping[str, object]]:
     return reports
 
 
-def _validate_ready_metadata(project: Project) -> None:
+def _validate_ready_metadata(project: Project) -> Dict[str, Mapping[str, object]]:
+    """Validate every task against its recovery report; return the reports by task id."""
     by_id = {task.task_id: task for task in project.tasks}
     recovery = _recovery_reports(project)
     seen_worktrees: Dict[str, str] = {}
@@ -486,6 +487,7 @@ def _validate_ready_metadata(project: Project) -> None:
             if report.get("verdict") not in LANDED_VERDICTS:
                 reason = report.get("reason", "landing commit is not proven")
                 _invalid_state(task, str(reason))
+    return recovery
 
 
 def _overlap(left: Task, right: Task) -> List[str]:
@@ -567,7 +569,7 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
     """Return task readiness, optionally accepting build/done for completion checks."""
 
     project = _load_project(repo, project_dir, ("active", "done") if allow_done else ("active",))
-    _validate_ready_metadata(project)
+    reports = _validate_ready_metadata(project)
     by_id = {task.task_id: task for task in project.tasks}
     unfinished_waves = sorted({task.wave for task in project.tasks if task.status != "done"})
     current_wave = unfinished_waves[0] if unfinished_waves else None
@@ -666,6 +668,19 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
             {"wave": current_wave, "tasks": stalled},
         )
 
+    # Tasks that share a regression source land one at a time, each from the landing of the one
+    # before, so the source's Verify runs on their combined edits. A parallel round leaves the
+    # primary task file pending: a retained isolate shows that the task is already dispatched.
+    sources = {task.task_id: {other.task_id for other in _regression_sources(project.tasks, task)}
+               for task in concurrent}
+    started = [task for task in selectable if reports[task.task_id].get("verdict") != "none"]
+    claimed = {source for task in active + started for source in sources[task.task_id]}
+    dispatchable = []
+    for task in selectable:
+        if task in started or not sources[task.task_id] & claimed:
+            dispatchable.append(task)
+            claimed |= sources[task.task_id]
+
     typed: Dict[str, object] = {}
     if repair_for_wave is not None:
         typed["repair_for_wave"] = repair_for_wave
@@ -691,7 +706,7 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
                 or any(other.verify_heavy for other in _regression_sources(project.tasks, task)),
                 **({"repo": task.repo} if task.repo else {}),
             }
-            for task in selectable
+            for task in dispatchable
         ],
     }
 

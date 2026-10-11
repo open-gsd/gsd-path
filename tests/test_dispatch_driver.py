@@ -867,6 +867,41 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.head(root), head)
         self.assertNotIn("status: done", (root / ".project/tasks/T002-demo.md").read_text(encoding="utf-8"))
 
+    def test_tasks_that_share_an_earlier_task_land_in_sequence_so_its_verify_sees_both(self) -> None:
+        root = self.root
+        # T001 owns a.py and b.py and its Verify permits only one of them. T002 adds a.py and T003 adds
+        # b.py: no file in common, and each one alone passes T001's Verify.
+        self.fixture(root, wave_t002=2, files_t002="src/a.py", verify_t002="test -f src/a.py",
+                     verify_t001="! { test -f src/a.py && test -f src/b.py; }")
+        handoffs = test_handoffs.HandoffValidationTests()
+        handoffs.write_coverage_task(root, "T003", "- None", wave=2, files="src/b.py", verify="test -f src/b.py")
+        t001 = root / ".project/tasks/T001-demo.md"
+        t001.write_bytes(t001.read_text(encoding="utf-8").replace(
+            "  - src/app.py\n", "  - src/app.py\n  - src/a.py\n  - src/b.py\n").encode("utf-8"))
+        plan = root / ".project/plan/PLAN.md"
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(
+            "| — | src/app.py |\n", "| — | src/app.py, src/a.py, src/b.py |\n").replace(
+            "| T002 | Demo task T002 | — | src/a.py |\n",
+            "| T002 | Demo task T002 | — | src/a.py |\n| T003 | Demo task T003 | — | src/b.py |\n").encode("utf-8"))
+        run_git(root, "add", ".")
+        run_git(root, "commit", "-qm", "plan: T002 and T003 edit the files of T001")
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+
+        receipt = self.round(root, "--wait", "60", wave=2)
+
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual([item["task"] for item in receipt["landed"]], ["T002"])
+        blocked = receipt["blocked"][0]
+        self.assertEqual(blocked["task_id"], "T003")
+        self.assertEqual(blocked["reason"], "regression Verify of T001 failed in the isolate")
+        # T003 was dispatched after T002 landed: its base has the T002 commit, so the two never ran together.
+        states = {state["task_id"]: state for state in
+                  dispatch_driver.latest_states(dispatch_driver.records_root(root))}
+        run_git(root, "merge-base", "--is-ancestor", receipt["landed"][0]["commit"], states["T003"]["base"])
+        # The bound branch still passes T001's Verify: it has a.py and not b.py.
+        self.assertEqual(run_git(root, "ls-tree", "-r", "--name-only", "HEAD", "src").stdout.split(),
+                         ["src/a.py", "src/app.py"])
+
     def test_round_without_wait_returns_in_flight_and_settles_later(self) -> None:
         root = self.root
         self.fixture(root, deps_t002="[T001]")
