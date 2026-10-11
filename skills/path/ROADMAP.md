@@ -27,7 +27,8 @@ return to `$gsd-path` for ownership checking. Legal entry is
 yet, `roadmap/active|blocked`, or a
 milestone-boundary re-slice: `inspect/active` or `define/active` with no
 approved INTENT.md for the next milestone and a user request to re-scope the
-remaining `pending` entries,
+remaining `pending` entries or, at `define/active` only, to change the scope
+of the `active` entry,
 or `roadmap/active` with STATE.milestone null and an `abandoned` entry in
 ROADMAP.md (the post-abandon re-slice the build orchestrator hands off).
 Enter from `decide/done` only with `pipeline_state.py transition`, exact
@@ -35,6 +36,8 @@ expected phase/status/milestone/branch/archive fields, event `roadmap started`,
 and `--set-phase roadmap --set-status active`; never edit STATE directly. In a
 milestone-boundary re-slice, preserve the entering `inspect/active` or
 `define/active` state throughout the re-slice.
+A `define/active` state that the router reports in `corrections` mode already
+has an approved INTENT.md; it blocks.
 Any later phase blocks; mid-milestone
 re-scope is never legal — finish or ship the active milestone first. A
 `decide/done` state with ROADMAP.md already present is milestone-scope decide;
@@ -71,8 +74,11 @@ precondition fails.
    give `.project/ROADMAP.before-reslice.md` with the instruction to preserve
    `shipped` entries byte-for-byte except Status/Archive/Integrated fields and
    to never modify `abandoned` entries at all. For a milestone-boundary
-   re-slice, also preserve the existing `active` entry byte-for-byte; only
-   `pending` entries are in scope.
+   re-slice entered at `inspect/active`, also preserve the existing `active`
+   entry byte-for-byte; only `pending` entries are in scope. Entered at
+   `define/active`, the `active` entry may also change as the user ruled, but
+   its heading (id and slug) and its Status, Depends on, Archive, and
+   Integrated fields stay unchanged.
    The output is exactly `.project/ROADMAP.md` — no other location is
    canonical.
 3. Gate ROADMAP.md:
@@ -96,8 +102,11 @@ precondition fails.
    - On a re-slice, `shipped` entries differ from
      `.project/ROADMAP.before-reslice.md` only in Status/Archive/Integrated;
      `abandoned` entries are byte-for-byte identical.
-   - On a milestone-boundary re-slice, the prior `active` entry is byte-for-byte
-     identical to `.project/ROADMAP.before-reslice.md`.
+   - On a milestone-boundary re-slice entered at `inspect/active`, the prior
+     `active` entry is byte-for-byte identical to
+     `.project/ROADMAP.before-reslice.md`. Entered at `define/active`, it
+     stays the only `active` entry and keeps its heading and its Status,
+     Depends on, Archive, and Integrated fields.
 4. Redispatch one complete corrected brief under logical task name `roadmap`,
    following the runtime dispatch contract and including all gate failures.
    Allow one revision round. If it still fails, keep the entering
@@ -160,7 +169,8 @@ precondition fails.
 
    The helper owns roadmap selection, expected state, baseline cleanup and
    the approval checkpoint. It journals before mutation, retains the baseline
-   bytes for recovery, and refuses changes to settled or active entries.
+   bytes for recovery, and refuses changes to settled entries and every
+   `active` entry change that step 2 does not permit.
    A milestone-boundary re-slice retains Inspect or Define; a post-abandon
    re-slice enters Inspect. Require its typed result to report `status:
    approved`, the requested kind, milestone and returned commit. After an

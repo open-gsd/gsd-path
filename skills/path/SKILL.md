@@ -371,7 +371,8 @@ on `NEEDS-USER`. Planning owns the single build-approval gate; never ask a
 second time. One user-driven exception to normal routing: at a program milestone
 boundary — `inspect/active` or `define/active` with no approved INTENT.md for
 the next milestone — a user request to re-scope the remaining `pending`
-entries routes to the bundled [roadmap contract](ROADMAP.md) in re-slice mode.
+entries, or at `define/active` the `active` entry, routes to the bundled
+[roadmap contract](ROADMAP.md) in re-slice mode.
 
 ## Lookahead planning (program flow)
 

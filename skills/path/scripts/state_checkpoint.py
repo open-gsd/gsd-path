@@ -164,9 +164,16 @@ def _approval_details(
     raise PipelineStateError(f"unsupported approval kind: {kind}")
 
 
-def _reslice_roadmap(before: str, candidate: str, state: PipelineState, selected: str) -> str:
+def _reslice_roadmap(
+    repo: Path, before: str, candidate: str, state: PipelineState, state_text: str, selected: str,
+) -> str:
+    # Define may amend its active entry until intent approval. A return to
+    # define after that approval always leaves an active recovery record.
+    amend_active = state.phase == "define" and not (
+        pipeline_state._build_recovery().context(repo, state_text) or {}
+    ).get("active")
     try:
-        return roadmap.reslice(before, candidate, state.phase, selected)
+        return roadmap.reslice(before, candidate, state.phase, selected, amend_active)
     except roadmap.RoadmapError as error:
         raise PipelineStateError(str(error)) from error
 
@@ -307,7 +314,8 @@ def _approval_journal(repo: Path, journal: Mapping[str, object]) -> dict[str, ob
         if journal["roadmap_path"] != ".project/ROADMAP.md":
             raise PipelineStateError("checkpoint journal has an invalid ROADMAP path")
         expected_roadmap = _reslice_roadmap(
-            str(journal["baseline_before"]), str(journal["roadmap_before"]), before, str(selected),
+            repo, str(journal["baseline_before"]), str(journal["roadmap_before"]), before,
+            str(journal["state_before"]), str(selected),
         ) if journal["kind"] == "roadmap-reslice" else _activate_roadmap_milestone(
             str(journal["roadmap_before"]),
             str(selected),
@@ -611,7 +619,7 @@ def checkpoint_approval(
             if kind == "roadmap-reslice":
                 baseline_before = pipeline_state._read_real_file(project / "ROADMAP.before-reslice.md", "re-slice baseline")
             roadmap_after = _reslice_roadmap(
-                baseline_before, roadmap_before, state, selected_milestone,
+                resolved, baseline_before, roadmap_before, state, state_before, selected_milestone,
             ) if kind == "roadmap-reslice" else _activate_roadmap_milestone(
                 roadmap_before,
                 selected_milestone,
@@ -722,8 +730,8 @@ def defer_approval(
             if kind == "roadmap-reslice":
                 baseline = project / "ROADMAP.before-reslice.md"
                 roadmap_after = _reslice_roadmap(
-                    pipeline_state._read_real_file(baseline, "re-slice baseline"),
-                    roadmap_before, state, selected_milestone,
+                    resolved, pipeline_state._read_real_file(baseline, "re-slice baseline"),
+                    roadmap_before, state, state_before, selected_milestone,
                 )
             else:
                 roadmap_after = _activate_roadmap_milestone(roadmap_before, selected_milestone)
