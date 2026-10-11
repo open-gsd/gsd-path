@@ -36,6 +36,7 @@ DOCS.md (here)     four journeys in one place
 | **Team** — pin skills in repo | `--local` install; see [Installing](#installing) |
 | **Shipping broke** — archive commit blocked | [HOOKS.md](HOOKS.md) (expected with hooks) |
 | **Several repos** — one milestone changes them all | [Multi-repo milestones](README.md#multi-repo-milestones) |
+| **Several people** — one project | [Working with more than one person](FULL.md#working-with-more-than-one-person) |
 
 ---
 
