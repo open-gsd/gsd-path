@@ -667,22 +667,30 @@ def _strip_comments(text: str) -> str:
     return COMMENT_PATTERN.sub("", text)
 
 
-def _numbered_items(section: str, *, continuations: bool = False) -> Dict[int, str]:
-    items: Dict[int, str] = {}
-    current = None
+def _numbered_entries(section: str, *, continuations: bool = False) -> List[Tuple[int, str]]:
+    """Each numbered item in document order; a repeated number stays a separate entry."""
+    entries: List[Tuple[int, str]] = []
+    open_item = False
     for line in _strip_comments(section).splitlines():
         match = NUMBERED_ITEM_PATTERN.fullmatch(line.strip())
         if not match:
-            if continuations and current is not None and line[:1].isspace() and line.strip():
-                items[current] += " " + line.strip()
+            if continuations and open_item and line[:1].isspace() and line.strip():
+                number, text = entries[-1]
+                entries[-1] = (number, text + " " + line.strip())
             elif line.strip():
-                current = None
+                open_item = False
             continue
-        number = int(match.group(1))
+        entries.append((int(match.group(1)), match.group(2).strip()))
+        open_item = True
+    return entries
+
+
+def _numbered_items(section: str, *, continuations: bool = False) -> Dict[int, str]:
+    items: Dict[int, str] = {}
+    for number, text in _numbered_entries(section, continuations=continuations):
         if number in items:
             raise HandoffError(f"repeated numbered item {number}")
-        items[number] = match.group(2).strip()
-        current = number
+        items[number] = text
     return items
 
 
@@ -1301,7 +1309,10 @@ def task_review_observation(item: str, task_text: str) -> str:
     item = _normalize_ws(item)
     section = _common.section_body(task_text, "Acceptance criteria")
     if section is not None:
-        for criterion in _numbered_items(section, continuations=True).values():
+        # Issue #374: frozen landed bytes may repeat a criterion number. Only the
+        # criterion text matters here, so each repeated entry is still split
+        # from its evidence and the evidence gets the same checks.
+        for _number, criterion in _numbered_entries(section, continuations=True):
             quoted = _normalize_ws(criterion)
             prefix = quoted + " — "
             if item.startswith(prefix):

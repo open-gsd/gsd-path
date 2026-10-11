@@ -1129,6 +1129,34 @@ class PipelineStateTests(unittest.TestCase):
                 "build intent corrections requested",
             )
 
+    def test_closed_plan_origin_recovery_still_requires_the_base_milestone(self) -> None:
+        # Issue #374 accepts an unnamed base only for a closed build-origin record.
+        repo = self._plan_intent_correction_repo()
+        state = repo / ".project/STATE.md"
+        state.write_bytes(state.read_bytes().replace(b"milestone: second", b"milestone: null"))
+        run_git(repo, "commit", "-am", "fixture: unnamed milestone")
+        pipeline_state.transition_state(
+            repo,
+            {
+                "phase": "plan",
+                "status": "active",
+                "branch": "gsd-path/M001",
+                "archive": None,
+            },
+            {"phase": "define", "status": "active"},
+            "plan intent corrections requested",
+        )
+        closed = state.read_text(encoding="utf-8") + "- 2026-08-24 — plan — plan approved\n"
+        state.write_bytes(closed.encode("utf-8"))
+        recovery = pipeline_state._build_recovery().context(repo)
+        self.assertEqual((recovery["source"], recovery["active"]), ("plan", False))
+        state.write_bytes(closed.replace("milestone: null", "milestone: second").encode("utf-8"))
+        with self.assertRaisesRegex(
+            pipeline_state.PipelineStateError,
+            "does not prove this blocked milestone",
+        ):
+            pipeline_state.route_state(repo)
+
     def test_transition_cannot_enter_build_on_lookahead_track(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
