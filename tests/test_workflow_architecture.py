@@ -191,14 +191,21 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
             baseline = repo / ".project/ROADMAP.before-reslice.md"
             baseline.write_bytes(roadmap.read_bytes())
             narrowed = roadmap.read_text(encoding="utf-8").replace("Goal: second", "Goal: narrowed")
-            for label, old, new in (
-                ("dependencies", "Depends on: [M001]", "Depends on: []"),
-                ("status", "Status: active", "Status: pending"),
-                ("id", "### M002 — second", "### M003 — second"),
+            changed = "active roadmap entry changed: second"
+            tail = "Archive: null\nIntegrated: null"  # only the active entry ends like this
+            third = "\n\n### M003 — third\n\nGoal: third\nDepends on: [M002]\nStatus: active\n" + tail
+            for label, old, new, refusal in (
+                ("dependencies", "Depends on: [M001]", "Depends on: []", changed),
+                ("status", "Status: active", "Status: pending", changed),
+                ("id", "### M002 — second", "### M003 — second", changed),
+                ("slug", "### M002 — second", "### M002 — other", "exactly one entry for second"),
+                ("archive", "Archive: null", "Archive: .project/archive/002-second/", changed),
+                ("integrated", tail, "Archive: null\nIntegrated: " + head, changed),
+                ("second active", tail, tail + third, "must retain the active entry"),
             ):
                 with self.subTest(fixed=label):
                     roadmap.write_bytes(narrowed.replace(old, new).encode("utf-8"))
-                    with self.assertRaisesRegex(pipeline_state.PipelineStateError, "active roadmap entry changed: second"):
+                    with self.assertRaisesRegex(pipeline_state.PipelineStateError, refusal):
                         self.approve(repo, head)
                     self.assertTrue(baseline.exists())
             roadmap.write_bytes(narrowed.encode("utf-8"))

@@ -1840,6 +1840,41 @@ The task implements the demo.
                 check_handoffs.validate_roadmap(root)
             self.assertIn("after intent approval", str(failure.exception))
 
+    def test_define_reslice_that_removes_a_surface_reaches_the_plan_gate(self) -> None:
+        # Issue #362: the owner rules one surface out of the active milestone.
+        wide = ROADMAP.replace(
+            "Surfaces: Demo web app", "Surfaces: Demo web app, X page",
+        ).replace("- First capability\n", "- First capability\n- X page publishing\n")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            git(root, "init", "-b", "gsd-path/M001")
+            git(root, "config", "user.email", "test@example.test")
+            git(root, "config", "user.name", "Test")
+            self.write_state(root, "define", "active")
+            self.write(root, ".project/ROADMAP.md", wide)
+            git(root, "add", ".project")
+            git(root, "commit", "-q", "-m", "milestone started")
+            self.write(root, ".project/ROADMAP.before-reslice.md", wide)
+            self.write(root, ".project/ROADMAP.md", ROADMAP)
+            self.assertEqual(check_handoffs.validate_roadmap(root)["milestones"], ["M001"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                approved = pipeline_state.main([
+                    "approve", "--repo", str(root), "--kind", "roadmap-reslice",
+                    "--milestone", "demo", "--expected-head", git_output(root, "rev-parse", "HEAD"),
+                ])
+            self.assertEqual(approved, 0)
+            self.assertEqual(git_output(root, "show", "HEAD:.project/ROADMAP.md"), ROADMAP.strip())
+
+            self.write_plan_handoff(root)
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+            # The same plan fails against the entry before the re-slice.
+            self.write(root, ".project/ROADMAP.md", wide)
+            with self.assertRaises(check_handoffs.HandoffError) as failure:
+                check_handoffs.validate_plan(root)
+            self.assertIn("INTENT.md Surfaces do not match ROADMAP.md demo", str(failure.exception))
+
     def test_roadmap_rejects_repeated_surfaces_within_one_milestone(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
