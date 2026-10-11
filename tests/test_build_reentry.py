@@ -245,6 +245,23 @@ class BuildReentryTests(unittest.TestCase):
             "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
         })
 
+    def test_review_panel_changed_inside_a_closed_comment_drops_wave_reviews(self):
+        from scripts import review_panel
+        plan, review = self.reviewed_plan_recovery()
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(
+            "- max_review_cycles: 3\n- wave_budget: none\n- review_panel: off\n",
+            "- max_review_cycles: 3 <!--\n- review_panel: detected\n-->\n- wave_budget: none\n"
+            "<!-- x -->- review_panel: off\n",
+        ).encode("utf-8"))
+        self.assertEqual(review_panel.extract_config_value(
+            plan.read_text(encoding="utf-8"), review_panel.PLAN_LINE, "PLAN.md"), "detected")
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertFalse(review.exists())
+        self.assertEqual(approved["recovery_reviews"], {
+            "restored": [],
+            "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
+        })
+
     def assert_separator_in_a_cap_line_drops_wave_reviews(self, separator):
         plan, review = self.reviewed_plan_recovery(skeptics=None)
         plan.write_bytes(plan.read_text(encoding="utf-8").replace(

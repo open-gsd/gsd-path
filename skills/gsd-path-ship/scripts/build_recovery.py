@@ -22,16 +22,8 @@ MARKER = "build recovery: "
 RECOVERY_KEYS = frozenset({"base", "branch", "kind", "source"})
 
 
-COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-# A cap line that still holds a comment marker is not exempt: an unclosed comment can hide a governing key.
-CAP_LINE = re.compile(r"-[ \t]*(?:max_review_cycles|wave_budget):[^<>]*")
-
-
-def without_cap_lines(config):
-    # Read Config as review_findings.parse_config does: a closed comment is not a setting, and
-    # no line separator hides a key in a cap line.
-    return "".join(line for line in COMMENT.sub("", config).splitlines(keepends=True)
-                   if not CAP_LINE.fullmatch(line))
+# Only the value of a cap line is exempt; a comment or a line separator after it stays in the compared text.
+CAP_VALUE = re.compile(r"(?m)^(-[ \t]*(?:max_review_cycles|wave_budget):)[ \t\w.,-]*")
 
 
 def runtime():
@@ -328,7 +320,7 @@ def stale_review_reasons(repo: Path, recovery: dict, waves: set[int]) -> dict[in
     def governing(plan):
         # Non-wave settings govern every wave, including coverage and surfaces. Caps only bound
         # later work and Dependency notes are prose, so neither changes what a passed review judged.
-        return {title: without_cap_lines(body) if title == "Config" else body
+        return {title: CAP_VALUE.sub(r"\1", body) if title == "Config" else body
                 for title, body in plan.items()
                 if not title.startswith("Wave ") and title != "Dependency notes"}
 
