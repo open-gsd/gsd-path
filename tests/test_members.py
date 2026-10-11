@@ -403,7 +403,7 @@ class MemberTests(unittest.TestCase):
 
     def test_validate_refuses_a_default_branch_that_cannot_be_recorded(self) -> None:
         path = self.coordinator / ".project" / "MEMBERS.md"
-        row = "# Members\n\n## web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\n"
+        row = f"# Members\n\n## web\nCheckout: {self.root / 'web'}\nRemote: https://github.com/a/b\nIntegration: default\n"
         for value in (" gsd-path/M001", " a b", ""):
             with self.subTest(value):
                 path.write_bytes(f"{row}Default branch:{value}\n".encode("utf-8"))
