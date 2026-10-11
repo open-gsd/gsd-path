@@ -2007,6 +2007,23 @@ def next_task_id(tasks_dir: Path) -> str:
     return f"T{max(numbers, default=0) + 1:03d}"
 
 
+def replaced_review_base(primary: Path, project_dir: str, wave: int, cycle: int) -> Optional[str]:
+    """The recovery base when this cycle's review replaces the one a build recovery set aside, else None."""
+    recovery = pipeline_state._build_recovery().context(primary)
+    if not recovery:
+        return None
+    relative = f"{project_dir}/review/wave-{wave}.cycle{cycle}.md"
+    before = isolation.run_git(primary, "show", f"{recovery['base']}:{relative}")
+    current = primary / relative
+    # Plan approval restores the review of an unchanged wave before its checkpoint, so no commit
+    # since the base touches that file. A set-aside review is deleted by that checkpoint.
+    rewritten = isolation.run_git(primary, "log", "-1", "--format=%H", f"{recovery['base']}..HEAD", "--", relative)
+    if (not rewritten.stdout.strip() and before.returncode == 0 and current.is_file()
+            and current.read_text(encoding="utf-8") == before.stdout):
+        return None  # the restored review keeps its repairs
+    return recovery["base"]
+
+
 def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
     """Step 7: one fix task per findings batch, carrying failed criteria and observations verbatim."""
     receipt: Dict[str, object] = {"status": None, "wave": options.wave, "cycle": options.cycle,
@@ -2015,14 +2032,32 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         project = primary / options.project_dir
         tasks_dir = project / "tasks"
         repairs = []
+        pending = []
         for path in sorted(tasks_dir.glob("*-fix-wave-*-cycle-*.md")):
             text = path.read_text(encoding="utf-8")
             fields, _ = isolation.task_frontmatter(text)
             repairs.append({"task": fields["id"], "path": path.relative_to(primary).as_posix(),
-                            "wave": int(fields["wave"]), "locators": re.findall(r"(?m)^### (.+)$", _common.section_body(text, "Review findings") or "")})
+                            "wave": int(fields["wave"]), "locators": re.findall(r"(?m)^### (.+)$", _common.section_body(text, "Review findings") or ""),
+                            **({"repo": fields["repo"]} if fields.get("repo") else {})})
+            if fields["status"] != "done":
+                pending.append(repairs[-1])
         suffix = f"-fix-wave-{options.wave}-cycle-{options.cycle}.md"
-        existing = [item for item in repairs if item["path"].endswith(suffix)]
-        carried = {locator for item in repairs if item not in existing for locator in item["locators"]}
+        # A build recovery restarts a changed wave at cycle 1, so the repairs and the PLAN heading
+        # of the review it set aside carry the same names. They belong to that review, not this one.
+        replaced = replaced_review_base(primary, options.project_dir, options.wave, options.cycle)
+
+        def of_replaced_review(relative: str) -> bool:
+            if not replaced or isolation.run_git(primary, "show", f"{replaced}:{relative}").returncode != 0:
+                return False
+            return not isolation.run_git(primary, "log", "--diff-filter=AD", "--format=%H",
+                                         f"{replaced}..HEAD", "--", relative).stdout.strip()
+
+        stale = [item for item in repairs if item["path"].endswith(suffix) and of_replaced_review(item["path"])]
+        existing = [item for item in repairs if item["path"].endswith(suffix) and item not in stale]
+        # A landed repair no longer carries its finding: a repeat proves that fix failed and needs the next one.
+        # Two repos can carry the same locator, so a repair carries a finding only in its own repo.
+        carried = {(item.get("repo"), locator) for item in pending if not item["path"].endswith(suffix)
+                   for locator in item["locators"]}
         findings = review_findings.compute(primary, options.project_dir, options.wave, options.cycle)
         receipt["findings"] = findings
         escalation = [key for key in ("structural_blockers", "skeptic_groups", "cap_reached", "all_refuted")
@@ -2043,8 +2078,10 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
         repair_waves = {item["wave"] for item in existing}
         if len(repair_waves) > 1:
             raise DriverStop("repair tasks for this cycle disagree on their wave")
-        repair_heading = re.search(
+        stale_waves = {item["wave"] for item in stale}
+        repair_heading = next((heading for heading in re.finditer(
             rf"(?m)^## Wave (\d+) — fix wave {options.wave} cycle {options.cycle} review findings$", plan_text)
+            if int(heading.group(1)) not in stale_waves), None)
         if repair_waves:
             fix_wave = next(iter(repair_waves))
         elif repair_heading:
@@ -2055,9 +2092,10 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
             raise DriverStop("repair tasks disagree with the PLAN repair wave")
         receipt["existing"] = existing
         for batch in findings["fix_batches"]:
-            if any(set(batch["locators"]) <= set(item["locators"]) for item in existing):
+            repo = batch.get("repo")  # a member name, or None for the coordinator
+            if any(item.get("repo") == repo and set(batch["locators"]) <= set(item["locators"]) for item in existing):
                 continue
-            if all(locator in carried for locator in batch["locators"]):
+            if all((repo, locator) in carried for locator in batch["locators"]):
                 receipt["carried"].append(batch)
                 continue
             batch_groups = [groups[locator] for locator in batch["locators"]]
@@ -2065,6 +2103,8 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
             for source in sources:
                 if source not in texts:
                     raise DriverStop(f"fix batch names unknown task {source}")
+            # One task changes one repo: the fix depends on, and runs the Verify of, the source tasks of its repo.
+            sources = [source for source in sources if isolation.task_frontmatter(texts[source])[0].get("repo") == repo]
             task_id = next_task_id(tasks_dir)
             verify = "set -e\n" + "\n".join(  # each source Verify in its own subshell
                 f"(\n{command}\n)" for command in dict.fromkeys(_common.task_verify_command(texts[source]) for source in sources))
@@ -2075,6 +2115,7 @@ def fix_tasks(primary: Path, options: argparse.Namespace) -> Dict[str, object]:
                 f"### {group['locator']}\nCriterion: {group['criterion']}\n"
                 + "\n".join(f"- {item['text']}" for item in group["observations"]) for group in batch_groups)
             files = "\n".join(f"  - {path}" for path in batch["files"])
+            member = f"repo: {repo}\n" if repo else ""  # the task template puts `repo:` before `files:`
             title = f"Fix wave {options.wave} cycle {options.cycle} review findings in {', '.join(sources)}"
             text = f"""---
 id: {task_id}
@@ -2086,7 +2127,7 @@ agent: null
 base: null
 worktree: null
 task_branch: null
-files:
+{member}files:
 {files}
 ---
 
@@ -2136,7 +2177,7 @@ Heavy: {'yes' if heavy else 'no'}
             _common.atomic_write(path, text)
             receipt["created"].append({"task": task_id, "path": path.relative_to(primary).as_posix(),
                                        "wave": fix_wave, "deps": sources, "files": batch["files"],
-                                       "locators": batch["locators"]})
+                                       "locators": batch["locators"], **({"repo": repo} if repo else {})})
         rows = []
         for item in [*existing, *receipt["created"]]:
             fields, _ = isolation.task_frontmatter((primary / item["path"]).read_text(encoding="utf-8"))

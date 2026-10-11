@@ -183,9 +183,11 @@ def load_wave_tasks(project: Path, wave: int) -> Dict[str, dict]:
         if not task_wave or int(task_wave.group(1)) != wave:
             continue
         body = parts[2]
+        member = re.search(r"(?m)^repo:[ \t]*(?P<name>[^\s#]+)", frontmatter)
         tasks[named.group("id")] = {
             "id": named.group("id"),
             "path": str(path),
+            "repo": member.group("name").strip("\"'") if member else None,  # None is the coordinator
             "files": _frontmatter_list(frontmatter, "files"),
             "acceptance": _numbered_items(_section(body, "Acceptance criteria")),
             "interface": [
@@ -433,21 +435,27 @@ def _earlier_lens_locators(project: Path, wave: int, cycle: int, depth: str, tas
 
 
 def _fix_batches(groups: Sequence[dict], tasks: Dict[str, dict]) -> List[dict]:
-    """One batch per disjoint file scope: groups whose task files overlap share a batch."""
+    """One batch per repo and disjoint file scope: groups whose task files overlap in one repo share a batch.
+
+    A member batch names its `repo`; a coordinator batch has no such key.
+    """
 
     batches: List[dict] = []
     for group in groups:
-        files = sorted({path for task_id in group["tasks"] for path in tasks.get(task_id, {}).get("files", [])})
-        merged = {"locators": [group["locator"]], "files": files}
-        keep: List[dict] = []
-        for batch in batches:
-            if set(batch["files"]) & set(files):
-                merged["locators"] = batch["locators"] + merged["locators"]
-                merged["files"] = sorted(set(batch["files"]) | set(merged["files"]))
-            else:
-                keep.append(batch)
-        keep.append(merged)
-        batches = keep
+        owners = [tasks.get(task_id, {}) for task_id in group["tasks"]]
+        for repo in sorted({task.get("repo") or "" for task in owners}) or [""]:
+            files = sorted({path for task in owners if (task.get("repo") or "") == repo
+                            for path in task.get("files", [])})
+            merged = {"locators": [group["locator"]], "files": files, **({"repo": repo} if repo else {})}
+            keep: List[dict] = []
+            for batch in batches:
+                if batch.get("repo") == merged.get("repo") and set(batch["files"]) & set(files):
+                    merged["locators"] = batch["locators"] + merged["locators"]
+                    merged["files"] = sorted(set(batch["files"]) | set(merged["files"]))
+                else:
+                    keep.append(batch)
+            keep.append(merged)
+            batches = keep
     return batches
 
 
@@ -613,8 +621,9 @@ def repair_evidence(repo: Path, project_dir: str, wave: int, cycle: int, task_id
         source = compute(repo, project_dir, wave, cycle)
         if source["structural_blockers"]:
             raise ReviewFindingsError("source findings have structural blockers")
+        member = fields.get("repo")  # a finding in two repos has one batch per repo with the same locators
         batches = [batch for batch in source["fix_batches"]
-                   if set(batch["locators"]) == set(locators)]
+                   if batch.get("repo") == member and set(batch["locators"]) == set(locators)]
         if len(batches) != 1:
             raise ReviewFindingsError("repair must carry one eligible source finding batch")
         groups = [group for group in source["groups"] if group["locator"] in locators]
@@ -627,11 +636,12 @@ def repair_evidence(repo: Path, project_dir: str, wave: int, cycle: int, task_id
                 raise ReviewFindingsError("repair does not carry the exact criterion and observations")
         frontmatter = text.split("---", 2)[1]
         files = _frontmatter_list(frontmatter, "files")
-        originals = sorted({task for group in groups for task in group["tasks"]})
-        if (task_id in originals or not set(originals) <= set(_frontmatter_list(frontmatter, "deps"))
-                or set(files) != set(batches[0]["files"])):
-            raise ReviewFindingsError("repair dependencies/files do not match its source batch")
         sources = load_wave_tasks(project, wave)
+        originals = sorted({task for group in groups for task in group["tasks"] if sources[task]["repo"] == member})
+        # A repair may be narrowed to the files it needs; it names a file and never leaves its batch.
+        if (task_id in originals or not set(originals) <= set(_frontmatter_list(frontmatter, "deps"))
+                or not files or not set(files) <= set(batches[0]["files"])):
+            raise ReviewFindingsError("repair dependencies/files do not match its source batch")
         original_paths = [Path(sources[task]["path"]) for task in originals]
         original_proofs = isolation.verify_landed_task_files(
             repo, original_paths, f"{project_dir}/tasks", head

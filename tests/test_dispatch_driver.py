@@ -1893,6 +1893,104 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(carried["created"], [])
         self.assertEqual((root / ".project/plan/PLAN.md").read_bytes(), plan)
 
+    def test_fix_tasks_repairs_a_finding_that_repeats_after_its_fix_landed(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
+        first = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
+        self.assertEqual([item["task"] for item in first["created"]], ["T003"], first)
+        self.assertEqual(self.round(root, "--wait", "60", wave=2)["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60", verdict="blocked", cycle=2)["status"], "blocked")
+        repeat = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "2")
+        self.assertEqual(repeat["status"], "created", repeat)
+        self.assertEqual(repeat["carried"], [])
+        self.assertEqual([(item["task"], item["wave"]) for item in repeat["created"]], [("T004", 3)])
+        self.assertEqual(dispatch_driver.build_state.ready(str(root))["repair_for_wave"], 1)
+
+    def state_cli(self, root: Path, *args: str) -> dict:
+        completed = subprocess.run(
+            [sys.executable, "-B", str(PROJECT_ROOT / "scripts/pipeline_state.py"), *args, "--repo", str(root)],
+            capture_output=True, encoding="utf-8", errors="replace")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return json.loads(completed.stdout)
+
+    def move(self, root: Path, phase: str, status: str, event: str) -> dict:
+        current = self.state_cli(root, "validate")["state"]
+        return self.state_cli(
+            root, "transition", "--expect-phase", current["phase"], "--expect-status", current["status"],
+            "--expect-branch", current["branch"], "--expect-archive", "null",
+            "--set-phase", phase, "--set-status", status, "--event", event)
+
+    def test_fix_tasks_after_recovery_ignores_repairs_of_the_replaced_review(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
+        self.assertEqual(self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")["created"][0]["task"], "T003")
+        self.assertEqual(self.round(root, "--wait", "60", wave=2)["status"], "done")
+        # A plan repair changes wave 1, so its review is set aside and wave 1 is reviewed again from cycle 1.
+        self.move(root, "build", "blocked", "wave 1 plan defect")
+        run_git(root, "commit", "-qam", "build: checkpoint blocked build")
+        self.move(root, "plan", "active", "build plan repair requested")
+        self.state_cli(root, "prepare-build-recovery")
+        plan = root / ".project/plan/PLAN.md"
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace("Goal: ", "Goal: after repair, ", 1).encode("utf-8"))
+        self.state_cli(root, "approve", "--kind", "plan", "--expected-head", self.head(root))
+        self.move(root, "build", "active", "build started")
+        run_git(root, "commit", "-qam", "build: resume after plan repair")
+        review = root / ".project/review/wave-1.cycle1.md"
+        self.assertFalse(review.exists())
+        reviewed = self.review(root, "--wait", "60", verdict="blocked")
+        self.assertIn("Wave verdict: blocked", review.read_text(encoding="utf-8") if review.exists() else str(reviewed))
+        receipt = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
+        self.assertEqual(receipt["status"], "created", receipt)
+        self.assertEqual(receipt["existing"], [])
+        self.assertEqual([(item["task"], item["wave"]) for item in receipt["created"]], [("T004", 3)])
+        text = plan.read_text(encoding="utf-8")
+        self.assertIn("## Wave 2 — fix wave 1 cycle 1 review findings", text)
+        self.assertIn("## Wave 3 — fix wave 1 cycle 1 review findings", text)
+        self.assertNotIn("T004", text[text.index("## Wave 2"):text.index("## Wave 3")])
+        repeated = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
+        self.assertEqual(repeated["status"], "exists", repeated)
+        self.assertEqual([item["task"] for item in repeated["existing"]], ["T004"])
+
+    def test_fix_tasks_after_recovery_keeps_a_new_repair_that_reuses_a_deleted_name(self) -> None:
+        root = self.root
+        self.fixture(root)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
+        old = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")["created"][0]
+        self.assertEqual((old["task"], old["wave"]), ("T003", 2))
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+        self.move(root, "build", "blocked", "wave 1 plan defect")
+        run_git(root, "commit", "-qam", "build: checkpoint blocked build")
+        self.move(root, "plan", "active", "build plan repair requested")
+        self.state_cli(root, "prepare-build-recovery")
+        # The plan repair changes wave 1 and deletes the obsolete pending repair with its wave.
+        plan = root / ".project/plan/PLAN.md"
+        text = plan.read_text(encoding="utf-8").replace("Goal: ", "Goal: after repair, ", 1)
+        heading = "## Wave 2 — fix wave 1 cycle 1 review findings"
+        start = text.index(heading)
+        plan.write_bytes((text[:start] + text[text.index("## ", start + len(heading)):]).encode("utf-8"))
+        (root / old["path"]).unlink()
+        run_git(root, "add", "-A")
+        self.state_cli(root, "approve", "--kind", "plan", "--expected-head", self.head(root))
+        self.move(root, "build", "active", "build started")
+        run_git(root, "commit", "-qam", "build: resume after plan repair")
+        self.assertEqual(run_git(root, "ls-files", old["path"]).stdout, "")
+        self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
+        receipt = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
+        self.assertEqual([(item["task"], item["path"], item["wave"]) for item in receipt["created"]],
+                         [("T003", old["path"], 2)], receipt)
+        repeated = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
+        self.assertEqual(repeated["status"], "exists", repeated)
+        self.assertEqual(repeated["created"], [])
+        self.assertEqual([item["task"] for item in repeated["existing"]], ["T003"])
+        self.assertEqual(sorted(path.name for path in (root / ".project/tasks").glob("*-fix-wave-*.md")),
+                         [Path(old["path"]).name])
+        self.assertEqual(plan.read_text(encoding="utf-8").count(heading), 1)
+
     def test_panel_named_family_runs_merges_and_checkpoints_with_the_review(self) -> None:
         root = self.root
         self.fixture(root)

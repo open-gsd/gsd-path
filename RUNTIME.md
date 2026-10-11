@@ -174,8 +174,9 @@ through its receipt only when the canonical file matches the saved hash.
 
 `fix-tasks` reconciles existing repair tasks and PLAN rows before linting and
 checkpointing. It creates missing batches in an appended repair wave and
-reports new tasks in `created`, reused tasks in `existing`, and batches already
-covered by other repair tasks in `carried`. Status `created` includes restored
+reports new tasks in `created`, reused tasks in `existing`, and batches that
+other repair tasks not yet `done` cover in the same repo in `carried`. A member
+batch and its task carry `repo`. Status `created` includes restored
 PLAN rows or pending project bookkeeping; `exists` means nothing was written
 and no project changes needed a checkpoint. Status `none` means no batches
 need work; `escalate` leaves the named decisions with build step 7 and the user.
