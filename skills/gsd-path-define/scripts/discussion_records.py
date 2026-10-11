@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import sys
+import traceback
 
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
@@ -40,6 +41,11 @@ def _load_pipeline_modules():
             "scripts.pipeline_state",
             "scripts._common",
         }:
+            raise
+        if any(  # raised while a `scripts` module loaded: not a foreign package
+            frame.f_globals.get("__name__", "").startswith("scripts.")
+            for frame, _ in traceback.walk_tb(error.__traceback__)
+        ):
             raise
         shared_scripts = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared_scripts))

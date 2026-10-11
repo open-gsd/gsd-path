@@ -13,6 +13,7 @@ import json
 import os
 import shlex
 import sys
+import traceback
 
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
@@ -98,6 +99,11 @@ def _load_diagnose_modules():
             "scripts.pipeline_state",
         }:
             raise
+        if any(  # raised while a `scripts` module loaded: not a foreign package
+            frame.f_globals.get("__name__", "").startswith("scripts.")
+            for frame, _ in traceback.walk_tb(error.__traceback__)
+        ):
+            raise
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared))
         import archive_milestone
@@ -149,6 +155,11 @@ else:
             from scripts import pipeline_undo
         except ImportError as error:  # a foreign `scripts` package
             if error.name not in {"scripts", "scripts.pipeline_undo"}:
+                raise
+            if any(  # raised while a `scripts` module loaded: not a foreign package
+                frame.f_globals.get("__name__", "").startswith("scripts.")
+                for frame, _ in traceback.walk_tb(error.__traceback__)
+            ):
                 raise
             shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
             if str(shared) not in sys.path:
