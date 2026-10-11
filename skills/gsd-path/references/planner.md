@@ -83,7 +83,7 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   owning task's Approach.
 - Make `files` exhaustive, including imports, routes, generated artifacts,
   tests, and wiring. Require disjoint files for same-wave tasks that are not
-  dependency-ordered.
+  dependency-ordered. A declared directory overlaps every path below it.
 - Write an Interface contract in every task: `None` for independent tasks;
   for any tasks that exchange a symbol, signature, schema, endpoint, file
   format, or path, the exact shapes both sides code against — identical text
