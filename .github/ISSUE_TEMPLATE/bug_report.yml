@@ -1,0 +1,74 @@
+name: Bug report
+description: Something in GSD Path does not work as its documents say.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write one problem in one issue. Report a security problem privately: see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: GSD Path version
+      description: The package version, for example 1.5.0. `npx @opengsd/gsd-path@latest --doctor` shows it.
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Coding-agent host and version
+      placeholder: Claude Code 2.x, Codex CLI 0.x, Cursor ...
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Installer or update
+        - Pipeline phase (inspect, define, research, decide, roadmap, plan)
+        - Build (dispatch, landing, wave review, recovery)
+        - Ship (archive, integration, tag)
+        - Multi-repo
+        - Guard hooks
+        - Sidecar skill (discuss, docs audit, loop, forensics, undo, migrate)
+        - Desktop app or monitor daemon
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did
+      description: The skill or command you ran, and the state of the project (phase and status from `/gsd-path status`).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The exact error text or helper output. Remove secrets first.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: More information
+      description: A patched or pinned runtime, a non-GitHub remote, a default branch other than main, or other facts that can matter.
