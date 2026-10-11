@@ -122,8 +122,8 @@ contain newer changes.
    need Git; GitHub repository creation and pull-request operations also need
    an authenticated GitHub CLI (`gh`). The default branch of `origin` can have
    any name: Path records it at initialization and ships onto it. This guide
-   calls it `main`; see [default branch](WORKFLOW.md#default-branch). A
-   multi-repo project supports only `main`. Pull-request
+   calls it `main`; see [default branch](WORKFLOW.md#default-branch).
+   Pull-request
    shipping supports GitHub.com only. On GitLab, Gitea, or GitHub Enterprise
    Server, use the [`external-landing` mode](WORKFLOW.md#integration) when
    the default branch accepts merge requests only.
@@ -364,12 +364,30 @@ partial remote/clone/worktree transaction; the default checkout stays clean.
 One project can change several repositories in the same milestone. The
 **coordinator** repo holds `.project/` and runs the pipeline; each other repo
 is a **member** listed in `.project/MEMBERS.md`. A member needs a GitHub.com
-`origin` whose default is `main`. See
+`origin`. Its default branch can have any name, and it can differ from the
+default branch of the coordinator and of the other members. See
 [ADR 0002](docs/adr/0002-multi-repo-coordinator.md) for the design.
+
+`MEMBERS.md` has one section per member, in ship order. `members.py` writes
+it; do not edit it by hand:
+
+```markdown
+## web
+Checkout: /absolute/path/to/web
+Remote: https://github.com/acme/web.git
+Integration: default
+Default branch: master
+```
+
+`Default branch` is the member's default branch on `origin`. `members.py add`
+records it one time, from the member's local `origin/HEAD`; run
+`git remote set-head origin --auto` in the member first. A section without
+the field means `main`. See [default branch](WORKFLOW.md#default-branch).
 
 - Add members at a milestone boundary: ask the router to add an existing repo
   (`members.py add`) or to create a new one (`members.py add --create`, after
-  you approve the exact owner, name, visibility, and checkout). For optional
+  you approve the exact owner, name, visibility, and checkout; a new
+  repository uses `main`). For optional
   guard hooks, install them in the member with
   `npx @opengsd/gsd-path@latest --member-of <coordinator> --project <member>`.
 - The planner gives each member task `repo: <member>`; one task changes one

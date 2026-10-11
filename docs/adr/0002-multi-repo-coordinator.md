@@ -41,3 +41,9 @@ must be `main`; each member may choose its integration mode. The
 coordinator may be a product repo or a dedicated program repo. Submodules,
 nested repos, and one task across two repos stay out of scope. The work plan is
 [multi-repo-work.md](../multi-repo-work.md).
+
+**Update 2026-10-10 (issue #372):** a member's remote default no longer must
+be `main`. `members add` records the default branch of the member one time in
+its `MEMBERS.md` section (`Default branch`); a section without the field means
+`main`. The members and the coordinator may have different default branches.
+A new repository that `members add --create` creates still uses `main`.

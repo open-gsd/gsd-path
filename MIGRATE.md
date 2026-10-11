@@ -16,8 +16,7 @@ plans do not become passed Path gates.
   Path initialization records it in `.project/STATE.md` as `default_branch`
   and ships onto it. Run `git remote set-head origin --auto` before the first
   Path run: an unset `origin/HEAD` records `main`. See
-  [default branch](WORKFLOW.md#default-branch). A multi-repo project supports
-  only `main`.
+  [default branch](WORKFLOW.md#default-branch).
 - Pull-request shipping supports GitHub.com only. On GitLab, Gitea, or GitHub
   Enterprise Server, ship with `direct`, or with
   [`external-landing`](WORKFLOW.md#integration) when the default branch

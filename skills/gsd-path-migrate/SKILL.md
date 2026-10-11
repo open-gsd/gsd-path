@@ -16,7 +16,7 @@ Path ships onto the default branch of `origin`, with any name. The router
 records that name in STATE `default_branch` at initialization; the helper's
 `preview` and `prepare` commands do not check it. Before the router
 initializes the project, run `git remote set-head origin --auto` so that the
-record is correct. A multi-repo project supports only `main`.
+record is correct.
 Pull-request shipping supports GitHub.com only. For any other host, tell the
 user that the project ships with `direct` or `external-landing`.
 

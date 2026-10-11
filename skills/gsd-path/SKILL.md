@@ -191,8 +191,10 @@ the default branch of the forge. A STATE file without the field means `main`.
 `validate`, `route`, and `status` JSON, beside `state`. Never edit the field,
 and never take the name from a later `origin/HEAD` lookup. When a helper
 reports that the remote default differs from the recorded one, stop and report
-it. A project with members supports only `main`: the member repositories and
-the coordinator.
+it. In a project with members, STATE `default_branch` is the default branch of
+the coordinator only. `members.py add` records the default branch of each
+member in `.project/MEMBERS.md`; the member helpers read that record. The
+names can differ.
 
 ## Integration choice
 
@@ -227,16 +229,23 @@ milestone boundary, never during build or ship. Resolve the bundled
 `scripts/members.py` to an absolute path and use it; never edit MEMBERS.md
 or a member marker by hand.
 
-- To add an existing repository, it needs a GitHub.com `origin` whose default
-  is `main`, a clean worktree, and no active milestone of its own. Ask for the
-  member name, checkout path, and integration (`direct`, `pull-request`, or
-  `default`, which follows the milestone's choice), then run
+- To add an existing repository, it needs a GitHub.com `origin`, a clean
+  worktree, and no active milestone of its own. Its default branch can have
+  any name. Run `git remote set-head origin --auto` in the member first: `add`
+  reads the member's local `origin/HEAD` one time and records the name in
+  MEMBERS.md as `Default branch`; an unset `origin/HEAD` records `main`. Ask
+  for the member name, checkout path, and integration (`direct`,
+  `pull-request`, or `default`, which follows the milestone's choice), then run
   `python3 <members.py> add --repo <absolute-root> --name <name> --checkout <path> --integration <mode>`.
+  When `validate` or member close later reports
+  `remote default must be <recorded>`, stop and report it; never edit the
+  record.
 - To create a new member repository, present the exact `owner/name`,
   visibility, and checkout path as the **Review** surface and get approval
   first, as for a new GitHub repository. Then run the same command with
   `--create <owner/name> --visibility <visibility>`. It journals the approved
-  target before creating anything; rerun the identical command to resume.
+  target before creating anything; rerun the identical command to resume. A
+  new member repository uses `main`.
 - After adding a member, tell the user to install its guard hooks:
   `npx @opengsd/gsd-path@latest --member-of <absolute-root> --project <member checkout>`.
 - `python3 <members.py> validate --repo <absolute-root>` checks every member;

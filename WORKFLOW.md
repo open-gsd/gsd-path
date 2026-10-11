@@ -563,10 +563,26 @@ state, or promotion stops. Names in the reserved `gsd-path/`,
 `gsd-path-integrate/`, and `gsd-path-task/` namespaces, and names with `#` or
 a quote character, cannot be recorded.
 
-Not supported: a multi-repo project supports only `main`, for each member
-repository and for the coordinator. `members.py add`, `create`, and `validate`
-stop for a coordinator with another default branch. A new repository that
-Path creates uses `main`.
+In a multi-repo project, each repository has its own record. The coordinator
+records its default branch in `STATE.md`, as above. `members.py add` reads the
+local `refs/remotes/origin/HEAD` of the member one time and records the name
+in the member's section of `.project/MEMBERS.md`, as `Default branch: <name>`;
+an unset `origin/HEAD` records `main`. Run `git remote set-head origin --auto`
+in the member before you add it. A section without the field means `main`, so
+an older `MEMBERS.md` does not change. The members of one project can have
+different default branches, and the coordinator default can differ from them.
+The same name rules apply.
+
+Build start, the task brief check, undo, the member pre-push guard, and member
+close read the member record. The member bound branch starts at
+`origin/<recorded>`, the member merge subject ends with `into <recorded>`, and
+a member pull request targets `<recorded>`. When the remote default of the
+member no longer agrees with the record, `members.py validate` and member
+close stop with `remote default must be <recorded>`.
+
+Not supported: a new repository that Path creates uses `main`. This includes
+`members.py add --create`, which stops when the new repository has another
+default branch.
 
 ### Integration
 
