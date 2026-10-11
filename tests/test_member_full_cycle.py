@@ -35,7 +35,7 @@ phase: {phase}
 status: {status}
 branch: {branch}
 archive: {archive}
----
+{default}---
 
 # Project State
 
@@ -199,7 +199,7 @@ class MemberFullCycleTests(unittest.TestCase):
 
     def state(self, phase, status, archive="null"):
         self.write(".project/STATE.md", STATE.format(slug=SLUG, phase=phase, status=status, branch=BRANCH,
-                                                     archive=archive, today=TODAY))
+                                                     archive=archive, today=TODAY, default=self.default_line))
 
     def commit(self, message):
         git(self.repo, "add", "-A")
@@ -223,6 +223,14 @@ class MemberFullCycleTests(unittest.TestCase):
         return self.gate("pipeline_state.py", *arguments)
 
     def test_two_repo_milestone_from_plan_to_member_retirement(self):
+        self.cycle()
+
+    def test_two_repo_milestone_with_a_master_member_and_a_trunk_coordinator(self):
+        self.cycle(member_default="master", coordinator_default="trunk")
+
+    def cycle(self, member_default="main", coordinator_default="main"):
+        # A STATE file without default_branch means main, as in a project from before the field.
+        self.default_line = "" if coordinator_default == "main" else f"default_branch: {coordinator_default}\n"
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary).resolve()
             environment = mock.patch.dict(os.environ, {
@@ -235,21 +243,22 @@ class MemberFullCycleTests(unittest.TestCase):
             member = base / "web"
             origin = base / "acme-origin.git"
             member_origin = base / "web-origin.git"
-            for bare in (origin, member_origin):
-                self.assertEqual(git(base, "init", "--bare", "-q", "-b", "main", str(bare)).returncode, 0)
+            for bare, default in ((origin, coordinator_default), (member_origin, member_default)):
+                self.assertEqual(git(base, "init", "--bare", "-q", "-b", default, str(bare)).returncode, 0)
 
             # --- member: an existing GitHub repo (rewritten to a local bare remote)
-            git(base, "init", "-q", "-b", "main", str(member))
+            git(base, "init", "-q", "-b", member_default, str(member))
             self.write("lib.py", "value = 1\n", member)
             git(member, "add", "-A")
             git(member, "commit", "-q", "-m", "web: existing library")
             git(member, "remote", "add", "origin", "https://github.com/acme/web.git")
-            self.assertEqual(git(member, "push", "-q", str(member_origin), "main").returncode, 0)
-            git(member, "fetch", "-q", str(member_origin), "main:refs/remotes/origin/main")
-            git(member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+            self.assertEqual(git(member, "push", "-q", str(member_origin), member_default).returncode, 0)
+            git(member, "fetch", "-q", str(member_origin),
+                f"{member_default}:refs/remotes/origin/{member_default}")
+            git(member, "symbolic-ref", "refs/remotes/origin/HEAD", f"refs/remotes/origin/{member_default}")
 
             # --- coordinator with guard hooks, planning a member task
-            git(base, "init", "-q", "-b", "main", str(repo))
+            git(base, "init", "-q", "-b", coordinator_default, str(repo))
             self.write("README.md", "acme program\n")
             self.commit("fixture: coordinator")
             hooks = subprocess.run(["node", str(SCRIPTS / "install.mjs"), "--claude", "--local", "--project",
@@ -257,7 +266,7 @@ class MemberFullCycleTests(unittest.TestCase):
             self.assertEqual(hooks.returncode, 0, hooks.stdout + hooks.stderr)
             self.commit("router: install guard hooks")
             git(repo, "remote", "add", "origin", str(origin))
-            self.assertEqual(git(repo, "push", "-q", "-u", "origin", "main").returncode, 0)
+            self.assertEqual(git(repo, "push", "-q", "-u", "origin", coordinator_default).returncode, 0)
             git(repo, "remote", "set-head", "origin", "--auto")
             git(repo, "switch", "-q", "-c", BRANCH)
             self.state("plan", "active")
@@ -321,8 +330,10 @@ class MemberFullCycleTests(unittest.TestCase):
             closed = self.gate("archive_milestone.py", "close-members", "--repo", str(repo))
             self.assertEqual(closed["status"], "integrated")
             merge = closed["members"][0]["merge"]
-            self.assertEqual(git(member_origin, "rev-list", "--parents", "-n", "1", "main").stdout.split()[1:],
-                             [git(member_origin, "rev-parse", "main~1").stdout.strip(), member_tip])
+            self.assertEqual(git(member_origin, "rev-list", "--parents", "-n", "1", member_default).stdout.split()[1:],
+                             [git(member_origin, "rev-parse", f"{member_default}~1").stdout.strip(), member_tip])
+            self.assertEqual(git(member_origin, "log", "-1", "--format=%s", member_default).stdout.strip(),
+                             f"integrate: acme M001 — merge gsd-path/acme-M001 into {member_default}")
             self.gate("pipeline_state.py", "record-shipment", "--repo", str(repo), "--archive", prepared["archive"],
                       "--event", "archive preflight passed; shipment recorded")
             git(repo, "add", "-A")
@@ -343,7 +354,8 @@ class MemberFullCycleTests(unittest.TestCase):
             self.assertEqual(git(member_origin, "rev-parse", "--verify", "--quiet", bound_ref).stdout.strip(),
                              member_tip)
             self.gate("pipeline_git.py", "bind-next", "--repo", str(repo), "--branch", "gsd-path/M002",
-                      "--previous-branch", BRANCH, "--ship", ship_sha, "--remote-default", "origin/main",
+                      "--previous-branch", BRANCH, "--ship", ship_sha,
+                      "--remote-default", f"origin/{coordinator_default}",
                       "--base", integrated["integrate"], "--landing", integrated["integrate"])
             self.assertEqual(git(member_origin, "rev-parse", "--verify", "--quiet",
                                  "refs/heads/gsd-path/acme-M001").stdout, "")
@@ -352,7 +364,11 @@ class MemberFullCycleTests(unittest.TestCase):
             worktrees = git(member, "worktree", "list", "--porcelain").stdout.splitlines()
             self.assertNotIn(f"worktree {bound_checkout}", worktrees)
             self.assertEqual(git(member, "for-each-ref", "refs/gsd-path/authorizations/").stdout, "")
-            self.assertEqual(git(member_origin, "rev-parse", "main").stdout.strip(), merge)
+            self.assertEqual(git(member_origin, "rev-parse", member_default).stdout.strip(), merge)
+            self.assertEqual(git(origin, "rev-parse", coordinator_default).stdout.strip(), integrated["integrate"])
+            others = {"main", "master", "trunk"} - {member_default}
+            self.assertEqual([name for name in others
+                              if git(member_origin, "show-ref", "--verify", "--quiet", f"refs/heads/{name}").returncode == 0], [])
             self.assertTrue(re.fullmatch(r"[0-9a-f]{40}", git(member_origin, "rev-parse",
                                                               "refs/tags/milestone/acme-001-demo").stdout.strip()))
 

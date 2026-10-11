@@ -277,7 +277,7 @@ def _verify_tokens(
 
 
 def _member_bases(root: Path):
-    """Resolve a member name to (checkout, origin/main SHA), reading MEMBERS.md once."""
+    """Resolve a member name to (checkout, base SHA), reading MEMBERS.md once."""
     cache: Dict[str, Optional[Tuple[Path, str]]] = {}
 
     def locate(name: str) -> Optional[Tuple[Path, str]]:
@@ -290,21 +290,22 @@ def _member_bases(root: Path):
                 except ImportError:  # pragma: no cover - package import used by tests
                     from scripts import members
             try:
-                listed = {member["name"]: Path(member["checkout"]) for member in members.read_members(root)}
-                checkout = listed.get(name)
-                if checkout is None:
+                listed = {member["name"]: member for member in members.read_members(root)}
+                if name not in listed:
                     cache[name] = None
                 else:
+                    checkout = Path(listed[name]["checkout"])
                     # A build lock selects the bound tip, including during Plan recovery;
-                    # without the lock, use origin/main before the first build start.
+                    # without the lock, use the member's recorded default branch on origin
+                    # before the first build start.
                     lock = root / members.LOCK_PATH
                     locked = [entry for entry in (json.loads(lock.read_text(encoding="utf-8"))["members"]
                                                   if lock.is_file() else []) if entry["name"] == name]
                     if locked:
                         cache[name] = (checkout, _resolve_base(checkout, f"refs/heads/{locked[0]['branch']}"))
                     else:
-                        members.require_origin_branch(checkout, "main")
-                        cache[name] = (checkout, _resolve_base(checkout, "refs/remotes/origin/main"))
+                        cache[name] = (checkout, members.require_origin_branch(
+                            checkout, members.default_branch(listed[name])))
             except (members.MembersError, BriefError) as error:
                 raise BriefError(f"member {name} is unavailable: {error}") from error
         return cache[name]
@@ -328,8 +329,8 @@ def _lint_task(
     checked = 0
     if fields is None:
         return task_id, [error or "invalid frontmatter"], None, checked
-    # A member task's paths resolve in the member at its origin/main, where the
-    # member bound branch starts; `repo:` absent means the coordinator.
+    # A member task's paths resolve in the member at its default branch on origin,
+    # where the member bound branch starts; `repo:` absent means the coordinator.
     git_root = repo
     member = fields.get("repo")
     if member is not None:

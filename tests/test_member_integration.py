@@ -23,11 +23,12 @@ class MemberIntegrationTests(unittest.TestCase):
         # The member keeps its GitHub origin URL; Git rewrites it to a local bare remote.
         self.remote = self.root.parent / "web-remote.git"
         git(self.root.parent, "init", "-q", "--bare", str(self.remote))
-        git(self.remote, "symbolic-ref", "HEAD", "refs/heads/main")
+        default = getattr(self, "member_default", "main")
+        git(self.remote, "symbolic-ref", "HEAD", f"refs/heads/{default}")
         git(self.member, "config", "url." + str(self.remote) + ".insteadOf", "https://github.com/acme/web.git")
-        git(self.member, "push", "-q", "origin", "main")
+        git(self.member, "push", "-q", "origin", default)
         git(self.member, "fetch", "-q", "origin")
-        self.main = git(self.member, "rev-parse", "main")
+        self.main = git(self.member, "rev-parse", default)
 
     def remote_ref(self, ref: str) -> str:
         return git(self.remote, "rev-parse", "--verify", "--quiet", ref, check=False)
@@ -176,6 +177,67 @@ class MemberIntegrationTests(unittest.TestCase):
             integration.validate_member_integrated(
                 self.root, "web", ARCHIVE, self.member_tip, refresh=False), result)
         self.assertEqual([git(self.member, "rev-parse", "--verify", ref) for ref in refs], before)
+
+
+class MasterMemberIntegrationTests(unittest.TestCase):
+    """Direct member close on a member whose recorded default branch is master."""
+    member_default = "master"
+    fixture = MemberIntegrationTests.fixture
+    setUp = MemberIntegrationTests.setUp
+    remote_ref = MemberIntegrationTests.remote_ref
+    integrate = MemberIntegrationTests.integrate
+
+    def test_direct_member_integration_lands_on_the_recorded_default_branch(self) -> None:
+        self.assertIn("Default branch: master\n", (self.root / ".project/MEMBERS.md").read_text(encoding="utf-8"))
+        validate = integration.validate_member_integrated
+        tracking = []
+
+        def record_tracking_refs(*arguments, **options):
+            tracking.append(git(self.member, "for-each-ref", "--format=%(refname) %(objectname)",
+                                "refs/remotes/origin/main", "refs/remotes/origin/master"))
+            return validate(*arguments, **options)
+
+        with mock.patch.object(integration, "validate_member_integrated", side_effect=record_tracking_refs):
+            result = self.integrate()
+        merge = self.remote_ref("refs/heads/master")
+        self.assertEqual(tracking, [f"refs/remotes/origin/master {merge}"])
+        self.assertEqual(result["merge"], merge)
+        self.assertEqual(git(self.remote, "rev-list", "--parents", "-n", "1", merge).split()[1:],
+                         [self.main, self.member_tip])
+        self.assertEqual(git(self.remote, "show", "-s", "--format=%s", merge),
+                         "integrate: demo M001 — merge gsd-path/demo-M001 into master")
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}^{{commit}}"), merge)
+        self.assertEqual(self.remote_ref("refs/heads/main"), "")
+        self.assertTrue(members.authorized(self.member, "demo", "push", "refs/heads/master", merge))
+        self.assertEqual(git(self.member, "rev-parse", "refs/remotes/origin/master"), merge)
+
+        # A rerun and a read-only validation find the merge on origin/master.
+        self.assertEqual(self.integrate(), result)
+        self.assertEqual(integration.validate_member_integrated(
+            self.root, "web", ARCHIVE, self.member_tip, refresh=False), result)
+        self.assertEqual(git(self.remote, "rev-list", "--count", "--first-parent", f"{self.main}..master"), "1")
+
+    def test_reviewed_head_on_the_recorded_default_branch_requires_recovery(self) -> None:
+        git(self.remote, "fetch", "-q", str(self.member), self.member_tip)
+        git(self.remote, "update-ref", "refs/heads/master", self.member_tip)
+        with self.assertRaisesRegex(ArchiveError, "reached origin/master outside Path"):
+            self.integrate()
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), "")
+
+    def test_forge_default_that_differs_from_the_record_blocks_before_publishing(self) -> None:
+        git(self.remote, "branch", "main", "master")
+        git(self.remote, "symbolic-ref", "HEAD", "refs/heads/main")
+        with self.assertRaisesRegex(ArchiveError, "member web remote default must be master, got 'main'"):
+            self.integrate()
+        self.assertEqual(self.remote_ref("refs/heads/master"), self.main)
+        self.assertEqual(self.remote_ref("refs/heads/gsd-path/demo-M001"), "")
+
+    def test_retirement_clears_the_default_branch_push_authorization(self) -> None:
+        merge = self.integrate()["merge"]
+        integration.retire_member(self.root, "web", ARCHIVE, self.member_tip, merge, TAG)
+        self.assertEqual(git(self.member, "for-each-ref", "refs/gsd-path/authorizations/demo/"), "")
+        self.assertEqual(self.remote_ref("refs/heads/gsd-path/demo-M001"), "")
+        self.assertEqual(self.remote_ref("refs/heads/master"), merge)
 
 
 if __name__ == "__main__":

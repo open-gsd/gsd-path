@@ -714,6 +714,18 @@ def member_checkout(coordinator: Path, member: str) -> Tuple[Path, str]:
     return checkout, str(role["project"])
 
 
+def member_default_branch(coordinator: Path, member: str) -> str:
+    """The default branch that MEMBERS.md records for a member; a row without it means main."""
+    try:
+        import members
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import members
+    try:
+        return members.member_default_branch(require_directory(coordinator, "coordinator"), member)
+    except members.MembersError as error:
+        raise IsolationError(str(error)) from error
+
+
 def member_bound_checkout(coordinator: Path, member: str) -> Dict[str, object]:
     """Path's own checkout of a locked member's bound branch, outside the team's checkout."""
     checkout, _, entry = _member_context(coordinator, member)
