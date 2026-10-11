@@ -22,13 +22,16 @@ MARKER = "build recovery: "
 RECOVERY_KEYS = frozenset({"base", "branch", "kind", "source"})
 
 
-# A cap line that holds a comment marker is not exempt: the comment can hide a governing key.
+COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+# A cap line that still holds a comment marker is not exempt: an unclosed comment can hide a governing key.
 CAP_LINE = re.compile(r"-[ \t]*(?:max_review_cycles|wave_budget):[^<>]*")
 
 
 def without_cap_lines(config):
-    # Split as review_findings.parse_config does, so no line separator hides a key in a cap line.
-    return "".join(line for line in config.splitlines(keepends=True) if not CAP_LINE.fullmatch(line))
+    # Read Config as review_findings.parse_config does: a closed comment is not a setting, and
+    # no line separator hides a key in a cap line.
+    return "".join(line for line in COMMENT.sub("", config).splitlines(keepends=True)
+                   if not CAP_LINE.fullmatch(line))
 
 
 def runtime():

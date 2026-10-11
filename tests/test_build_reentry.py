@@ -184,11 +184,11 @@ class BuildReentryTests(unittest.TestCase):
         failure = self.cli("approve", "--kind", "plan", "--expected-head", self.base, success=False)
         self.assertIn("changed wave must be reviewed after build resumes", failure)
 
-    def reviewed_plan_recovery(self, skeptics="off"):
+    def reviewed_plan_recovery(self, skeptics="off", cap="- max_review_cycles: 3\n"):
         """Commit a reviewed wave under a plan with Config and Dependency notes, then open a plan repair."""
         plan = self.project / "plan/PLAN.md"
         plan.write_bytes((
-            "# Plan — demo\n\n## Config\n\n- max_review_cycles: 3\n- wave_budget: none\n"
+            "# Plan — demo\n\n## Config\n\n" + cap + "- wave_budget: none\n"
             "- review_panel: off\n" + (f"- finding_skeptics: {skeptics}\n" if skeptics else "") + "\n"
             "## Wave 1 — Deliver the module\n\nGoal: Deliver the module\nReview depth: full\n\n"
             "## Dependency notes\n\nNone.\n"
@@ -221,6 +221,16 @@ class BuildReentryTests(unittest.TestCase):
             "restored": [],
             "review_again": [{"wave": 1, "reason": "PLAN.md section `Config` changed"}],
         })
+
+    def test_cap_edit_on_a_line_with_the_template_comment_keeps_wave_reviews(self):
+        plan, review = self.reviewed_plan_recovery(cap=(
+            "- max_review_cycles: 3   <!-- review→fix→re-review loops per wave\n"
+            "                             before escalating -->\n"))
+        plan.write_bytes(plan.read_text(encoding="utf-8")
+                         .replace("max_review_cycles: 3", "max_review_cycles: 5").encode("utf-8"))
+        approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
+        self.assertEqual(review.read_text(encoding="utf-8"), "Previously recorded wave evidence\n")
+        self.assertEqual(approved["recovery_reviews"], {"restored": [1], "review_again": []})
 
     def test_comment_opened_on_a_cap_line_drops_wave_reviews(self):
         plan, review = self.reviewed_plan_recovery(skeptics="on")
