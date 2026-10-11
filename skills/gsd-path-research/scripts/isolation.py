@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import hashlib
 import io
 import json
@@ -1177,7 +1178,7 @@ def _prove_member_commit(
                              parent, commit).splitlines())
     if not changed:
         return "commit changes nothing"
-    undeclared = sorted(changed - allowed)
+    undeclared = undeclared_paths(repo, parent, changed, allowed)
     if undeclared:
         return "undeclared paths: " + ", ".join(undeclared)
     if git_output(repo, "log", "-1", "--format=%s", commit) != subject:
@@ -1193,7 +1194,7 @@ def _commit_member_source(sidecar: Path, journal: Dict[str, object], allowed: Se
     if pending:
         if current_sha(sidecar) != member_base:
             raise IsolationError("dirty member source HEAD must equal the member base")
-        undeclared = sorted(pending - allowed)
+        undeclared = undeclared_paths(sidecar, member_base, pending, allowed)
         if undeclared:
             raise IsolationError("undeclared paths: " + ", ".join(undeclared))
         git_output(sidecar, "add", "-A", "--", *sorted(pending))
@@ -1671,7 +1672,7 @@ def _commit_pending(
         mode = "-f" if path in forced else "-A"
         added = run_git(repo, "add", mode, "--", path)
         if added.returncode != 0:
-            raise IsolationError(f"could not stage {path}")
+            raise IsolationError(f"could not stage {path}: {added.stderr.strip()}")
     staged = _split_paths(
         git_output(
             repo,
@@ -1690,6 +1691,32 @@ def _commit_pending(
     return current_sha(repo)
 
 
+def undeclared_paths(
+    repo: Path, base: str, paths: Set[str], declared: Set[str]
+) -> list[str]:
+    """Return the sorted paths that the declared entries do not cover.
+
+    An entry covers itself and, as a declared directory, the files below it.
+    An entry that is a file at `base` covers only itself: the task-brief lint
+    rejects a path below a base file.
+    """
+
+    @functools.lru_cache(maxsize=None)
+    def directory(entry: str) -> bool:
+        kind = run_git(repo, "cat-file", "-t", f"{base}:{entry}")
+        return kind.returncode != 0 or kind.stdout.strip() == "tree"
+
+    return sorted(
+        path
+        for path in paths
+        if path not in declared
+        and not any(
+            str(parent) in declared and directory(str(parent))
+            for parent in list(PurePosixPath(path).parents)[:-1]
+        )
+    )
+
+
 def validate_allowed_changes(
     repo: Path,
     base: str,
@@ -1703,7 +1730,7 @@ def validate_allowed_changes(
     if not landing:
         raise IsolationError("no changes to land")
     since_base = committed_paths_since(repo, base) | landing
-    unexpected = sorted(path for path in since_base if path not in allowed)
+    unexpected = undeclared_paths(repo, base, since_base, allowed)
     if unexpected:
         raise IsolationError(
             "unexpected paths: " + ", ".join(unexpected)
@@ -1740,7 +1767,7 @@ def commit_allowed_changes(
     for path in sorted(staging):
         added = run_git(repo, "add", "-A", "--", path)
         if added.returncode != 0:
-            raise IsolationError(f"could not stage {path}")
+            raise IsolationError(f"could not stage {path}: {added.stderr.strip()}")
     staged = _split_paths(
         git_output(repo, "diff", "--cached", "--name-only", "--relative")
     )
@@ -2619,7 +2646,7 @@ def _prove_task_commit(
     )
     if task_file not in changed:
         return None, "commit does not touch the task file"
-    stray = sorted(changed - contract_paths)
+    stray = undeclared_paths(repo, base, changed, contract_paths)
     if stray:
         return None, f"commit touches undeclared paths: {', '.join(stray)}"
     if landing_error:
@@ -3803,7 +3830,11 @@ def _attest_body_fields(body: str) -> tuple[Dict[str, str], list[str]]:
 
 
 def _attested_changes(repo: Path, base: str, head: str, declared: Set[str]) -> list[str]:
-    """Declared paths that changed between base and head, matched literally like land."""
+    """Declared paths that changed between base and head, matched literally.
+
+    Land also accepts files below a declared directory. Attestation does not:
+    a recorded attestation body must stay provable.
+    """
     changed = set(git_output(repo, "diff", "--name-only", base, head).splitlines())
     return sorted(changed & declared)
 

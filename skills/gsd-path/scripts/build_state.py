@@ -489,7 +489,7 @@ def _validate_ready_metadata(project: Project) -> None:
 def _overlap(left: Task, right: Task) -> List[str]:
     if left.repo != right.repo:
         return []
-    return sorted(set(left.files) & set(right.files))
+    return _common.overlapping_paths(left.files, right.files)
 
 
 def _blocked_wave_reviews(project: Project) -> Dict[int, int]:

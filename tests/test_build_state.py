@@ -424,7 +424,59 @@ archive: null
 
         self.assertEqual(result.returncode, 1)
         self.assertEqual(payload["error"]["code"], "ready-file-overlap")
-        self.assertEqual(payload["error"]["details"]["tasks"], ["T001", "T002"])
+        self.assertEqual(payload["error"]["message"], "concurrent tasks T001 and T002 overlap")
+        self.assertEqual(
+            payload["error"]["details"], {"tasks": ["T001", "T002"], "files": ["shared.py"]}
+        )
+
+    def ready_pair(
+        self, left: tuple[str, ...], right: tuple[str, ...], *,
+        deps: tuple[str, ...] = (), repo: str = "",
+    ) -> tuple[subprocess.CompletedProcess[str], dict]:
+        """Run `ready` for T001 with `left` files and T002 with `right` files in Wave 1."""
+        self.write_plan(((("T001", "One", (), left), ("T002", "Two", deps, right)),))
+        self.write_task("T001", task_text("T001", "One", 1, (), left))
+        second = task_text("T002", "Two", 1, deps, right)
+        if repo:
+            second = second.replace("files:", f"repo: {repo}\nfiles:", 1)
+        self.write_task("T002", second)
+        self.commit_all("plan")
+        return self.cli("ready")
+
+    def test_ready_rejects_a_declared_directory_and_a_path_below_it(self) -> None:
+        result, payload = self.ready_pair(
+            ("fixtures/set",), ("fixtures/set/a.json", "fixtures/set/deep/b.json", "other.py")
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["error"]["code"], "ready-file-overlap")
+        self.assertEqual(
+            payload["error"]["details"],
+            {"tasks": ["T001", "T002"],
+             "files": ["fixtures/set/a.json", "fixtures/set/deep/b.json"]},
+        )
+
+    def test_ready_accepts_a_sibling_of_a_declared_directory(self) -> None:
+        result, payload = self.ready_pair(("fixtures/set",), ("fixtures/setx.json",))
+
+        self.assertEqual(result.returncode, 0, payload)
+        self.assertEqual([task["id"] for task in payload["ready"]], ["T001", "T002"])
+
+    def test_ready_accepts_a_directory_and_a_path_below_it_in_different_repos(self) -> None:
+        result, payload = self.ready_pair(
+            ("fixtures/set",), ("fixtures/set/a.json",), repo="web"
+        )
+
+        self.assertEqual(result.returncode, 0, payload)
+        self.assertEqual([task["id"] for task in payload["ready"]], ["T001", "T002"])
+
+    def test_ready_orders_a_dependent_path_below_a_declared_directory(self) -> None:
+        result, payload = self.ready_pair(
+            ("fixtures/set",), ("fixtures/set/a.json",), deps=("T001",)
+        )
+
+        self.assertEqual(result.returncode, 0, payload)
+        self.assertEqual([task["id"] for task in payload["ready"]], ["T001"])
 
     def test_ready_rejects_a_noncanonical_task_filename(self) -> None:
         self.write_plan(((("T001", "One", (), ("one.py",)),),))

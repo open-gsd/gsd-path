@@ -235,6 +235,25 @@ class GroupingTest(unittest.TestCase):
         self.assertIn("names no task criterion", result["structural_blockers"][0]["detail"])
 
 
+class FixBatchTest(unittest.TestCase):
+    def test_a_declared_directory_and_a_path_below_it_share_a_fix_batch(self):
+        # Fix batches become same-wave repair tasks, so they follow the plan overlap rule.
+        groups = [{"locator": f"t00{n}_ac1", "tasks": [f"T00{n}"]} for n in (1, 2, 3)]
+        tasks = {
+            "T001": {"files": ["fixtures/set"]},
+            "T002": {"files": ["fixtures/set/a.json"]},
+            "T003": {"files": ["fixtures/setx.json"]},
+        }
+        self.assertEqual(
+            review_findings._fix_batches(groups, tasks),
+            [
+                {"locators": ["t001_ac1", "t002_ac1"],
+                 "files": ["fixtures/set", "fixtures/set/a.json"]},
+                {"locators": ["t003_ac1"], "files": ["fixtures/setx.json"]},
+            ],
+        )
+
+
 class SkepticSelectionTest(unittest.TestCase):
     def test_skeptics_off_sends_groups_to_fix(self):
         fixture = Fixture(self, skeptics="off")

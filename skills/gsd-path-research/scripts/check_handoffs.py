@@ -1532,7 +1532,7 @@ def _validate_task_graph(
         for right in task_ids[index + 1 :]:
             if task_waves[left] != task_waves[right] or task_repos[left] != task_repos[right]:
                 continue
-            overlap = sorted(set(task_files[left]) & set(task_files[right]))
+            overlap = _common.overlapping_paths(task_files[left], task_files[right])
             if overlap:
                 if (
                     _task_scalar(tasks[left], left, "status") == "done"
