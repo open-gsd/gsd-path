@@ -99,7 +99,9 @@ def _load_diagnose_modules():
             "scripts.pipeline_state",
         }:
             raise
-        if any(  # raised while a `scripts` module loaded: not a foreign package
+        # A plain ImportError raised while a `scripts` module loaded is not a
+        # foreign package. A missing module falls back, as before.
+        if not isinstance(error, ModuleNotFoundError) and any(
             frame.f_globals.get("__name__", "").startswith("scripts.")
             for frame, _ in traceback.walk_tb(error.__traceback__)
         ):
@@ -156,7 +158,9 @@ else:
         except ImportError as error:  # a foreign `scripts` package
             if error.name not in {"scripts", "scripts.pipeline_undo"}:
                 raise
-            if any(  # raised while a `scripts` module loaded: not a foreign package
+            # A plain ImportError raised while a `scripts` module loaded is not a
+            # foreign package. A missing module falls back, as before.
+            if not isinstance(error, ModuleNotFoundError) and any(
                 frame.f_globals.get("__name__", "").startswith("scripts.")
                 for frame, _ in traceback.walk_tb(error.__traceback__)
             ):

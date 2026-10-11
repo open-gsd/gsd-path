@@ -42,7 +42,9 @@ def _load_pipeline_modules():
             "scripts._common",
         }:
             raise
-        if any(  # raised while a `scripts` module loaded: not a foreign package
+        # A plain ImportError raised while a `scripts` module loaded is not a
+        # foreign package. A missing module falls back, as before.
+        if not isinstance(error, ModuleNotFoundError) and any(
             frame.f_globals.get("__name__", "").startswith("scripts.")
             for frame, _ in traceback.walk_tb(error.__traceback__)
         ):

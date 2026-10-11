@@ -610,6 +610,29 @@ class PipelineDiagnoseTests(unittest.TestCase):
                     self.assertNotEqual(completed.returncode, 0)
                     self.assertIn("missing_helper_name", completed.stderr)
 
+    def test_bundled_helpers_fall_back_when_a_scripts_module_lacks_a_helper(self) -> None:
+        # Same as before #360: a missing `scripts.<helper>` starts the fallback.
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / "scripts"
+            package.mkdir()
+            (package / "archive_milestone.py").write_bytes(
+                "import scripts.pipeline_state\n".encode("utf-8"),
+            )
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = tmp
+            bundle = PROJECT_ROOT / "skills" / "gsd-path-forensics" / "scripts"
+            for name in ("pipeline_diagnose.py", "pipeline_undo.py", "discussion_records.py"):
+                with self.subTest(helper=name):
+                    completed = subprocess.run(
+                        [sys.executable, "-B", str(bundle / name), "--help"],
+                        cwd=tmp,
+                        env=environment,
+                        capture_output=True,
+                        encoding="utf-8", errors="replace",
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertIn("usage:", completed.stdout)
+
     def test_cli_diagnose_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
