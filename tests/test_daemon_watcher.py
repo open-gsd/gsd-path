@@ -187,7 +187,8 @@ class WatcherTests(unittest.TestCase):
         self.assertEqual(watcher.projects[str(self.project)].flavor, "gsd-path")
         core = watcher.projects[core_id].to_dict()
         self.assertEqual((core["id"], core["root"], core["flavor"]), (core_id, str(self.project), "gsd-core"))
-        self.assertEqual(core["workflow"]["state"], "unverified")
+        # The gsd-core reader runs: no phase folder yet, so the card is not started.
+        self.assertEqual(core["workflow"]["state"], "idle")
         # Removing one framework's folder removes only its card.
         (self.project / ".planning" / "STATE.md").unlink()
         (self.project / ".planning").rmdir()

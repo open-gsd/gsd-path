@@ -207,7 +207,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 32px; margin-top: 8px; }
   .page h2 { font-size: 12.5px; font-weight: 650; margin: 20px 0 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
   .page h2 span { color: var(--faint); font-weight: 400; }
-  .phases { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; }
+  .phases { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; }
   .phases div { font-size: 11.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .phases i { display: block; height: 6px; border-radius: 2px; background: var(--seg); margin-bottom: 4px; }
   .phases .done { color: var(--dim); } .phases .done i { background: var(--done); }
@@ -615,7 +615,9 @@ const money = v => v == null ? "—" : "$" + Number(v).toLocaleString("en-US", {
 const DASH = '<span class="faint">—</span>';
 /* Same order as canonicalPhases in the tray's Models.swift. */
 const PHASES = ["inspect", "define", "research", "decide", "roadmap", "plan", "build", "ship"];
-const phaseIndex = p => stateOf(p) === "shipped" ? PHASES.length : PHASES.indexOf(p.phase);
+// A gsd-pi or gsd-core card sends its own phase list.
+const phasesOf = p => p.phases || PHASES;
+const phaseIndex = p => stateOf(p) === "shipped" ? phasesOf(p).length : phasesOf(p).indexOf(p.phase);
 const ago = iso => {
   const t = Date.parse(iso), now = Date.parse(DATA.generated_at) || Date.now();
   if (isNaN(t)) return "—";
@@ -635,7 +637,7 @@ function routeMarks(p) {
 }
 function phaseMeter(p) {
   const i = phaseIndex(p);
-  return `<span class="meter ${stateOf(p)}" role="img" aria-label="${esc(p.phase || "no phase")}">${PHASES.map((ph, k) => `<i class="${k < i ? "done" : k === i ? "now" : ""}" title="${ph}"></i>`).join("")}</span>`;
+  return `<span class="meter ${stateOf(p)}" role="img" aria-label="${esc(p.phase || "no phase")}">${phasesOf(p).map((ph, k) => `<i class="${k < i ? "done" : k === i ? "now" : ""}" title="${ph}"></i>`).join("")}</span>`;
 }
 function boardRow(p) {
   const st=stateOf(p), {cur}=milestoneStack(p), sp=p.spend||{};
@@ -670,7 +672,7 @@ function verifyLine(p) {
 function phaseTrack(p) {
   const i = phaseIndex(p), log = p.phase_log || [];
   const dateOf = ph => ((ph === p.phase ? log.filter(e => e.phase === ph).slice(-1)[0] : log.find(e => e.phase === ph)) || {}).date;
-  return `<div class="phases ${stateOf(p)}">${PHASES.map((ph, k) => `<div class="${k < i ? "done" : k === i ? "now" : ""}" title="${ph}${dateOf(ph) ? " · " + esc(dateOf(ph)) : ""}"><i></i>${ph}<small>${esc(String(dateOf(ph) || "").slice(5)) || "&nbsp;"}</small></div>`).join("")}</div>`;
+  return `<div class="phases ${stateOf(p)}">${phasesOf(p).map((ph, k) => `<div class="${k < i ? "done" : k === i ? "now" : ""}" title="${ph}${dateOf(ph) ? " · " + esc(dateOf(ph)) : ""}"><i></i>${ph}<small>${esc(String(dateOf(ph) || "").slice(5)) || "&nbsp;"}</small></div>`).join("")}</div>`;
 }
 const spendText = slot => slot && slot.turns ? [slot.cost != null ? money(slot.cost) : null, `${int(slot.turns)} turns`].filter(Boolean).join(" · ") : "";
 const manifestMeta = m => {

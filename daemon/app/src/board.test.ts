@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { boardRow, filterCounts, setupPill, updateBanner, visibleProjects } from "./board";
 import { asking, blocked, building, shipped, status } from "./fixtures";
 import type { HostInfo, PluginStatus, ProjectSetup } from "./skills";
+import { phaseTrack } from "./project";
 import { nameOf } from "./status";
 
 const NOW = Date.parse(status.generated_at!);
@@ -59,6 +60,13 @@ describe("boardRow", () => {
     expect(boardRow(core, NOW)).toMatchObject({ id: "/work/gsd-path::gsd-core", root: "/work/gsd-path", flavor: "gsd-core" });
     expect(boardRow({ ...building, flavor: "gsd-path" }, NOW).flavor).toBeNull();
     expect(visibleProjects([building, core], "all", "gsd-core").map((p) => p.id)).toEqual(["/work/gsd-path::gsd-core"]);
+  });
+  it("draws a gsd-core card with its own five steps", () => {
+    const core = { ...building, flavor: "gsd-core", phases: ["discuss", "research", "plan", "execute", "verify"], phase: "plan" };
+    expect(boardRow(core, NOW).cells).toEqual(["done", "done", "now", "todo", "todo"]);
+    expect(phaseTrack(core).map((step) => [step.label, step.state])).toEqual([
+      ["discuss", "done"], ["research", "done"], ["plan", "now"], ["execute", "todo"], ["verify", "todo"]]);
+    expect(boardRow({ ...core, workflow: { state: "shipped", label: "Shipped" } }, NOW).cells).toEqual(Array(5).fill("done"));
   });
   it("shows a blocked project with its reason and no invented usage", () => {
     expect(boardRow(blocked, NOW)).toMatchObject({
