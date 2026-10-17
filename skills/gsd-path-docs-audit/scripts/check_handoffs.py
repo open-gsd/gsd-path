@@ -2176,6 +2176,12 @@ def validate_wave_evidence(
         raise HandoffError(f"{name} is missing ## Intent coverage")
     verdicts: Dict[str, str] = {}
     coverage_lines = _strip_comments(coverage).splitlines()
+    for line in coverage_lines:
+        if line.strip().startswith("### ") and not WAVE_SC_HEADING.fullmatch(line.strip()):
+            raise HandoffError(
+                f"{name} has an invalid Intent coverage heading: {line.strip()}; "
+                "use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)"
+            )
     sc_headings = [
         (index, match)
         for index, line in enumerate(coverage_lines)
@@ -2216,8 +2222,11 @@ def validate_wave_evidence(
         for item in evidence:
             _non_placeholder(item, f"{name} {sc_id} {verdict} evidence")
         verdicts[sc_id] = verdict
-    if sorted(verdicts, key=lambda n: int(n[2:])) != owned:
-        raise HandoffError(f"{name} Intent coverage must cover exactly {', '.join(owned)}")
+    if list(verdicts) != owned:
+        raise HandoffError(
+            f"{name} Intent coverage must cover exactly {', '.join(owned)} "
+            "in ascending SC order"
+        )
     if overall == "pass" and "fail" in verdicts.values():
         raise HandoffError(f"{name} Wave verdict is pass while an owned SC failed")
     return {
