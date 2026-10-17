@@ -149,7 +149,7 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
             ])} />)}
           {section("Pending answers", answers.length, answers, <>
             <RecordTable rows={answers} columns={[["id", "Answer"], ["question", "Question"], ["status", "Status"], ["follow_up", "Follow-up"], ["owner", "Owner"]]} />
-            {source(".project/discuss/ANSWERS.md", "Read complete discussion record")}
+            {!p.record_files && source(".project/discuss/ANSWERS.md", "Read complete discussion record")}
           </>)}
         </section>
 

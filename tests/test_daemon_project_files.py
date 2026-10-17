@@ -131,6 +131,25 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertEqual(self.js("document.querySelectorAll('.prow').length"), '1')
 
     @unittest.skipUnless(os.environ.get('GSD_UI_TEST'), 'requires Orca browser')
+    def test_browser_gsd_path_only_links_are_hidden_for_other_frameworks(self):
+        from tests.test_daemon_board_ui import BoardUITests
+        self.orca = BoardUITests.orca.__get__(self)
+        self.js = BoardUITests.js.__get__(self)
+        answers = "document.querySelector('[data-open-file=\".project/discuss/ANSWERS.md\"]')!==null"
+        for flavor, record_files, shown in (('gsd-path', None, 'true'),
+                                            ('gsd-core', [{'path': '.planning/STATE.md', 'label': 'State'}], 'false')):
+            with self.subTest(flavor=flavor):
+                self.watcher.projects.clear()
+                self.watcher.projects[str(self.root)] = ProjectStatus(root=str(self.root), flavor=flavor, record_files=record_files)
+                self.page = self.orca('tab', 'create', '--url', f'http://127.0.0.1:{self.port}/')['browserPageId']
+                tab = next(t for t in self.orca('tab', 'list')['tabs'] if t.get('browserPageId') == self.page)
+                self.addCleanup(self.orca, 'tab', 'close', '--index', str(tab['index']))
+                self.orca('wait', '--page', self.page, '--selector', '.pname')
+                self.js("document.querySelector('.pname').click()")
+                self.orca('wait', '--page', self.page, '--selector', '[data-section=discussions]')
+                self.assertEqual(self.js(answers), shown)
+
+    @unittest.skipUnless(os.environ.get('GSD_UI_TEST'), 'requires Orca browser')
     def test_browser_relative_link_preserves_selected_revision(self):
         from tests.test_daemon_board_ui import BoardUITests
         target = self.root / '.project/linked.md'

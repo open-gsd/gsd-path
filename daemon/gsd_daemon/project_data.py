@@ -39,14 +39,15 @@ def project_records(watcher, key):
     if project.record_files is None:
         usage, usage_source = _records(root, '.project/build/usage.jsonl')
         ledger, ledger_source = _records(root, '.project/build/verify-ledger.jsonl')
+        verify_records = list(reversed(ledger))
         runtime = project.status_source == 'runtime'
         # Without a runtime payload, the workflow result says why: not set up, not started or unverified.
         sources = [usage_source, ledger_source,
                    {'path': '.gsd-path/status_runtime.py', 'status': 'loaded' if runtime else project.workflow.get('label', 'Unverified').lower(),
                     'detail': 'Runtime status' if runtime else project.workflow.get('reason') or 'Parsed-file fallback; runtime status was not verified.'}]
     else:
-        # gsd-pi and gsd-core keep no GSD Path usage or runtime; their verify ledger is the card's (newest first).
-        usage, ledger, sources = [], list(reversed(project.ledger)), []
+        # gsd-pi and gsd-core keep no GSD Path usage or runtime; the card's ledger is already newest first.
+        usage, verify_records, sources = [], project.ledger, []
     activity = []
     try:
         lines = resolve_history_path().read_text(encoding='utf-8').splitlines()
@@ -82,6 +83,6 @@ def project_records(watcher, key):
         sources.append({'path': path, 'status': 'available' if path in known_paths else 'missing'})
     sources.extend({**source, 'path': source['source']} for source in listing['coverage'])
     return {'root': raw_root, 'id': project.id or raw_root, 'sources': sources, 'files': listing['files'], 'file_scope': listing['scope'],
-            'usage_records': usage, 'verify_records': list(reversed(ledger)),
+            'usage_records': usage, 'verify_records': verify_records,
             'activity': list(reversed(activity)), 'turns': list(reversed(turns)),
             'project': project.to_dict()}
