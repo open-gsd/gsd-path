@@ -1,7 +1,7 @@
 // The project page: facts strip, phase bar, current milestone, milestones and usage.
 // The same mapping as projectPage() in the daemon dashboard (serve.py).
 import {
-  ago, DASH, duration, healthOf, int, milestoneStack, money, phaseCells, PHASES, reasons, shortTime, spendCell,
+  ago, DASH, duration, healthOf, int, milestoneStack, money, phaseCells, phasesOf, reasons, shortTime, spendCell,
   stateLabel, stateOf, tokens,
 } from "./status";
 import { runtimePending } from "./board";
@@ -24,11 +24,11 @@ export function facts(p: Project, now: number): [string, string][] {
   ];
 }
 
-/** The 8-step bar. A phase entered twice shows its first date; the current phase shows its last. */
+/** The phase bar. A phase entered twice shows its first date; the current phase shows its last. */
 export function phaseTrack(p: Project): { label: string; date: string; state: Cell }[] {
   const log = p.phase_log ?? [];
   const cells = phaseCells(p);
-  return PHASES.map((label, k) => {
+  return phasesOf(p).map((label, k) => {
     const entries = log.filter((entry) => entry.phase === label);
     const entry = label === p.phase ? entries[entries.length - 1] : entries[0];
     return { label, date: (entry?.date ?? "").slice(5), state: cells[k] };

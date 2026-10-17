@@ -23,8 +23,32 @@ It also lists projects run by the other GSD frameworks: a folder with
 `.planning/` holding `STATE.md` or `ROADMAP.md` (gsd-core). `~/.gsd`, the
 gsd-pi home, is not a project. A folder with more than one framework shows one
 card per framework. These cards are read-only, and GSD Path setup actions do
-not apply to them. Their status shows as **Unverified** until the app reads
-that framework's files.
+not apply to them. gsd-pi cards show as **Unverified** until the app reads
+gsd-pi files.
+
+A gsd-core card is read from `.planning/` the way gsd-core decides
+completion, from files on disk:
+
+- **Phase strip**: the steps of the current phase: `discuss`, `research`,
+  `plan`, `execute`, `verify`. The step comes from the phase folder: no
+  `CONTEXT.md` is discuss, `CONTEXT.md` is research, `RESEARCH.md` is plan,
+  plans with a missing `SUMMARY.md` are execute, and all summaries present is
+  verify.
+- **Waves and tasks**: each phase folder of the current milestone is a wave,
+  named from the ROADMAP `### Phase N:` heading. A ROADMAP phase with no folder
+  yet is a wave at `discuss` when its number is above the highest phase folder
+  or equals the STATE.md `current_phase`; lower ROADMAP phases (archived
+  milestones) are skipped. Each `NN-PP-PLAN.md` is a task, done when its
+  `NN-PP-SUMMARY.md` exists. ROADMAP checkboxes are not read.
+- **Milestones**: `MILESTONES.md` headings (`## vX.Y Name (Shipped: …)`) plus
+  the STATE.md `milestone` and `milestone_name`.
+- **Reviews**: `NN-VERIFICATION.md` and `NN-UAT.md` with their `status`.
+  `passed` reads as pass and `gaps_found` as failed. `human_needed` adds an
+  attention item.
+- **Attention**: items under the STATE.md `Blockers` heading.
+- **State**: **Shipped** when STATE.md says `milestone_complete` or every wave
+  has a passed VERIFICATION; **Blocked** when STATE.md `status` is `blocked`;
+  **Not started** with no phase folder; otherwise the step, such as **In execute**.
 
 ## Install (one command)
 
@@ -417,7 +441,8 @@ VERSION-stamp probes plus the update-check cache, never a source refresh; see
 - Identity/state: `id` (card id: `root` for GSD Path, `<root>::gsd-pi` or
   `<root>::gsd-core` for the other frameworks; API `root` parameters that
   select a watched project accept it), `flavor` (`gsd-path`, `gsd-pi` or
-  `gsd-core`), `root` (discovered project path), `project` (project state name),
+  `gsd-core`), `phases` (the phase strip for a gsd-pi or gsd-core card; null
+  means the GSD Path phases), `root` (discovered project path), `project` (project state name),
   `repository` (Git repository folder name when available), `project_root`
   (corresponding path under the main checkout, or the discovered project path
   for bare-backed worktrees and non-Git projects), `worktree_root` (linked

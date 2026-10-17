@@ -54,8 +54,9 @@ const API: Record<string, unknown> = {
   // ?flavors adds a gsd-core card in the GSD Path folder: one card per framework.
   "/status": query.has("flavors") ? { ...status, projects: [...status.projects, {
     ...building, id: "/work/gsd-path::gsd-core", flavor: "gsd-core", health: "amber",
-    workflow: { state: "unverified", label: "Unverified", reason: "The app does not read gsd-core status yet." },
-    attention: [{ kind: "unverified", label: "The app does not read gsd-core status yet.", ref: null }] }] } : status,
+    phases: ["discuss", "research", "plan", "execute", "verify"], phase: "execute",
+    workflow: { state: "active", label: "In execute" },
+    attention: [{ kind: "question", label: "Phase 02 needs a human check", ref: "02-VERIFICATION.md" }] }] } : status,
   "/api/refresh": { ok: true },
   "/activity": { events: [
     { root: "/work/gsd-path", at: "2026-09-29T03:58:00+00:00", type: "phase-changed", detail: "plan → build" },
