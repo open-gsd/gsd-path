@@ -22,6 +22,8 @@ export type Project = {
   root: string;
   /** Card id: the root for GSD Path, "<root>::<flavor>" for gsd-pi and gsd-core. Older daemons omit it. */
   id?: string; flavor?: string;
+  /** The phase strip; gsd-pi and gsd-core cards send their own. Missing means PHASES. */
+  phases?: string[] | null;
   project?: string | null; repository?: string | null; project_root?: string | null; worktree_root?: string | null;
   milestone?: string | null; phase?: string | null; status?: string | null; branch?: string | null;
   integration?: string | null;
@@ -77,11 +79,13 @@ export const healthTone = (p: Project): Tone => ({ red: "bad", amber: "warn" } a
 export const reasons = (p: Project) => (p.attention ?? []).map((item) => item.label).filter(Boolean).join(" · ")
   || (stateOf(p) === "idle" && p.workflow?.reason) || "";
 
-/** Eight cells: done before the current phase; a shipped project fills all. */
+export const phasesOf = (p: Project) => p.phases ?? PHASES;
+
+/** One cell per phase: done before the current phase; a shipped project fills all. */
 export function phaseCells(p: Project): Cell[] {
-  const state = stateOf(p);
-  const index = state === "shipped" ? PHASES.length : PHASES.indexOf(p.phase ?? "");
-  return PHASES.map((_, k) => (k < index ? "done" : k > index ? "todo" : state === "blocked" ? "blocked" : "now"));
+  const state = stateOf(p), phases = phasesOf(p);
+  const index = state === "shipped" ? phases.length : phases.indexOf(p.phase ?? "");
+  return phases.map((_, k) => (k < index ? "done" : k > index ? "todo" : state === "blocked" ? "blocked" : "now"));
 }
 
 const isDone = (m: Milestone) => m.status === "shipped" || m.status === "archived" || !!m.archive;
