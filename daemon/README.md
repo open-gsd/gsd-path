@@ -35,16 +35,18 @@ completion, from files on disk:
   plans with a missing `SUMMARY.md` are execute, and all summaries present is
   verify.
 - **Waves and tasks**: each phase folder of the current milestone is a wave,
-  named from the ROADMAP `### Phase N:` heading. Each `NN-PP-PLAN.md` is a
-  task, done when its `NN-PP-SUMMARY.md` exists. ROADMAP checkboxes are not
-  read.
+  named from the ROADMAP `### Phase N:` heading. A ROADMAP phase with no folder
+  yet is a wave at `discuss` when its number is above the highest phase folder
+  or equals the STATE.md `current_phase`; lower ROADMAP phases (archived
+  milestones) are skipped. Each `NN-PP-PLAN.md` is a task, done when its
+  `NN-PP-SUMMARY.md` exists. ROADMAP checkboxes are not read.
 - **Milestones**: `MILESTONES.md` headings (`## vX.Y Name (Shipped: …)`) plus
   the STATE.md `milestone` and `milestone_name`.
 - **Reviews**: `NN-VERIFICATION.md` and `NN-UAT.md` with their `status`.
   `passed` reads as pass and `gaps_found` as failed. `human_needed` adds an
   attention item.
 - **Attention**: items under the STATE.md `Blockers` heading.
-- **State**: **Shipped** when STATE.md says `milestone_complete` or every phase
+- **State**: **Shipped** when STATE.md says `milestone_complete` or every wave
   has a passed VERIFICATION; **Blocked** when STATE.md `status` is `blocked`;
   **Not started** with no phase folder; otherwise the step, such as **In execute**.
 
