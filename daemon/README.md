@@ -33,7 +33,8 @@ summaries), and then from the milestone registry in `STATE.md`.
 - **Phase strip**: the same five steps as a gsd-core card. The STATE.md
   `**Phase:**` value maps onto them (for example `executing` is execute and
   `completing-milestone` is verify). Without it, the open slice decides:
-  no tasks is plan, open tasks is execute, all tasks closed is verify.
+  no tasks is plan, open tasks is execute, all tasks closed is verify. When
+  every slice is closed, the step is verify.
 - **Waves and tasks**: the slices of the active milestone are waves, and their
   tasks are tasks (`S02-T01`).
 - **Milestones**: every milestone, with its vision as the goal.
