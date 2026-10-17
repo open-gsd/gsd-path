@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from . import subprocess_platform
+from .model import is_path_card
 
 FILES = (".env", ".env.local", ".env.development", ".env.production")
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
@@ -200,7 +201,7 @@ def _project(handler, body: dict) -> str:
         raise Refused("Environment editing needs the OpenGSD Path app. "
                       "Restart the monitor from the app, then try again.")
     root = body.get("root")
-    if not isinstance(root, str) or root not in handler.watcher.projects:
+    if not is_path_card(handler.watcher.projects, root):
         raise ValueError("root is not a watched project")
     return root
 

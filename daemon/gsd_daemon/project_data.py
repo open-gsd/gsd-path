@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from .history import resolve_history_path
-from .project_files import FileAccessError, _read_current, file_index
+from .project_files import FileAccessError, _read_current, file_index, watched_root
 
 
 def _records(root, path):
@@ -31,10 +31,9 @@ def _records(root, path):
                      'invalid_lines': invalid, 'modified': modified}
 
 
-def project_records(watcher, raw_root):
-    project = next((p for p in watcher.projects.values() if str(p.root) == raw_root), None)
-    if project is None:
-        raise FileAccessError('Select a watched project.', 403)
+def project_records(watcher, key):
+    raw_root = watched_root(watcher.projects, key)
+    project = watcher.projects.get(key) or next(p for p in watcher.projects.values() if str(p.root) == raw_root)
     root = Path(raw_root).resolve(strict=True)
     listing = file_index(root)
     usage, usage_source = _records(root, '.project/build/usage.jsonl')
@@ -53,7 +52,7 @@ def project_records(watcher, raw_root):
                 event = json.loads(line)
                 if not isinstance(event, dict):
                     raise ValueError('expected an object')
-                if event.get('root') == raw_root:
+                if event.get('id', event.get('root')) == (project.id or raw_root):
                     activity.append(event)
             except ValueError:
                 invalid.append(number)
@@ -77,7 +76,7 @@ def project_records(watcher, raw_root):
                  '.project/plan/PLAN.md', '.project/review/FINAL.md', '.project/discuss/ANSWERS.md', '.project/LESSONS.md', '.project/next/STATE.md']:
         sources.append({'path': path, 'status': 'available' if path in known_paths else 'missing'})
     sources.extend({**source, 'path': source['source']} for source in listing['coverage'])
-    return {'root': raw_root, 'sources': sources, 'files': listing['files'], 'file_scope': listing['scope'],
+    return {'root': raw_root, 'id': project.id or raw_root, 'sources': sources, 'files': listing['files'], 'file_scope': listing['scope'],
             'usage_records': usage, 'verify_records': list(reversed(ledger)),
             'activity': list(reversed(activity)), 'turns': list(reversed(turns)),
             'project': project.to_dict()}

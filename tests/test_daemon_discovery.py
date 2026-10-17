@@ -237,6 +237,84 @@ class WorktreeDedupTests(unittest.TestCase):
             results = discovery.scan([str(self.parent)])
         self.assertEqual(results, [str(main), str(linked)])
 
+    def test_other_framework_worktree_deduped_to_main_checkout(self) -> None:
+        main, linked = self.make_repo_with_worktree()
+        for root in (main, linked):
+            make_planning(root)
+        self.assertEqual(discovery.scan_projects([str(self.parent)]),
+                         [(str(main), "gsd-core"), (str(main), "gsd-path")])
+
+    def test_other_framework_main_checkout_wins_over_milestone_worktree(self) -> None:
+        main, linked = self.make_repo_with_worktree()
+        self._git("branch", "-m", "gsd-path/M002", cwd=linked)
+        for root in (main, linked):
+            make_planning(root)
+        self.assertEqual(discovery.scan_projects([str(self.parent)]),
+                         [(str(main), "gsd-core"), (str(linked), "gsd-path")])
+
+    def test_other_framework_subfolders_in_one_repo_keep_their_cards(self) -> None:
+        main = self.parent / "mono"
+        main.mkdir()
+        self._git("init", cwd=main)
+        make_planning(main / "packages" / "a")
+        make_planning(main / "packages" / "b")
+        self._git("add", "-A", cwd=main)
+        self._git("commit", "-m", "init", cwd=main)
+        self._git("worktree", "add", str(self.parent / "mono-linked"), cwd=main)
+        self.assertEqual(discovery.scan_projects([str(self.parent)]),
+                         [(str(main / "packages" / "a"), "gsd-core"), (str(main / "packages" / "b"), "gsd-core")])
+
+def make_planning(root: Path) -> Path:
+    (root / ".planning").mkdir(parents=True, exist_ok=True)
+    (root / ".planning" / "STATE.md").write_text("---\nmilestone: v1.0\n---\n")
+    return root
+
+
+def make_gsd(root: Path, marker: str = "STATE.md") -> Path:
+    (root / ".gsd").mkdir(parents=True, exist_ok=True)
+    (root / ".gsd" / marker).write_text("# GSD State\n")
+    return root
+
+
+class FlavorDiscoveryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.parent = Path(self.tmp.name) / "work"
+        self.parent.mkdir()
+
+    def scan(self) -> list:
+        return discovery.scan_projects([str(self.parent)])
+
+    def test_one_card_per_framework_in_one_folder(self) -> None:
+        both = make_gsd(make_planning(make_project(self.parent / "both")))
+        self.assertEqual(self.scan(), [(str(both), "gsd-core"), (str(both), "gsd-path"), (str(both), "gsd-pi")])
+        # The GSD Path-only scan is unchanged.
+        self.assertEqual(discovery.scan([str(self.parent)]), [str(both)])
+
+    def test_gsd_pi_markers(self) -> None:
+        db = make_gsd(self.parent / "db", "gsd.db")
+        legacy = self.parent / "legacy"
+        (legacy / ".gsd" / "milestones" / "M001").mkdir(parents=True)
+        self.assertEqual(self.scan(), [(str(db), "gsd-pi"), (str(legacy), "gsd-pi")])
+
+    def test_state_folder_without_marker_is_not_a_project(self) -> None:
+        make_gsd(self.parent / "prefs", "PREFERENCES.md")
+        (self.parent / "notes" / ".planning").mkdir(parents=True)
+        (self.parent / "notes" / ".planning" / "ideas.md").write_text("ideas\n")
+        self.assertEqual(self.scan(), [])
+
+    def test_other_framework_does_not_hide_a_project_below_it(self) -> None:
+        outer = make_planning(self.parent / "outer")
+        inner = make_project(outer / "inner")
+        self.assertEqual(self.scan(), [(str(outer), "gsd-core"), (str(inner), "gsd-path")])
+
+    def test_gsd_pi_home_is_not_a_project(self) -> None:
+        home = make_gsd(self.parent, "gsd.db")
+        project = make_gsd(self.parent / "app")
+        with mock.patch("pathlib.Path.home", return_value=home):
+            self.assertEqual(self.scan(), [(str(project), "gsd-pi")])
+
 
 if __name__ == "__main__":
     unittest.main()

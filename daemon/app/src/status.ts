@@ -20,6 +20,8 @@ export type Spend = SpendSlot & {
 };
 export type Project = {
   root: string;
+  /** Card id: the root for GSD Path, "<root>::<flavor>" for gsd-pi and gsd-core. Older daemons omit it. */
+  id?: string; flavor?: string;
   project?: string | null; repository?: string | null; project_root?: string | null; worktree_root?: string | null;
   milestone?: string | null; phase?: string | null; status?: string | null; branch?: string | null;
   integration?: string | null;
@@ -63,6 +65,9 @@ export const DASH = "—";
 export const PHASES = ["inspect", "define", "research", "decide", "roadmap", "plan", "build", "ship"];
 
 export const nameOf = (p: Project) => p.repository || p.project || p.root;
+export const idOf = (p: Project) => p.id || p.root;
+/** The framework badge; GSD Path cards have none. */
+export const flavorOf = (p: Project) => (p.flavor && p.flavor !== "gsd-path" ? p.flavor : null);
 export const stateOf = (p: Project) => p.workflow?.state ?? "unverified";
 export const stateLabel = (p: Project) => p.workflow?.label ?? "Unverified";
 /** Health comes from the daemon; older payloads get a local guess. */

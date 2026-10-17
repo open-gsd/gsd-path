@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from . import subprocess_platform
+from .model import is_path_card
 
 
 def configure(plugin, projects, request, write=False):
@@ -17,7 +18,7 @@ def configure(plugin, projects, request, write=False):
     root = request.get('root')
     command = [sys.executable, '-B']
     if scope == 'project':
-        if not isinstance(root, str) or root not in projects:
+        if not is_path_card(projects, root):
             raise ValueError('select a watched project')
         launcher = Path(root) / '.gsd-path/status_runtime.py'
         if not launcher.is_file() or launcher.is_symlink():

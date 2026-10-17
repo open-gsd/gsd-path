@@ -48,11 +48,17 @@ describe("boardRow", () => {
   });
   it("shows the milestone, phase, tasks and usage of a project in build", () => {
     expect(boardRow(building, NOW)).toEqual({
-      root: "/work/gsd-path", name: "gsd-path", tone: "warn", path: "/work/gsd-path",
+      id: "/work/gsd-path", root: "/work/gsd-path", flavor: null, name: "gsd-path", tone: "warn", path: "/work/gsd-path",
       number: "M004", slug: "daemon", cells: ["done", "done", "done", "done", "done", "done", "now", "todo"], phase: "build",
       state: "active", label: "In build", note: "no activity for 2d", ago: "2d ago",
       tasks: "2/3", cost: "$26.10", turns: "90 turns",
     });
+  });
+  it("gives each framework in one folder its own card id and badge", () => {
+    const core = { ...building, id: "/work/gsd-path::gsd-core", flavor: "gsd-core" };
+    expect(boardRow(core, NOW)).toMatchObject({ id: "/work/gsd-path::gsd-core", root: "/work/gsd-path", flavor: "gsd-core" });
+    expect(boardRow({ ...building, flavor: "gsd-path" }, NOW).flavor).toBeNull();
+    expect(visibleProjects([building, core], "all", "gsd-core").map((p) => p.id)).toEqual(["/work/gsd-path::gsd-core"]);
   });
   it("shows a blocked project with its reason and no invented usage", () => {
     expect(boardRow(blocked, NOW)).toMatchObject({
@@ -113,6 +119,9 @@ describe("updateBanner", () => {
   it("counts one update in the singular", () => {
     const one = plugin({ hosts: { claude: { installed: true, version: "1.4.0" } } });
     expect(updateBanner(hosts, one, status.projects)).toEqual({ count: 1, title: "1 update available", text: "runtime for gsd-path" });
+    // A gsd-core card in the same folder shares the folder, not the GSD Path runtime.
+    const core = { ...building, id: "/work/gsd-path::gsd-core", flavor: "gsd-core" };
+    expect(updateBanner(hosts, one, [...status.projects, core])?.text).toBe("runtime for gsd-path");
   });
   it("compares a runtime with the chosen release, not the latest one", () => {
     const chosen = plugin({ hosts: {}, releases: { latest: "1.4.0", selected: "1.3.2", versions: ["1.4.0", "1.3.2"] } });

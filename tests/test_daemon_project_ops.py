@@ -18,6 +18,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 
 from gsd_daemon import project_ops
+from gsd_daemon.model import ProjectStatus
 from gsd_daemon.plugin import PluginManager
 
 
@@ -42,7 +43,7 @@ class Case(unittest.TestCase):
                                     git_runner=lambda argv, cwd=None: (0, "", ""), environ={},
                                     repo="https://example.invalid/gsd-path.git")
         (self.plugin.src_dir / ".git").mkdir(parents=True)
-        self.handler = SimpleNamespace(plugin=self.plugin, watcher=SimpleNamespace(projects={self.root: object()}))
+        self.handler = SimpleNamespace(plugin=self.plugin, watcher=SimpleNamespace(projects={self.root: ProjectStatus(root=self.root)}))
         self.members = {"members": [{"name": "api", "checkout": self.member, "remote": "git@x:api.git",
                                      "integration": "default"}]}
 
@@ -114,6 +115,13 @@ class InstallerOpTests(Case):
         for body in ({"root": "/etc", "op": "doctor"}, {"op": "rm -rf"}, {"op": None}, {"root": 5, "op": "doctor"}):
             with self.subTest(body=body), self.assertRaises(ValueError):
                 project_ops.run(self.handler, {"root": self.root, **body})
+        self.assertEqual(self.calls, [])
+
+    def test_a_card_of_another_framework_runs_nothing(self):
+        card = self.root + "::gsd-core"
+        self.handler.watcher.projects[card] = ProjectStatus(root=self.root, id=card, flavor="gsd-core")
+        with self.assertRaisesRegex(ValueError, "not a watched project"):
+            project_ops.run(self.handler, {"root": card, "op": "doctor"})
         self.assertEqual(self.calls, [])
 
     def test_a_second_operation_is_refused_while_one_runs(self):
@@ -228,7 +236,7 @@ class LegacyRuntimeInstallerTests(unittest.TestCase):
                                git_runner=lambda argv, cwd=None: (0, "", ""), environ={},
                                repo="https://example.invalid/gsd-path.git")
         (plugin.src_dir / ".git").mkdir(parents=True)
-        handler = SimpleNamespace(plugin=plugin, watcher=SimpleNamespace(projects={str(repo): object()}))
+        handler = SimpleNamespace(plugin=plugin, watcher=SimpleNamespace(projects={str(repo): ProjectStatus(root=str(repo))}))
         return repo, git, handler
 
     def assert_migrated(self, repo, git):

@@ -31,6 +31,7 @@ b{font-weight:600}
 .pill.warn{background:var(--wait-soft);color:var(--wait)}
 .pill.bad{background:var(--danger-soft);color:var(--danger)}
 .pill.mute{background:var(--chrome);color:var(--faint)}
+.pill.flavor{margin-left:8px;vertical-align:middle}
 .dot{width:8px;height:8px;border-radius:50%;display:block;flex:none;background:var(--faint)}
 .dot.ok{background:var(--ok)}.dot.warn{background:var(--wait)}.dot.bad{background:var(--danger)}
 .logo{display:flex;gap:8px;align-items:center;font-weight:650;white-space:nowrap}

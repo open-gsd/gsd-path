@@ -184,15 +184,21 @@ def read_file(root, relative, revision: Optional[str] = None):
             'bytes': len(data), 'text': text, 'html': rendered, 'preview_warning': warning, 'status': 'loaded'}
 
 
+def watched_root(projects, key):
+    """The folder of a watched card, selected by its id or by its folder."""
+    project = projects.get(key) if isinstance(key, str) else None
+    if project is None and any(str(p.root) == key for p in projects.values()):
+        return key
+    if project is None:
+        raise FileAccessError('Select a watched project.', 403)
+    return str(project.root)
+
+
 def request_files(projects, request):
     allowed = {'root', 'action', 'path', 'revision'}
     if set(request) - allowed:
         raise FileAccessError('Unknown file request fields.')
-    raw_root = request.get('root')
-    roots = {str(project.root) for project in projects.values()}
-    if raw_root not in roots:
-        raise FileAccessError('Select a watched project.', 403)
-    root = Path(raw_root).resolve(strict=True)
+    root = Path(watched_root(projects, request.get('root'))).resolve(strict=True)
     action = request.get('action', 'list')
     if action == 'list':
         return file_index(root)

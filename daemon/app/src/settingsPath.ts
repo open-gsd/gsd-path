@@ -1,5 +1,7 @@
 // Settings → Path settings: the form over GET/POST /api/path-config (daemon/gsd_daemon/path_settings.py).
 // The daemon takes one key per request; Save sends one request per changed key.
+import { flavorOf } from "./status";
+import type { Project } from "./status";
 
 export type PathItem = { value: string; source: string; locked?: string | null; current?: string; current_source?: string };
 export type PathData = {
@@ -18,6 +20,9 @@ export type PathDrafts = Record<string, string | null>;
 export type PathRequest = { action: "set"; key: string; value: string } | { action: "reset"; key: string };
 
 /** An empty root is the user defaults. */
+/** Only GSD Path cards have a project scope; other frameworks are read-only. */
+export const pathProjects = (projects: Project[]) => projects.filter((p) => !flavorOf(p));
+
 export const scopeQuery = (root: string): { scope: "user" } | { scope: "project"; root: string } =>
   (root ? { scope: "project", root } : { scope: "user" });
 

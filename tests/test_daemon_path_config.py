@@ -79,6 +79,13 @@ class DashboardConfigTests(unittest.TestCase):
         code, response = self.request('POST', {**body, 'key': 'phase', 'value': 'build'})
         self.assertEqual(code, 400, response)
 
+    def test_project_scope_takes_only_gsd_path_cards(self):
+        from gsd_daemon.model import ProjectStatus
+        from gsd_daemon.path_settings import configure
+        projects = {str(self.repo): ProjectStatus(root=str(self.repo), flavor='gsd-core')}
+        with self.assertRaisesRegex(ValueError, 'select a watched project'):
+            configure(Mock(src_dir=ROOT), projects, {'scope': 'project', 'root': str(self.repo)})
+
     @unittest.skipUnless(os.environ.get('GSD_UI_TEST'), 'requires Orca embedded browser')
     def test_browser_save_reload_and_project_lock(self):
         from tests.test_daemon_board_ui import BoardUITests

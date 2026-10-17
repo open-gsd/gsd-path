@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import List
 
+from .model import is_path_card
 from .plugin import GIT_HOOK_NAMES, OP_LOCK, _tail
 
 # op -> installer flag. Each takes "--project <root>". hooks-init also takes host
@@ -100,7 +101,7 @@ def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
 def run(handler, body: dict) -> dict:
     """POST /api/project/op ``{root, op, dry_run?, member?, hosts?}``."""
     root, op = body.get("root"), body.get("op")
-    if not isinstance(root, str) or root not in handler.watcher.projects:
+    if not is_path_card(handler.watcher.projects, root):
         raise ValueError("root is not a watched project")
     if op not in OPS:
         raise ValueError(f"op must be one of: {', '.join(OPS)}")

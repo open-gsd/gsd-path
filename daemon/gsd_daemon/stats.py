@@ -107,7 +107,7 @@ def route(handler, _body=None) -> dict:
     if root is not None and root not in watcher.projects:
         raise ValueError("root is not a watched project")
     projects = [watcher.projects[root]] if root else list(watcher.projects.values())
-    roots = [str(project.root) for project in projects]
+    roots = list(dict.fromkeys(str(project.root) for project in projects))
     missing: Dict[str, str] = {}
 
     # A scan changes the session index; read it under the scan lock.
