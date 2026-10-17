@@ -274,6 +274,7 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertEqual(self.request('read', path='.gsd/STATE.md')[1]['text'], '# GSD State\n')
 
     @requires_symlink
+    @unittest.skipIf(os.name == "nt", "the .gsd store link is followed only on POSIX; Windows refuses every link")
     def test_gsd_link_is_followed_only_into_the_gsd_pi_store(self):
         from unittest import mock
         home = Path(self.tmp.name) / 'home'
