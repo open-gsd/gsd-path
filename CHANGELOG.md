@@ -11,6 +11,19 @@ app and the daemon have their own file,
 [daemon/app/CHANGELOG.md](daemon/app/CHANGELOG.md). Release bookkeeping and
 test-only changes are not listed; the Git history has them.
 
+## [1.6.2] - 2026-10-17
+
+### Changed
+- record 1.6.2 live host release evidence
+- prepare 1.6.2 patch candidate
+- Document README What's new heading in RELEASE.md
+- update release notes for v1.6.1
+
+### Fixed
+- keep the README What's new section current from release notes
+- read quoted STATE values in the ship checkpoint guard
+- refuse a build checkpoint while STATE is ship/active
+- keep evidence-line citations when final review reuses a wave
 ## [1.6.1] - 2026-10-16
 
 ### Added

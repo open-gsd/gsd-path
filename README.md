@@ -24,16 +24,16 @@ The [host trust matrix](https://github.com/open-gsd/gsd-path/blob/main/docs/trus
 is the source of truth for live milestone proof and each host's guard tier.
 
 <!-- release-docs -->
-## What's new in 1.6.1 — 2026-10-16
+## What's new in 1.6.2 — 2026-10-17
 
-**Latest npm release:** [@opengsd/gsd-path@1.6.1](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.6.1) — [release notes](CHANGELOG.md#161---2026-10-16)
+**Latest npm release:** [@opengsd/gsd-path@1.6.2](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.6.2) — [release notes](CHANGELOG.md#162---2026-10-17)
 
 **Recent highlights**
-- accept GitHub rebase merges in pull-request integration
-- run dispatch_driver subprocess helpers from the selected runtime
-- refuse a relative model_policy --record and check release before locking
-- let promote-next replace a DOCS-AUDIT carry-forward the lookahead keeps
-- let the owner authorize one exact pre-ship push to a task branch
+- keep the README What's new section current from release notes
+- read quoted STATE values in the ship checkpoint guard
+- refuse a build checkpoint while STATE is ship/active
+- keep evidence-line citations when final review reuses a wave
+- record 1.6.2 live host release evidence
 
 <!-- /release-docs -->
 
