@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Union
 
-from . import gitinfo, gsd_core
+from . import gitinfo, gsd_core, gsd_pi
 from .model import PATH_FLAVOR, ProjectStatus
 from .probe import compute_attention, health_for, tree_mtime
 
@@ -22,7 +22,7 @@ FOREIGN = {
 
 
 # Each reader fills the card from the state folder and returns extra attention items.
-READERS = {"gsd-core": gsd_core.read}
+READERS = {"gsd-core": gsd_core.read, "gsd-pi": gsd_pi.read}
 
 
 def project_id(root: str, flavor: str) -> str:
@@ -58,14 +58,7 @@ def probe_foreign(root: Union[str, Path], flavor: str) -> ProjectStatus:
         state_mtime=mtime,
         last_activity_iso=datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat() if mtime else None,
     )
-    reader = READERS.get(flavor)
-    if reader is not None:
-        extra = reader(status, state_dir(root, flavor))
-    else:
-        # ponytail: no reader yet; the gsd-pi reader fills this in.
-        status.workflow = {"state": "unverified", "label": "Unverified",
-                           "reason": f"The app does not read {flavor} status yet."}
-        extra = [{"kind": "unverified", "label": status.workflow["reason"], "ref": None}]
+    extra = READERS[flavor](status, state_dir(root, flavor))
     status.attention = compute_attention(status) + extra
     status.health = health_for(status.attention)
     return status
