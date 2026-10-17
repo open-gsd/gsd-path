@@ -464,7 +464,8 @@ VERSION-stamp probes plus the update-check cache, never a source refresh; see
   `<root>::gsd-core` for the other frameworks; API `root` parameters that
   select a watched project accept it), `flavor` (`gsd-path`, `gsd-pi` or
   `gsd-core`), `phases` (the phase strip for a gsd-pi or gsd-core card; null
-  means the GSD Path phases), `root` (discovered project path), `project` (project state name),
+  means the GSD Path phases), `record_files` (`[{path, label}]`, the gsd-pi or
+  gsd-core records with the state file first; null for GSD Path), `root` (discovered project path), `project` (project state name),
   `repository` (Git repository folder name when available), `project_root`
   (corresponding path under the main checkout, or the discovered project path
   for bare-backed worktrees and non-Git projects), `worktree_root` (linked
