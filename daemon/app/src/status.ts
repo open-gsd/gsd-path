@@ -24,6 +24,8 @@ export type Project = {
   id?: string; flavor?: string;
   /** The phase strip; gsd-pi and gsd-core cards send their own. Missing means PHASES. */
   phases?: string[] | null;
+  /** gsd-pi and gsd-core records, state file first. GSD Path cards have none. */
+  record_files?: { path: string; label: string }[] | null;
   project?: string | null; repository?: string | null; project_root?: string | null; worktree_root?: string | null;
   milestone?: string | null; phase?: string | null; status?: string | null; branch?: string | null;
   integration?: string | null;
@@ -80,6 +82,8 @@ export const reasons = (p: Project) => (p.attention ?? []).map((item) => item.la
   || (stateOf(p) === "idle" && p.workflow?.reason) || "";
 
 export const phasesOf = (p: Project) => p.phases ?? PHASES;
+/** The file "History & files" opens first. */
+export const stateFileOf = (p: Project) => p.record_files?.[0]?.path ?? ".project/STATE.md";
 
 /** One cell per phase: done before the current phase; a shipped project fills all. */
 export function phaseCells(p: Project): Cell[] {

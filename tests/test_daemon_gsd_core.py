@@ -97,6 +97,8 @@ class GsdCoreReaderTests(unittest.TestCase):
     def test_reads_milestone_phases_plans_and_reviews(self) -> None:
         card = self.probe()
         self.assertEqual(card["phases"], ["discuss", "research", "plan", "execute", "verify"])
+        self.assertEqual(card["record_files"][:2], [{"path": ".planning/STATE.md", "label": "State"},
+                                                    {"path": ".planning/ROADMAP.md", "label": "Roadmap"}])
         self.assertEqual((card["project"], card["milestone"], card["status"]), ("Demo App", "Hardening", "executing"))
         self.assertEqual((card["phase"], card["current_wave"]), ("execute", 2))
         self.assertEqual(card["waves"], {"1": "01 Alpha Work", "2": "02 Beta Work", "3": "03 Gamma Work"})

@@ -59,6 +59,10 @@ def _read_current(root, relative):
     if os.open not in os.supports_dir_fd or not hasattr(os, 'O_NOFOLLOW'):
         raise FileAccessError('Secure local file reading is unsupported on this platform.', 415, 'unsupported')
     parts = PurePosixPath(relative).parts
+    store = _gsd_store(root) if parts[0] == '.gsd' else None
+    if store:
+        # Walk from ~/.gsd/projects with the same no-follow rule for every part below it.
+        root, parts = store[0], (*store[1].parts, *parts[1:])
     fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         for part in parts[:-1]:
@@ -79,8 +83,32 @@ def _read_current(root, relative):
         os.close(fd)
 
 
+STATE_DIRS = ('.project', '.planning', '.gsd')  # GSD Path, gsd-core, gsd-pi
+
+
 def _group(path):
-    return 'Archived milestone' if path.startswith('.project/archive/') else 'Project records' if path.startswith('.project/') else 'Repository'
+    if path.startswith(('.project/archive/', '.planning/milestones/')):
+        return 'Archived milestone'
+    return 'Project records' if path.startswith(tuple(d + '/' for d in STATE_DIRS)) else 'Repository'
+
+
+def _gsd_store(root):
+    """(base, path below base) when .gsd links into ~/.gsd/projects: the only link Files follows.
+
+    gsd-pi keeps project state there and links .gsd to it. Every other symlink stays refused.
+    """
+    link = Path(root) / '.gsd'
+    # ponytail: POSIX only; Windows reads go through windows_handles, which refuses links.
+    if os.name == 'nt' or not link.is_symlink():
+        return None
+    try:
+        base = (Path.home() / '.gsd' / 'projects').resolve(strict=True)
+        target = link.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    if not target.is_dir() or base not in target.parents:
+        return None
+    return base, target.relative_to(base)
 
 
 def file_index(root):
@@ -91,19 +119,25 @@ def file_index(root):
         names.update(n.decode('utf-8', 'surrogateescape') for n in result.stdout.split(b'\0') if n)
     else:
         errors.append({'source': 'repository', 'status': 'unavailable', 'error': result.stderr.decode('utf-8', 'replace').strip()})
-    project = root / '.project'
-    if not project.is_symlink() and project.is_dir():
-        def failed(error):
-            errors.append({'source': '.project', 'status': 'failed', 'error': str(error)})
-        for parent, dirs, files in os.walk(project, followlinks=False, onerror=failed):
+    store = _gsd_store(root)
+    store_dir = store[0].joinpath(store[1]) if store else None
+    for folder in STATE_DIRS:
+        top = store_dir if folder == '.gsd' and store else root / folder
+        if (top is not store_dir and top.is_symlink()) or not top.is_dir():
+            continue
+        def failed(error, folder=folder):
+            errors.append({'source': folder, 'status': 'failed', 'error': str(error)})
+        for parent, dirs, files in os.walk(top, followlinks=False, onerror=failed):
             dirs[:] = [d for d in dirs if d != '.git' and not (Path(parent) / d).is_symlink()]
-            names.update((Path(parent) / f).relative_to(root).as_posix() for f in files)
+            names.update((Path(folder) / (Path(parent) / f).relative_to(top)).as_posix() for f in files)
     entries = []
     for name in sorted(names):
         try:
             relative = _path(name)
-            path = root / relative
-            if any(part.is_symlink() for part in [path, *list(path.parents)[:len(PurePosixPath(relative).parts)-1]]):
+            parts = PurePosixPath(relative).parts
+            base, rest = (store_dir, parts[1:]) if store and parts[0] == '.gsd' else (root, parts)
+            path = base.joinpath(*rest)
+            if any(part.is_symlink() for part in [path, *list(path.parents)[:len(rest)-1]]):
                 continue
             info = path.stat()
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
@@ -112,7 +146,8 @@ def file_index(root):
         except (OSError, FileAccessError) as error:
             errors.append({'source': name, 'status': 'missing' if isinstance(error, FileNotFoundError) else 'failed', 'error': str(error)})
     return {'files': entries, 'coverage': errors, 'history_source': 'git',
-            'scope': 'Git-tracked and non-ignored repository files, plus .project records. Symlinks, hard links and .git internals are excluded.'}
+            'scope': 'Git-tracked and non-ignored repository files, plus .project, .planning and .gsd records. '
+                     'Symlinks, hard links and .git internals are excluded; only a .gsd link into ~/.gsd/projects is followed.'}
 
 
 def file_history(root, relative):

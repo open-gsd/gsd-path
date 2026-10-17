@@ -17,6 +17,9 @@ The app has its own version and `app-v<version>` tags, separate from the
   every milestone, assessments, the verification ledger, STATE.md blockers and
   the next command. They read `gsd.db` read-only, with a fallback to the older
   markdown layout.
+- **History & files** lists `.planning` and `.gsd` records and opens a gsd-pi
+  or gsd-core card at its own `STATE.md`. A `.gsd` folder that links into
+  `~/.gsd/projects/` is followed; every other link is still refused.
 
 ## [0.1.2] - 2026-10-03
 

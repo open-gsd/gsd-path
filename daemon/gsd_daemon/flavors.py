@@ -19,6 +19,13 @@ FOREIGN = {
     "gsd-pi": (".gsd", ("STATE.md", "gsd.db", "milestones")),
     "gsd-core": (".planning", ("STATE.md", "ROADMAP.md")),
 }
+# The records each framework keeps, state file first: the card's source links and coverage.
+RECORDS = {
+    "gsd-pi": (("STATE.md", "State"), ("PROJECT.md", "Project"), ("REQUIREMENTS.md", "Requirements"),
+               ("DECISIONS.md", "Decisions"), ("KNOWLEDGE.md", "Knowledge")),
+    "gsd-core": (("STATE.md", "State"), ("ROADMAP.md", "Roadmap"), ("PROJECT.md", "Project"),
+                 ("REQUIREMENTS.md", "Requirements"), ("MILESTONES.md", "Milestones")),
+}
 
 
 # Each reader fills the card from the state folder and returns extra attention items.
@@ -58,6 +65,8 @@ def probe_foreign(root: Union[str, Path], flavor: str) -> ProjectStatus:
         state_mtime=mtime,
         last_activity_iso=datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat() if mtime else None,
     )
+    folder = FOREIGN[flavor][0]
+    status.record_files = [{"path": f"{folder}/{name}", "label": label} for name, label in RECORDS[flavor]]
     extra = READERS[flavor](status, state_dir(root, flavor))
     status.attention = compute_attention(status) + extra
     status.health = health_for(status.attention)

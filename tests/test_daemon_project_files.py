@@ -238,5 +238,74 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertEqual(self.request('read', path='missing.md')[0], 404)
 
 
+    def test_other_framework_records_are_listed_and_grouped(self):
+        (self.root / '.planning/milestones').mkdir(parents=True)
+        (self.root / '.planning/STATE.md').write_bytes(b'---\nmilestone: v1.1\n---\n')
+        (self.root / '.planning/milestones/v1.0-ROADMAP.md').write_bytes(b'# v1.0\n')
+        (self.root / '.gsd').mkdir()
+        (self.root / '.gsd/STATE.md').write_bytes(b'# GSD State\n')
+        # Both folders are often ignored; Files lists them like .project.
+        (self.root / '.gitignore').write_bytes(b'.gsd/\n.planning/\n')
+        code, data = self.request()
+        self.assertEqual(code, 200, data)
+        groups = {f['path']: f['group'] for f in data['files']}
+        self.assertEqual(groups['.planning/STATE.md'], 'Project records')
+        self.assertEqual(groups['.planning/milestones/v1.0-ROADMAP.md'], 'Archived milestone')
+        self.assertEqual(groups['.gsd/STATE.md'], 'Project records')
+        self.assertEqual(self.request('read', path='.gsd/STATE.md')[1]['text'], '# GSD State\n')
+
+    @requires_symlink
+    def test_gsd_link_is_followed_only_into_the_gsd_pi_store(self):
+        from unittest import mock
+        home = Path(self.tmp.name) / 'home'
+        store = home / '.gsd/projects/abc123'
+        store.mkdir(parents=True)
+        (store / 'STATE.md').write_bytes(b'# Linked state\n')
+        (store / 'escape').symlink_to(self.root.parent, target_is_directory=True)
+        (self.root / '.gsd').symlink_to(store, target_is_directory=True)
+        with mock.patch('pathlib.Path.home', return_value=home):
+            code, data = self.request()
+            self.assertEqual(code, 200, data)
+            paths = {f['path'] for f in data['files']}
+            self.assertIn('.gsd/STATE.md', paths)
+            self.assertFalse(any(p.startswith('.gsd/escape') for p in paths))
+            code, body = self.request('read', path='.gsd/STATE.md')
+            self.assertEqual((code, body['text']), (200, '# Linked state\n'))
+            # A link inside the store is still refused.
+            self.assertIn(self.request('read', path='.gsd/escape/project/.project/STATE.md')[0], (400, 403))
+        # A .gsd link that points anywhere else is refused, as every other symlink, even when the store exists.
+        elsewhere = Path(self.tmp.name) / 'elsewhere'
+        elsewhere.mkdir()
+        (elsewhere / 'STATE.md').write_bytes(b'outside secret\n')
+        (self.root / '.gsd').unlink()
+        (self.root / '.gsd').symlink_to(elsewhere, target_is_directory=True)
+        for name in ('home', 'other-home'):
+            with self.subTest(home=name), mock.patch('pathlib.Path.home', return_value=Path(self.tmp.name) / name):
+                self.assertNotIn('.gsd/STATE.md', {f['path'] for f in self.request()[1]['files']})
+                code, body = self.request('read', path='.gsd/STATE.md')
+                self.assertIn(code, (400, 403))
+                self.assertNotIn('outside secret', str(body))
+
+    def test_other_framework_records_and_sources(self):
+        core_id = f'{self.root}::gsd-core'
+        self.watcher.projects[core_id] = ProjectStatus(
+            root=str(self.root), id=core_id, flavor='gsd-core',
+            record_files=[{'path': '.planning/STATE.md', 'label': 'State'}, {'path': '.planning/ROADMAP.md', 'label': 'Roadmap'}],
+            ledger=[{'command': 'npm test', 'result': 'pass'}, {'command': 'old', 'result': 'fail'}])
+        (self.root / '.planning').mkdir()
+        (self.root / '.planning/STATE.md').write_bytes(b'state\n')
+        conn = http.client.HTTPConnection('127.0.0.1', self.port)
+        self.addCleanup(conn.close)
+        conn.request('GET', '/api/project-data?' + urlencode({'root': core_id}))
+        response = conn.getresponse()
+        data = json.loads(response.read())
+        self.assertEqual(response.status, 200, data)
+        sources = {s['path']: s['status'] for s in data['sources']}
+        self.assertEqual((sources['.planning/STATE.md'], sources['.planning/ROADMAP.md']), ('available', 'missing'))
+        self.assertFalse(any(path.startswith(('.project/', '.gsd-path/')) for path in sources))
+        self.assertEqual([r['command'] for r in data['verify_records']], ['npm test', 'old'])  # newest first, as GSD Path
+        self.assertEqual(data['usage_records'], [])
+
+
 if __name__ == '__main__':
     unittest.main()

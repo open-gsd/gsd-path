@@ -775,7 +775,7 @@ function projectPage(p) {
                  ...(p.integration ? [["Integration", p.integration]] : []),
                  ["Updated", ago(p.last_activity_iso)], ["Cost", sp && sp.turns ? money(sp.cost) : "—"], ["Turns", sp && sp.turns ? int(sp.turns) : "—"]];
   return `<article class="project" data-root="${esc(p.id||p.root)}">
-    <div class="project-tools">${sourceLink('.project/STATE.md','History & files')}</div><div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.repository || p.project || p.root)}${flavorTag(p)}</h1><span class="mono">Project folder: ${esc(p.project_root||p.root)}</span>${p.worktree_root?`<span class="mono">Worktree: ${esc(p.worktree_root)}</span>`:''}</div>
+    <div class="project-tools">${sourceLink(stateFileOf(p),'History & files')}</div><div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.repository || p.project || p.root)}${flavorTag(p)}</h1><span class="mono">Project folder: ${esc(p.project_root||p.root)}</span>${p.worktree_root?`<span class="mono">Worktree: ${esc(p.worktree_root)}</span>`:''}</div>
     <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
     ${p.handoff ? `<p class="runtime-handoff">${esc(p.handoff.outcome)} — ${esc(p.handoff.next)}</p>` : ""}
     ${p.vision ? `<p class="vision">${esc(p.vision)}</p>` : ""}
