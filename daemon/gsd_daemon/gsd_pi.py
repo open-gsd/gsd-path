@@ -57,8 +57,12 @@ def _from_db(path: Path) -> Optional[dict]:
     if not path.is_file():
         return None
     try:
-        # mode=ro: the daemon never writes a watched project; WAL readers still see the latest commit.
-        connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=1)
+        # The daemon never writes a watched project. No -wal file means no open writer, and mode=ro
+        # would create -wal/-shm there; immutable=1 does not. With a writer, mode=ro sees its commits.
+        path = path.resolve()
+        live = path.with_name(path.name + "-wal").exists()
+        connection = sqlite3.connect(path.as_uri() + ("?mode=ro" if live else "?immutable=1"),
+                                     uri=True, timeout=1)
     except (sqlite3.Error, ValueError):
         return None
     try:

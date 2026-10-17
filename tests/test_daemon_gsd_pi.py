@@ -98,6 +98,20 @@ class GsdPiReaderTests(unittest.TestCase):
         self.assertIn(("failed", ".gsd/phases/02/02-01-ASSESSMENT.md — fail"), kinds)
         self.assertEqual(card["health"], "red")
 
+    def test_reading_a_wal_database_leaves_the_project_untouched(self) -> None:
+        self.make_db(schema="PRAGMA journal_mode=WAL;" + SCHEMA)
+        before = sorted(p.name for p in self.base.iterdir())
+        self.assertEqual(self.probe()["milestone"], "Notes")
+        self.assertEqual(sorted(p.name for p in self.base.iterdir()), before)
+
+    def test_reads_commits_of_an_open_wal_writer(self) -> None:
+        self.make_db(schema="PRAGMA journal_mode=WAL;" + SCHEMA)
+        writer = sqlite3.connect(self.base / "gsd.db")
+        self.addCleanup(writer.close)
+        writer.execute("INSERT INTO tasks VALUES ('M002', 'S02', 'T03', 'Search body', 'pending', '[]')")
+        writer.commit()
+        self.assertIn("S02-T03", [t["id"] for t in self.probe()["tasks"]])
+
     def test_older_schema_without_optional_columns_or_tables(self) -> None:
         self.make_db("""
         CREATE TABLE milestones (id TEXT PRIMARY KEY, title TEXT, status TEXT);
