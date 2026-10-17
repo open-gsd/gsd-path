@@ -23,8 +23,29 @@ It also lists projects run by the other GSD frameworks: a folder with
 `.planning/` holding `STATE.md` or `ROADMAP.md` (gsd-core). `~/.gsd`, the
 gsd-pi home, is not a project. A folder with more than one framework shows one
 card per framework. These cards are read-only, and GSD Path setup actions do
-not apply to them. gsd-pi cards show as **Unverified** until the app reads
-gsd-pi files.
+not apply to them.
+
+A gsd-pi card is read from `.gsd/`. gsd-pi keeps its record in `gsd.db`, and
+the daemon opens it read-only. A project with no rows there is read from the
+older markdown layout (`milestones/M###/` with `slices/S##/` and task
+summaries), and then from the milestone registry in `STATE.md`.
+
+- **Phase strip**: the same five steps as a gsd-core card. The STATE.md
+  `**Phase:**` value maps onto them (for example `executing` is execute and
+  `completing-milestone` is verify). Without it, the open slice decides:
+  no tasks is plan, open tasks is execute, all tasks closed is verify.
+- **Waves and tasks**: the slices of the active milestone are waves, and their
+  tasks are tasks (`S02-T01`).
+- **Milestones**: every milestone, with its vision as the goal.
+- **Reviews and verify ledger**: `assessments` rows are reviews, and
+  `verification_evidence` rows are the verify ledger, for the active milestone.
+- **Attention**: items under the STATE.md `Blockers` heading, blocked tasks
+  and failed assessments.
+- **Next step**: the STATE.md `Next Action` text and the `state.json` next
+  command.
+- **State**: **Shipped** when the phase is `complete` or every milestone is
+  closed; **Blocked** and **Paused** from the phase; **Not started** with no
+  milestone; otherwise the step, such as **In execute**.
 
 A gsd-core card is read from `.planning/` the way gsd-core decides
 completion, from files on disk:
