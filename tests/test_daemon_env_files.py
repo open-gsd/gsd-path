@@ -5,10 +5,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 
 from gsd_daemon import env_files
+from gsd_daemon.model import ProjectStatus
 
 SOURCE = """# Database
 DATABASE_URL=postgres://localhost/app
@@ -210,6 +212,18 @@ class GitStateTests(Case):
         self.assertEqual(env_files.list_file(self.root, ".env.local")["git"], "ignored")
         self.assertEqual(env_files.list_file(self.root, ".env.production")["git"], "untracked")
 
+
+
+class RouteTests(Case):
+    def test_a_card_of_another_framework_is_not_a_watched_project(self):
+        card = str(self.root) + "::gsd-core"
+        self.write()
+        handler = SimpleNamespace(token="t", watcher=SimpleNamespace(projects={
+            str(self.root): ProjectStatus(root=str(self.root)),
+            card: ProjectStatus(root=str(self.root), id=card, flavor="gsd-core")}))
+        self.assertEqual(env_files.list_route(handler, {"root": str(self.root), "file": ".env"})["file"], ".env")
+        with self.assertRaisesRegex(ValueError, "not a watched project"):
+            env_files.list_route(handler, {"root": card, "file": ".env"})
 
 if __name__ == "__main__":
     unittest.main()

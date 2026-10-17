@@ -104,11 +104,15 @@ def scan(parents: Iterable[str], excludes: Iterable[str] = (), max_depth: int = 
 
 
 def _dedupe_foreign(pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
-    # One card per framework per repository: the main checkout wins over its worktrees.
-    groups: Dict[Tuple[str, str], List[str]] = {}
+    # One card per framework per folder: the same folder in a worktree merges into the main checkout.
+    groups: Dict[Tuple[str, str, str], List[Tuple[str, str]]] = {}
     for root, flavor in pairs:
-        groups.setdefault((os.path.normcase(_git_common_dir(root) or root), flavor), []).append(root)
-    return [(min(members, key=_dedupe_rank), flavor) for (_, flavor), members in groups.items()]
+        common = _git_common_dir(root)
+        top = _git(root, "rev-parse", "--show-toplevel") if common else None
+        relative = os.path.relpath(os.path.realpath(root), os.path.realpath(top)) if top else ""
+        groups.setdefault((os.path.normcase(common or root), os.path.normcase(relative), flavor), []).append((root, top or root))
+    return [(min(members, key=lambda m: (not os.path.isdir(os.path.join(m[1], ".git")), len(m[0]), m[0]))[0], flavor)
+            for (_, _, flavor), members in groups.items()]
 
 
 def _walk(current: str, depth: int, max_depth: int, excluded: List[str],

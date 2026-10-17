@@ -172,6 +172,12 @@ class ProjectStatus:
         )
 
 
+def is_path_card(projects: Dict[str, ProjectStatus], key) -> bool:
+    """True when key selects a watched GSD Path card (write actions take no other card)."""
+    project = projects.get(key) if isinstance(key, str) else None
+    return project is not None and project.flavor == PATH_FLAVOR
+
+
 def aggregate(projects: List[ProjectStatus], generated_at: str) -> dict:
     return {
         "schema": SCHEMA,

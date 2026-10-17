@@ -173,6 +173,13 @@ class RouteTests(unittest.TestCase):
         self.assertIn("project", payload["missing"]["waves"])
         self.assertEqual(payload["verify"][0]["project"], "full")
 
+    def test_all_projects_scope_counts_a_shared_folder_once(self):
+        card = self.full + "::gsd-core"
+        self.watcher.projects[card] = ProjectStatus(root=self.full, id=card, flavor="gsd-core", project="full")
+        status, payload = self.get("/api/stats")
+        self.assertEqual(status, 200, payload)
+        self.assertEqual(payload["days"][0]["tokens"], 1_000_000)
+
     def test_an_unwatched_root_is_a_bad_request(self):
         status, payload = self.get("/api/stats?root=/etc")
         self.assertEqual(status, 400, payload)

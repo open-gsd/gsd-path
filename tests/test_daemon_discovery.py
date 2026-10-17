@@ -244,6 +244,26 @@ class WorktreeDedupTests(unittest.TestCase):
         self.assertEqual(discovery.scan_projects([str(self.parent)]),
                          [(str(main), "gsd-core"), (str(main), "gsd-path")])
 
+    def test_other_framework_main_checkout_wins_over_milestone_worktree(self) -> None:
+        main, linked = self.make_repo_with_worktree()
+        self._git("branch", "-m", "gsd-path/M002", cwd=linked)
+        for root in (main, linked):
+            make_planning(root)
+        self.assertEqual(discovery.scan_projects([str(self.parent)]),
+                         [(str(main), "gsd-core"), (str(linked), "gsd-path")])
+
+    def test_other_framework_subfolders_in_one_repo_keep_their_cards(self) -> None:
+        main = self.parent / "mono"
+        main.mkdir()
+        self._git("init", cwd=main)
+        make_planning(main / "packages" / "a")
+        make_planning(main / "packages" / "b")
+        self._git("add", "-A", cwd=main)
+        self._git("commit", "-m", "init", cwd=main)
+        self._git("worktree", "add", str(self.parent / "mono-linked"), cwd=main)
+        self.assertEqual(discovery.scan_projects([str(self.parent)]),
+                         [(str(main / "packages" / "a"), "gsd-core"), (str(main / "packages" / "b"), "gsd-core")])
+
 def make_planning(root: Path) -> Path:
     (root / ".planning").mkdir(parents=True, exist_ok=True)
     (root / ".planning" / "STATE.md").write_text("---\nmilestone: v1.0\n---\n")
