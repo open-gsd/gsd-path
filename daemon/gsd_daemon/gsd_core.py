@@ -99,7 +99,7 @@ def _milestones(base: Path, current: Optional[str], name: Optional[str], goal: O
             "number": number, "slug": title,
             "status": "active" if number == current else "shipped" if kind == "Shipped" else "planned",
             "goal": goal_match.group(1) if goal_match else None,
-            "archive": str(archive.relative_to(base.parent)) if archive.is_file() else None,
+            "archive": archive.relative_to(base.parent).as_posix() if archive.is_file() else None,
         })
     found.reverse()
     if current and not any(m["number"] == current for m in found):
@@ -165,7 +165,7 @@ def read(status: ProjectStatus, base: Path) -> List[dict]:
             value = VERDICTS.get(raw, raw) if kind == "verification" else raw
             if kind == "verification":
                 verdict = value
-            status.reviews.append({"file": str(path.relative_to(base.parent)), "kind": kind,
+            status.reviews.append({"file": path.relative_to(base.parent).as_posix(), "kind": kind,
                                    "verdict": value, "cycle": None, "depth": None, "note": None})
             if value == "human_needed":
                 extra.append({"kind": "question", "label": f"Phase {number} needs a human check", "ref": path.name})
