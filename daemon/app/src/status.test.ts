@@ -3,6 +3,7 @@ import { asking, blocked, building, shipped, status } from "./fixtures";
 import {
   ago, clock, duration, healthTone, milestoneStack, money, nameOf, phaseCells, pollMs, sortProjects, spendCell,
   stateLabel, stateOf, tokens,
+  stateFileOf,
 } from "./status";
 
 const NOW = Date.parse("2026-10-01T04:00:21+00:00");
@@ -22,6 +23,13 @@ describe("names and state", () => {
     expect([building, blocked, shipped].map(healthTone)).toEqual(["warn", "bad", "ok"]);
     expect(healthTone({ ...blocked, health: undefined })).toBe("bad");
     expect(healthTone({ ...building, health: undefined })).toBe("ok");
+  });
+});
+
+describe("stateFileOf", () => {
+  it("opens each framework's own state file", () => {
+    expect(stateFileOf(building)).toBe(".project/STATE.md");
+    expect(stateFileOf({ ...building, record_files: [{ path: ".gsd/STATE.md", label: "State" }] })).toBe(".gsd/STATE.md");
   });
 });
 

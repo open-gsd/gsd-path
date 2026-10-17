@@ -80,6 +80,8 @@ class ProjectStatus:
     attention: List[dict] = field(default_factory=list)
     # The phase strip for this card; None means the GSD Path phases.
     phases: Optional[List[str]] = None
+    # gsd-pi and gsd-core records, state file first ([{path, label}]); None for GSD Path.
+    record_files: Optional[List[dict]] = None
 
     def to_dict(self) -> dict:
         return {
@@ -125,6 +127,7 @@ class ProjectStatus:
             "health": self.health,
             "attention": list(self.attention),
             "phases": list(self.phases) if self.phases is not None else None,
+            "record_files": list(self.record_files) if self.record_files is not None else None,
         }
 
     @classmethod
@@ -173,6 +176,7 @@ class ProjectStatus:
             health=data.get("health") or "green",
             attention=list(data.get("attention") or []),
             phases=list(data["phases"]) if data.get("phases") is not None else None,
+            record_files=list(data["record_files"]) if data.get("record_files") is not None else None,
         )
 
 

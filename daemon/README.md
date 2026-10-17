@@ -464,7 +464,8 @@ VERSION-stamp probes plus the update-check cache, never a source refresh; see
   `<root>::gsd-core` for the other frameworks; API `root` parameters that
   select a watched project accept it), `flavor` (`gsd-path`, `gsd-pi` or
   `gsd-core`), `phases` (the phase strip for a gsd-pi or gsd-core card; null
-  means the GSD Path phases), `root` (discovered project path), `project` (project state name),
+  means the GSD Path phases), `record_files` (`[{path, label}]`, the gsd-pi or
+  gsd-core records with the state file first; null for GSD Path), `root` (discovered project path), `project` (project state name),
   `repository` (Git repository folder name when available), `project_root`
   (corresponding path under the main checkout, or the discovered project path
   for bare-backed worktrees and non-Git projects), `worktree_root` (linked
@@ -584,8 +585,10 @@ logon.
 ## Project history and files
 
 Open a project and choose **History & files**. The viewer lists Git-tracked and
-non-ignored repository files plus `.project` records, including archived
-milestones. UTF-8 text is shown in full. Markdown has Preview and Raw views;
+non-ignored repository files plus `.project`, `.planning` (gsd-core) and `.gsd`
+(gsd-pi) records, including archived milestones. A gsd-pi or gsd-core card
+opens its own `STATE.md` first, and its **Records & sources** links point to
+that framework's files. UTF-8 text is shown in full. Markdown has Preview and Raw views;
 HTML is escaped and images are represented by their alt text, without loading
 remote resources. Relative document links open within the same project and
 preserve the selected commit when viewing historical contents.
@@ -595,14 +598,18 @@ also retains a selected commit reached through a relative link when that commit
 is absent from the path's history. Working tree shows current contents.
 Uncommitted older contents are not
 retained, and history does not follow renames. Binary files, symlinks, hard
-links, `.git` internals, and paths outside watched projects are rejected.
+links, `.git` internals, and paths outside watched projects are rejected. One
+link is followed: a `.gsd` folder that links into `~/.gsd/projects/`, where
+gsd-pi keeps project state (POSIX only). Links inside it are still rejected.
 Secure working-tree reads currently require POSIX directory descriptors;
 unsupported platforms report that limitation instead of using an unsafe fallback.
 
 **Records & sources → Load full records** loads the full recorded pipeline
 usage, verification ledger, daemon activity, and indexed host turns on demand.
 Data coverage distinguishes available files, loaded records, invalid JSONL
-lines, missing files, and unverified runtime state. Host turns are the records
+lines, missing files, and unverified runtime state. A gsd-pi or gsd-core card
+lists its own records as sources and its verify ledger, with no GSD Path usage
+or runtime sources. Host turns are the records
 currently indexed from Codex and Claude Code logs, not a guarantee that every
 host log was parsed. The regular status snapshot still uses recent-record
 windows; full records and files are fetched separately.

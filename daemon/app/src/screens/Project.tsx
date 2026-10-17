@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { facts, milestoneRows, nowBox, phaseTrack, usageTiles } from "../project";
 import { filesHash, statsHash } from "../route";
 import { api } from "../shell";
-import { DASH, duration, flavorOf, healthTone, idOf, int, money, nameOf, shortDate, shortTime, tokens } from "../status";
+import { DASH, duration, flavorOf, healthTone, idOf, stateFileOf, int, money, nameOf, shortDate, shortTime, tokens } from "../status";
 import type { Project } from "../status";
 import { Fold, Table } from "../ui";
 import type { usePlugin } from "../skillsApi";
@@ -70,7 +70,7 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
         <h1 className="title"><i className={`dot ${healthTone(p)}`} />{nameOf(p)}{flavorOf(p) && <span className="pill mute flavor">{flavorOf(p)}</span>}</h1>
         <span className="mono">Project folder: {p.project_root || p.root}</span>
         {p.worktree_root && <span className="mono">Worktree: {p.worktree_root}</span>}
-        <a className="right" href={filesHash(idOf(p))}>History &amp; files ↗</a>
+        <a className="right" href={filesHash(idOf(p), stateFileOf(p))}>History &amp; files ↗</a>
       </div>
       <dl className="facts">{facts(p, now).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>
       {p.handoff && <p className="handoff">{p.handoff.outcome} — {p.handoff.next}</p>}
@@ -149,7 +149,7 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
             ])} />)}
           {section("Pending answers", answers.length, answers, <>
             <RecordTable rows={answers} columns={[["id", "Answer"], ["question", "Question"], ["status", "Status"], ["follow_up", "Follow-up"], ["owner", "Owner"]]} />
-            {source(".project/discuss/ANSWERS.md", "Read complete discussion record")}
+            {!p.record_files && source(".project/discuss/ANSWERS.md", "Read complete discussion record")}
           </>)}
         </section>
 
@@ -204,11 +204,11 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
         {records.data && <>
           <Fold title="Full verification ledger">
             <RecordTable rows={records.data.verify_records} columns={[["recorded_at", "Recorded"], ["task", "Task"], ["command", "Command"], ["commit", "Commit"], ["result", "Result"]]} />
-            {source(".project/build/verify-ledger.jsonl", "Read original ledger")}
+            {!p.record_files && source(".project/build/verify-ledger.jsonl", "Read original ledger")}
           </Fold>
           <Fold title="Full pipeline usage records">
             <RecordTable rows={records.data.usage_records} columns={[["task", "Task"], ["phase", "Phase"], ["model", "Model"], ["tokens_in", "Input"], ["tokens_out", "Output"], ["cost", "Cost"]]} />
-            {source(".project/build/usage.jsonl", "Read original usage")}
+            {!p.record_files && source(".project/build/usage.jsonl", "Read original usage")}
           </Fold>
           <Fold title="Full host turn ledger">
             <RecordTable rows={records.data.turns} columns={[["at", "Time"], ["agent", "Agent"], ["host", "Host"], ["model", "Model"], ["tokens_in", "Input"], ["tokens_cached", "Cached"], ["tokens_out", "Output"], ["duration_s", "Seconds"], ["cost", "Cost"]]} />
@@ -222,8 +222,10 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
           </Fold>
         </>}
         <div className="tools">
-          {source(".project/ROADMAP.md", "Roadmap")}{source(".project/intent/INTENT.md", "Intent")}{source(".project/plan/PLAN.md", "Plan")}
-          {source(".project/review/FINAL.md", "Final review")}{source(".project/LESSONS.md", "Lessons")}
+          {p.record_files ? p.record_files.slice(1).map((file) => <span key={file.path}>{source(file.path, file.label)}</span>) : <>
+            {source(".project/ROADMAP.md", "Roadmap")}{source(".project/intent/INTENT.md", "Intent")}{source(".project/plan/PLAN.md", "Plan")}
+            {source(".project/review/FINAL.md", "Final review")}{source(".project/LESSONS.md", "Lessons")}
+          </>}
         </div>
       </section>
     </main>

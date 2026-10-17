@@ -78,6 +78,7 @@ class GsdPiReaderTests(unittest.TestCase):
         self.make_db()
         card = self.probe()
         self.assertEqual(card["phases"], ["discuss", "research", "plan", "execute", "verify"])
+        self.assertEqual(card["record_files"][0], {"path": ".gsd/STATE.md", "label": "State"})
         self.assertEqual((card["project"], card["vision"], card["milestone"]), ("Notes App", "A notes app.", "Notes"))
         self.assertEqual((card["status"], card["phase"], card["current_wave"]), ("executing", "execute", 2))
         self.assertEqual(card["waves"], {"1": "S01 Editor", "2": "S02 Search"})

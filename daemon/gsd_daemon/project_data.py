@@ -36,13 +36,18 @@ def project_records(watcher, key):
     project = watcher.projects.get(key) or next(p for p in watcher.projects.values() if str(p.root) == raw_root)
     root = Path(raw_root).resolve(strict=True)
     listing = file_index(root)
-    usage, usage_source = _records(root, '.project/build/usage.jsonl')
-    ledger, ledger_source = _records(root, '.project/build/verify-ledger.jsonl')
-    runtime = project.status_source == 'runtime'
-    # Without a runtime payload, the workflow result says why: not set up, not started or unverified.
-    sources = [usage_source, ledger_source,
-               {'path': '.gsd-path/status_runtime.py', 'status': 'loaded' if runtime else project.workflow.get('label', 'Unverified').lower(),
-                'detail': 'Runtime status' if runtime else project.workflow.get('reason') or 'Parsed-file fallback; runtime status was not verified.'}]
+    if project.record_files is None:
+        usage, usage_source = _records(root, '.project/build/usage.jsonl')
+        ledger, ledger_source = _records(root, '.project/build/verify-ledger.jsonl')
+        verify_records = list(reversed(ledger))
+        runtime = project.status_source == 'runtime'
+        # Without a runtime payload, the workflow result says why: not set up, not started or unverified.
+        sources = [usage_source, ledger_source,
+                   {'path': '.gsd-path/status_runtime.py', 'status': 'loaded' if runtime else project.workflow.get('label', 'Unverified').lower(),
+                    'detail': 'Runtime status' if runtime else project.workflow.get('reason') or 'Parsed-file fallback; runtime status was not verified.'}]
+    else:
+        # gsd-pi and gsd-core keep no GSD Path usage or runtime; the card's ledger is already newest first.
+        usage, verify_records, sources = [], project.ledger, []
     activity = []
     try:
         lines = resolve_history_path().read_text(encoding='utf-8').splitlines()
@@ -72,11 +77,12 @@ def project_records(watcher, key):
         turns = []
         sources.append({'path': 'host session usage', 'status': 'failed', 'error': str(error)})
     known_paths = {f['path'] for f in listing['files']}
-    for path in ['.project/STATE.md', '.project/ROADMAP.md', '.project/CHARTER.md', '.project/intent/INTENT.md',
-                 '.project/plan/PLAN.md', '.project/review/FINAL.md', '.project/discuss/ANSWERS.md', '.project/LESSONS.md', '.project/next/STATE.md']:
+    paths = ['.project/STATE.md', '.project/ROADMAP.md', '.project/CHARTER.md', '.project/intent/INTENT.md',
+             '.project/plan/PLAN.md', '.project/review/FINAL.md', '.project/discuss/ANSWERS.md', '.project/LESSONS.md', '.project/next/STATE.md']
+    for path in [f['path'] for f in project.record_files] if project.record_files is not None else paths:
         sources.append({'path': path, 'status': 'available' if path in known_paths else 'missing'})
     sources.extend({**source, 'path': source['source']} for source in listing['coverage'])
     return {'root': raw_root, 'id': project.id or raw_root, 'sources': sources, 'files': listing['files'], 'file_scope': listing['scope'],
-            'usage_records': usage, 'verify_records': list(reversed(ledger)),
+            'usage_records': usage, 'verify_records': verify_records,
             'activity': list(reversed(activity)), 'turns': list(reversed(turns)),
             'project': project.to_dict()}
