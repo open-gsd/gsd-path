@@ -190,7 +190,8 @@ def read(status: ProjectStatus, base: Path) -> List[dict]:
     elif current is not None:
         # No STATE.md phase: derive it from the open slice's tasks.
         open_tasks = [t for t in status.tasks if t.wave == status.current_wave]
-        status.phase = ("plan" if not open_tasks else
+        status.phase = ("verify" if slices and status.current_wave is None else
+                        "plan" if not open_tasks else
                         "execute" if any(t.status != "done" for t in open_tasks) else "verify")
 
     status.reviews = [{"file": a["path"], "kind": a["scope"] or "assessment", "verdict": a["status"] or None,

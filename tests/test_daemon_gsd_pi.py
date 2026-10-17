@@ -131,6 +131,14 @@ class GsdPiReaderTests(unittest.TestCase):
         # No STATE.md phase: the open slice still has work.
         self.assertEqual((card["current_wave"], card["phase"], card["workflow"]["label"]), (2, "execute", "In execute"))
 
+    def test_legacy_markdown_with_every_slice_closed_is_in_verify(self) -> None:
+        (self.base / "STATE.md").unlink()
+        m2 = self.base / "milestones" / "M002"
+        write(m2 / "M002-ROADMAP.md", "# M002: Notes\n\n- [x] **S01: Editor**\n- [x] **S02: Search**\n")
+        write(m2 / "slices" / "S02" / "S02-PLAN.md", "- [x] **T01: Search titles**\n")
+        card = self.probe()
+        self.assertEqual((card["current_wave"], card["phase"], card["workflow"]["label"]), (None, "verify", "In verify"))
+
     def test_state_registry_is_the_last_source(self) -> None:
         card = self.probe()
         self.assertEqual([(m["number"], m["status"]) for m in card["roadmap_milestones"]], [("M001", "shipped"), ("M002", "active")])
