@@ -75,7 +75,7 @@ def _max_wave_cycle(root: Path, project_dir: str, wave: int) -> int:
     return maximum
 
 
-WAVE_SC_HEADING = re.compile(r"^### (SC[1-9]\d*) — (.+)$")
+WAVE_SC_HEADING = re.compile(r"^### (SC[1-9]\d*) — (.+): (pass|fail)$")
 WAVE_TASK_HEADING = re.compile(
     r"^## (?P<task>T\d{3}) — (?P<title>.+): (?P<verdict>pass|fail)$"
 )
@@ -2177,7 +2177,7 @@ def validate_wave_evidence(
     verdicts: Dict[str, str] = {}
     coverage_lines = _strip_comments(coverage).splitlines()
     for line in coverage_lines:
-        if line.strip().startswith("### ") and not WAVE_SC_HEADING.fullmatch(line.strip()):
+        if line.strip().startswith("### ") and not WAVE_SC_HEADING.fullmatch(line):
             raise HandoffError(
                 f"{name} has an invalid Intent coverage heading: {line.strip()}; "
                 "use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)"
@@ -2185,21 +2185,11 @@ def validate_wave_evidence(
     sc_headings = [
         (index, match)
         for index, line in enumerate(coverage_lines)
-        if (match := WAVE_SC_HEADING.fullmatch(line.strip())) is not None
+        if (match := WAVE_SC_HEADING.fullmatch(line)) is not None
     ]
     for position, (heading_index, match) in enumerate(sc_headings):
-        sc_id = match.group(1)
-        heading_text, separator, verdict = match.group(2).rpartition(":")
-        verdict = verdict.strip()
-        if verdict not in {"pass", "fail"}:
-            raise HandoffError(f"{name} {sc_id} heading must end with `: pass` or `: fail`")
-        if (
-            sc_id in criteria
-            and (
-                not separator
-                or not _common.quotes_criterion(heading_text, criteria[sc_id])
-            )
-        ):
+        sc_id, heading_text, verdict = match.groups()
+        if sc_id in criteria and not _common.quotes_criterion(heading_text, criteria[sc_id]):
             raise HandoffError(f"{name} {sc_id} heading text differs from INTENT.md")
         if sc_id in verdicts:
             raise HandoffError(f"{name} Intent coverage repeats {sc_id}")

@@ -2938,6 +2938,24 @@ Tasks reviewed: 2
                 "has an invalid Intent coverage heading: ### SC2 - The demo test suite is "
                 "green.: pass; use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)",
             ),
+            (
+                "SC verdict without a space after the colon",
+                [("green.: pass", "green.:pass")],
+                "has an invalid Intent coverage heading: ### SC2 — The demo test suite is green.:pass; "
+                "use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)",
+            ),
+            (
+                "SC heading with trailing whitespace",
+                [("green.: pass", "green.: pass ")],
+                "has an invalid Intent coverage heading: ### SC2 — The demo test suite is green.: pass; "
+                "use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)",
+            ),
+            (
+                "indented SC heading",
+                [("### SC2 — The demo", " ### SC2 — The demo")],
+                "has an invalid Intent coverage heading: ### SC2 — The demo test suite is green.: pass; "
+                "use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)",
+            ),
             ("sections in PLAN table order", [(t001 + t002, t002 + t001)], order),
             ("blocked review, sections out of order", [blocked, (t001 + t002, t002 + t001)], order),
             ("blocked review, unknown task", [blocked, ("## T002 — Demo", "## T009 — Demo")], order),
