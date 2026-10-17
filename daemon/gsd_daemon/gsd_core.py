@@ -130,8 +130,20 @@ def read(status: ProjectStatus, base: Path) -> List[dict]:
     current = _value(state, "current_phase")
     extra: List[dict] = []
     steps: Dict[int, Optional[str]] = {}
-    for wave, (number, slug, folder) in enumerate(_phase_dirs(base), 1):
+    folders = _phase_dirs(base)
+    top = max((_natural_key(number) for number, _, _ in folders), default=None)
+    # gsd-core makes a phase folder on first discuss/plan; later ROADMAP phases wait at discuss.
+    planned = [(number, name, None) for number, name in phase_names.items()
+               if folders and not any(_same_phase(number, n) for n, _, _ in folders)
+               and (_natural_key(number) > top or _same_phase(current, number))]
+    phases = sorted(folders + planned, key=lambda phase: _natural_key(phase[0]))
+    for wave, (number, slug, folder) in enumerate(phases, 1):
         status.waves[wave] = f"{number} {phase_names.get(number.lstrip('0') or '0', slug)}"
+        if folder is None:
+            steps[wave] = "discuss"
+            if _same_phase(current, number):
+                status.current_wave = wave
+            continue
         plans = []
         for entry in sorted(folder.iterdir(), key=lambda p: _natural_key(p.name)):
             match = PLAN_FILE_RE.match(entry.name)

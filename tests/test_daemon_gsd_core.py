@@ -1,3 +1,4 @@
+import shutil
 import sys
 import tempfile
 import unittest
@@ -144,6 +145,23 @@ class GsdCoreReaderTests(unittest.TestCase):
         write(beta / "02-VERIFICATION.md", verification("passed"))
         write(self.base / "phases" / "03-gamma-work" / "03-VERIFICATION.md", verification("passed"))
         self.assertEqual(self.probe()["workflow"], {"state": "shipped", "label": "Shipped"})
+
+    def test_roadmap_phase_without_folder_waits_at_discuss(self) -> None:
+        shutil.rmtree(self.base / "phases" / "03-gamma-work")
+        write(self.base / "phases" / "02-beta-work" / "02-02-SUMMARY.md", "done\n")
+        write(self.base / "phases" / "02-beta-work" / "02-VERIFICATION.md", verification("passed"))
+        state = STATE.format(status="ready_to_plan").replace("current_phase: 2", "current_phase: 3")
+        (self.base / "STATE.md").write_text(state, encoding="utf-8")
+        card = self.probe()
+        self.assertEqual((card["phase"], card["current_wave"]), ("discuss", 3))
+        self.assertEqual(card["waves"]["3"], "3 Gamma Work")
+        self.assertEqual(card["workflow"], {"state": "active", "label": "In discuss"})
+
+    def test_archived_roadmap_phases_do_not_become_waves(self) -> None:
+        archive = "## v1.0 archive\n\n### Phase 0: Old Spike\n\n"
+        (self.base / "ROADMAP.md").write_text(ROADMAP.replace("# Roadmap\n", "# Roadmap\n\n" + archive), encoding="utf-8")
+        card = self.probe()
+        self.assertEqual(card["waves"], {"1": "01 Alpha Work", "2": "02 Beta Work", "3": "03 Gamma Work"})
 
     def test_state_status_blocked_and_between_milestones(self) -> None:
         (self.base / "STATE.md").write_text(STATE.format(status="blocked"), encoding="utf-8")
