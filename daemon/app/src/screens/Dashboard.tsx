@@ -3,7 +3,7 @@ import type { Route } from "../route";
 import type { Shell } from "../shell";
 import { pendingSkills } from "../skills";
 import { usePlugin } from "../skillsApi";
-import { clock } from "../status";
+import { clock, idOf } from "../status";
 import { Logo } from "../ui";
 import { useStatus } from "../useStatus";
 import { Board } from "./Board";
@@ -24,10 +24,10 @@ export function Dashboard({ shell, route, onStart }: { shell: Shell; route: Rout
   const now = Date.parse(status?.generated_at ?? "") || Date.now();
   // A project that is no longer watched falls back to the board, as in the daemon dashboard.
   const project = route.page === "project" || route.page === "env"
-    ? status?.projects.find((p) => p.root === route.root) : undefined;
+    ? status?.projects.find((p) => idOf(p) === route.root) : undefined;
   // One plugin state for the nav badge, the Skills page, the board and the project setup card.
   // It loads again on each page or project change and when /status reports other skills or projects.
-  const skills = usePlugin(JSON.stringify([route.page, "root" in route && route.root, status?.projects.map((p) => p.root), status?.plugin]));
+  const skills = usePlugin(JSON.stringify([route.page, "root" in route && route.root, status?.projects.map(idOf), status?.plugin]));
   const pending = pendingSkills(skills.hosts, skills.plugin).length;
 
   return (

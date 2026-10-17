@@ -1,7 +1,7 @@
 // The Stats page: turns the daemon's GET /api/stats payload into what the charts show.
 // A chart with no data is a reason text, never a zero and never an empty axis.
 import { statsHash } from "./route";
-import { duration, money, nameOf, PHASES, shortDate, tokens } from "./status";
+import { duration, idOf, money, nameOf, PHASES, shortDate, tokens } from "./status";
 import type { Project } from "./status";
 
 export type Day = { date: string; tokens: number; turns: number; cost: number | null };
@@ -121,7 +121,7 @@ export function verifyChart(payload: StatsPayload): VerifyChart | string {
 /** The scope switch: All projects, then one entry per project. */
 export function scopes(projects: Project[], root: string | null): { label: string; href: string; current: boolean }[] {
   return [{ label: "All projects", href: statsHash(null), current: root === null },
-    ...projects.map((p) => ({ label: nameOf(p), href: statsHash(p.root), current: p.root === root }))];
+    ...projects.map((p) => ({ label: nameOf(p), href: statsHash(idOf(p)), current: idOf(p) === root }))];
 }
 
 /** Load when the scope changes; for the same scope at most once per minute. */

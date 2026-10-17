@@ -18,6 +18,14 @@ and task facts retained. Explicit [Path settings](#path-settings) saves and
 [plugin lifecycle](#plugin-lifecycle) actions can write project configuration
 or installation files. They cannot advance pipeline phases.
 
+It also lists projects run by the other GSD frameworks: a folder with
+`.gsd/` holding `STATE.md`, `gsd.db` or `milestones/` (gsd-pi), or with
+`.planning/` holding `STATE.md` or `ROADMAP.md` (gsd-core). `~/.gsd`, the
+gsd-pi home, is not a project. A folder with more than one framework shows one
+card per framework. These cards are read-only, and GSD Path setup actions do
+not apply to them. Their status shows as **Unverified** until the app reads
+that framework's files.
+
 ## Install (one command)
 
 From a repository checkout:
@@ -406,7 +414,10 @@ Top level: `schema` (`gsd-path-daemon/status/v1`), `generated_at`,
 VERSION-stamp probes plus the update-check cache, never a source refresh; see
 "Plugin lifecycle"). Each project object carries (keys are stable and additive):
 
-- Identity/state: `root` (discovered project path), `project` (project state name),
+- Identity/state: `id` (card id: `root` for GSD Path, `<root>::gsd-pi` or
+  `<root>::gsd-core` for the other frameworks; API `root` parameters that
+  select a watched project accept it), `flavor` (`gsd-path`, `gsd-pi` or
+  `gsd-core`), `root` (discovered project path), `project` (project state name),
   `repository` (Git repository folder name when available), `project_root`
   (corresponding path under the main checkout, or the discovered project path
   for bare-backed worktrees and non-Git projects), `worktree_root` (linked

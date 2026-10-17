@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 SCHEMA = "gsd-path-daemon/status/v1"
+PATH_FLAVOR = "gsd-path"
 
 
 @dataclass
@@ -37,6 +38,8 @@ class TaskSummary:
 @dataclass
 class ProjectStatus:
     root: str
+    id: Optional[str] = None
+    flavor: str = PATH_FLAVOR
     project: Optional[str] = None
     project_root: Optional[str] = None
     worktree_root: Optional[str] = None
@@ -79,6 +82,8 @@ class ProjectStatus:
     def to_dict(self) -> dict:
         return {
             "root": self.root,
+            "id": self.id or self.root,
+            "flavor": self.flavor,
             "project": self.project,
             "project_root": self.project_root,
             "worktree_root": self.worktree_root,
@@ -124,6 +129,8 @@ class ProjectStatus:
         waves = data.get("waves") or {}
         return cls(
             root=data.get("root"),
+            id=data.get("id"),
+            flavor=data.get("flavor") or PATH_FLAVOR,
             project=data.get("project"),
             project_root=data.get("project_root"),
             worktree_root=data.get("worktree_root"),

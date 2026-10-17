@@ -1,5 +1,5 @@
 // The Projects board: filters, search and one row per project.
-import { ago, DASH, healthTone, milestoneStack, nameOf, phaseCells, reasons, sortProjects, spendCell, stateLabel, stateOf } from "./status";
+import { ago, DASH, flavorOf, healthTone, idOf, milestoneStack, nameOf, phaseCells, reasons, sortProjects, spendCell, stateLabel, stateOf } from "./status";
 import { isNewer, pendingSkills, targetVersion } from "./skills";
 import type { HostInfo, PluginStatus, ProjectSetup } from "./skills";
 import type { Cell, Project, Tone } from "./status";
@@ -19,18 +19,18 @@ export function filterCounts(projects: Project[]): { key: string; label: string;
 export function visibleProjects(projects: Project[], filter: string, query: string): Project[] {
   const text = query.trim().toLowerCase();
   return sortProjects(projects).filter((p) => inFilter(p, filter) &&
-    [p.repository, p.project, p.root, p.milestone].filter(Boolean).join(" ").toLowerCase().includes(text));
+    [p.repository, p.project, p.root, p.milestone, p.flavor].filter(Boolean).join(" ").toLowerCase().includes(text));
 }
 
 export type BoardRow = {
-  root: string; name: string; tone: Tone; path: string; number: string; slug: string; cells: Cell[]; phase: string;
+  id: string; root: string; flavor: string | null; name: string; tone: Tone; path: string; number: string; slug: string; cells: Cell[]; phase: string;
   state: string; label: string; note: string; ago: string; tasks: string; cost: string; turns: string;
 };
 
 export function boardRow(p: Project, now: number): BoardRow {
   const { cur } = milestoneStack(p);
   return {
-    root: p.root, name: nameOf(p), tone: healthTone(p),
+    id: idOf(p), root: p.root, flavor: flavorOf(p), name: nameOf(p), tone: healthTone(p),
     path: (p.project_root || p.root) + (p.worktree_root ? ` · Worktree: ${p.worktree_root}` : ""),
     number: cur.number, slug: cur.slug, cells: phaseCells(p), phase: p.phase || "No phase recorded",
     state: stateOf(p), label: stateLabel(p), note: reasons(p), ago: ago(p.last_activity_iso, now),
@@ -56,7 +56,9 @@ export function setupPill(setup: ProjectSetup | undefined, latest: string | null
 export function updateBanner(hosts: HostInfo[], plugin: PluginStatus | null, projects: Project[]): { count: number; title: string; text: string } | null {
   if (!plugin) return null;
   const skills = pendingSkills(hosts, plugin).map((row) => "skills for " + row.label);
+  // Only GSD Path cards have a runtime; other frameworks in the same folder share it.
   const runtimes = projects.filter((p) => {
+    if (flavorOf(p)) return false;
     const setup = plugin.projects.find((item) => item.root === p.root);
     return setup && runtimePending(setup, targetVersion(plugin));
   }).map((p) => "runtime for " + nameOf(p));

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { MouseEvent } from "react";
 import { filesHash, projectHash } from "../route";
 import { api, openUrl } from "../shell";
-import { int, nameOf } from "../status";
+import { idOf, int, nameOf } from "../status";
 import type { Project } from "../status";
 
 type Entry = { path: string; group: string };
@@ -20,7 +20,7 @@ const GROUPS = ["Project records", "Archived milestone", "Repository"];
 const request = <T,>(params: Record<string, string>) => api<T>("GET", "/api/project-files?" + new URLSearchParams(params));
 
 export function Files({ project, path }: { project: Project; path: string }) {
-  const root = project.root;
+  const root = project.root, id = idOf(project);
   const [listing, setListing] = useState<Listing | null>(null);
   const [history, setHistory] = useState<History | null>(null);
   const [content, setContent] = useState<Content | null>(null);
@@ -62,7 +62,7 @@ export function Files({ project, path }: { project: Project; path: string }) {
     const base = new URL(path, "http://project.invalid/");
     try {
       const target = new URL(href, base);
-      if (target.origin === base.origin) location.hash = filesHash(root, decodeURIComponent(target.pathname.slice(1)));
+      if (target.origin === base.origin) location.hash = filesHash(id, decodeURIComponent(target.pathname.slice(1)));
     } catch { /* not a path: ignore */ }
   };
 
@@ -73,7 +73,7 @@ export function Files({ project, path }: { project: Project; path: string }) {
   return (
     <main className="page project">
       <a className="crumb" href="#/projects">‹ Projects</a> <span className="sub">/</span>{" "}
-      <a className="crumb" href={projectHash(root)}>{nameOf(project)}</a>
+      <a className="crumb" href={projectHash(id)}>{nameOf(project)}</a>
       <div className="phead"><h1 className="title">History &amp; files</h1><span className="sub">Read-only · {nameOf(project)}</span></div>
       <p className="note">Current files and committed versions. Uncommitted older contents are not retained by the watcher.</p>
       <div className="card files">
@@ -86,7 +86,7 @@ export function Files({ project, path }: { project: Project; path: string }) {
               return files.length > 0 && <div key={group}>
                 <h3>{group}</h3>
                 {files.map((file) => (
-                  <a key={file.path} href={filesHash(root, file.path)} aria-current={file.path === path ? "page" : undefined}>
+                  <a key={file.path} href={filesHash(id, file.path)} aria-current={file.path === path ? "page" : undefined}>
                     {file.path.split("/").pop()}<small>{file.path.split("/").slice(0, -1).join("/") || "Project root"}</small>
                   </a>
                 ))}

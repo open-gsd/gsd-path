@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple
 from . import __version__
 from . import env_files, hosts, project_ops, settings_api, stats
 from .history import append_event, resolve_history_path
-from .model import aggregate
+from .model import PATH_FLAVOR, aggregate
 from .plugin import OP_LOCK, PluginManager
 from .path_settings import configure
 from .project_files import FileAccessError, request_files
@@ -360,7 +360,7 @@ async function saveConfig(key, reset=false) {
 function pathConfigPage() {
   const data = CFG.data, disabled = CFG.busy || data?.locked;
   const options = (values, current) => values.map(([value, label]) => `<option value="${esc(value)}" ${value === current ? 'selected' : ''}>${esc(label)}</option>`).join('');
-  const scope = `<label>Settings for<select data-config-scope ${CFG.busy ? 'disabled' : ''}>${options([['','User defaults'], ...(DATA.projects || []).map(p => [p.root, p.repository || p.project || p.root])], CFG.root)}</select></label>`;
+  const scope = `<label>Settings for<select data-config-scope ${CFG.busy ? 'disabled' : ''}>${options([['','User defaults'], ...(DATA.projects || []).filter(p => (p.flavor || 'gsd-path') === 'gsd-path').map(p => [p.root, p.repository || p.project || p.root])], CFG.root)}</select></label>`;
   const feedback = `<p role="${CFG.error ? 'alert' : 'status'}">${esc(CFG.error || CFG.message || (CFG.busy ? 'Saving…' : ''))}</p>`;
   if (!data) return scope + feedback + (CFG.error ? '' : '<p class="dim">Loading settings…</p>');
   const setting = (key, label, choices, note) => {
@@ -412,6 +412,8 @@ function setHash() {
   else if (CState.view === "board") history.replaceState(null, "", location.pathname);
   else history.replaceState(null, "", "#" + CState.view);
 }
+// Cards from gsd-pi and gsd-core name their framework; GSD Path cards stay as before.
+const flavorTag = p => p.flavor && p.flavor !== 'gsd-path' ? ` <small class="dim">${esc(p.flavor)}</small>` : '';
 function openProject(root) { CState.view = "project"; CState.root = root; setHash(); render(); window.scrollTo(0, 0); loadActivity().then(render); }
 function navigate(view) {
   CState.view = view;
@@ -640,7 +642,7 @@ function boardRow(p) {
   const folder=p.project_root||p.root;
   const location=`Project folder: ${folder}${p.worktree_root?' · Worktree: '+p.worktree_root:''}`;
   const reasons=(p.attention||[]).map(a=>a.label).filter(Boolean).join(' · ');
-  return `<tr class="prow ${st}" data-root="${esc(p.root)}"><td><button class="pname" data-root="${esc(p.root)}" aria-label="Open ${esc(p.repository||p.project||p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span><span>${esc(p.repository||p.project||p.root)}</span></button><div class="ppath">${esc(location)}</div></td>
+  return `<tr class="prow ${st}" data-root="${esc(p.id||p.root)}"><td><button class="pname" data-root="${esc(p.id||p.root)}" aria-label="Open ${esc(p.repository||p.project||p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span><span>${esc(p.repository||p.project||p.root)}</span>${flavorTag(p)}</button><div class="ppath">${esc(location)}</div></td>
     <td><div class="milestone-name"><span class="mono dim">${esc(cur.number)}</span> ${esc(cur.slug)}</div><div class="milestone-phase">${phaseMeter(p)}<span class="phlabel">${esc(p.phase||'No phase recorded')}</span></div></td>
     <td><span class="state ${st}">${esc(stateLabel(p))}</span>${reasons?`<p class="health-note">${esc(reasons)}</p>`:''}<div class="ago">${ago(p.last_activity_iso)}</div></td><td class="n">${p.tasks_total?`${p.tasks_done||0}/${p.tasks_total}`:DASH}</td><td class="n">${sp.turns&&sp.cost!=null?money(sp.cost):DASH}<div class="ago">${sp.turns?int(sp.turns)+' turns':'No matched sessions'}</div></td></tr>`;
 }
@@ -737,7 +739,7 @@ function ledgerTable(p) {
     `<tr><td class="mono">${esc(String(e.recorded_at || "").slice(0, 16).replace("T", " "))}</td><td class="mono">${esc(e.command || "")}</td><td class="mono">${esc(String(e.commit || "").slice(0, 7))}</td><td class="st">${verdict(e.result)}</td></tr>`).join("")}</table></div>`;
 }
 function activityTable(p) {
-  const events = ACTIVITY.filter(e => e.root === p.root).slice(0, 30);
+  const events = ACTIVITY.filter(e => (e.id||e.root) === (p.id||p.root)).slice(0, 30);
   return `<h2>Activity <span>recorded changes</span></h2>${events.length
     ? `<div class="tablewrap"><table class="t activity"><tr><th>When</th><th>Change</th><th>Detail</th></tr>${events.map(e =>
       `<tr><td class="mono">${esc(String(e.at || "").slice(0, 16).replace("T", " "))}</td><td>${esc(e.type)}</td><td>${esc(e.detail || "")}</td></tr>`).join("")}</table></div>`
@@ -770,8 +772,8 @@ function projectPage(p) {
   const facts = [["State", stateLabel(p)], ["Health", healthReason(p)], ["Milestone", cur.number], ["Branch", git.branch || p.branch || "—"], ["Head", head],
                  ...(p.integration ? [["Integration", p.integration]] : []),
                  ["Updated", ago(p.last_activity_iso)], ["Cost", sp && sp.turns ? money(sp.cost) : "—"], ["Turns", sp && sp.turns ? int(sp.turns) : "—"]];
-  return `<article class="project" data-root="${esc(p.root)}">
-    <div class="project-tools">${sourceLink('.project/STATE.md','History & files')}</div><div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.repository || p.project || p.root)}</h1><span class="mono">Project folder: ${esc(p.project_root||p.root)}</span>${p.worktree_root?`<span class="mono">Worktree: ${esc(p.worktree_root)}</span>`:''}</div>
+  return `<article class="project" data-root="${esc(p.id||p.root)}">
+    <div class="project-tools">${sourceLink('.project/STATE.md','History & files')}</div><div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.repository || p.project || p.root)}${flavorTag(p)}</h1><span class="mono">Project folder: ${esc(p.project_root||p.root)}</span>${p.worktree_root?`<span class="mono">Worktree: ${esc(p.worktree_root)}</span>`:''}</div>
     <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
     ${p.handoff ? `<p class="runtime-handoff">${esc(p.handoff.outcome)} — ${esc(p.handoff.next)}</p>` : ""}
     ${p.vision ? `<p class="vision">${esc(p.vision)}</p>` : ""}
@@ -867,10 +869,10 @@ function render() {
   const connection = ONLINE === null ? "Connecting…" : ONLINE ? (DATA.generated_at ? "Updated " + esc(shortT(DATA.generated_at)) : "Connected") : "Offline · showing last update";
   const settings = `<details class="settings-menu"><summary aria-label="Settings" title="Settings">${ICON.settings}</summary><nav aria-label="Settings"><button class="btn" data-nav="config">Path settings</button><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button><div class="appearance" role="group" aria-label="Appearance">Appearance<div class="segc">${THEMES.map(t => `<button data-theme-choice="${t}" aria-pressed="${THEME === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div></div></nav></details>`;
   const status = `<button class="btn" data-action="refresh" aria-label="Refresh dashboard">Refresh</button><span class="connection" role="status"><span class="dot ${ONLINE === null ? "" : ONLINE ? "g" : "r"}"></span>${connection}</span>`;
-  const current = ["project","files"].includes(CState.view) ? projects.find(p => p.root === CState.root) : null;
+  const current = ["project","files"].includes(CState.view) ? projects.find(p => (p.id||p.root) === CState.root) : null;
   let header, body;
   if (current) {
-    header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to projects">‹ Projects</button><select class="switcher" data-switch aria-label="Project">${projects.map(q => `<option value="${esc(q.root)}"${q.root === current.root ? " selected" : ""}>${esc(q.repository || q.project || q.root)}</option>`).join("")}</select><span class="spacer"></span>${status}${settings}</header>`;
+    header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to projects">‹ Projects</button><select class="switcher" data-switch aria-label="Project">${projects.map(q => `<option value="${esc(q.id||q.root)}"${q === current ? " selected" : ""}>${esc(q.repository || q.project || q.root)}</option>`).join("")}</select><span class="spacer"></span>${status}${settings}</header>`;
     body = `<main class="page">${CState.view==='files'?filesPage(current):projectPage(current)+projectRecords(current)}</main>`;
   } else {
     header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="OpenGSD Path projects">${ICON.mark}OpenGSD Path</button><nav class="topnav" aria-label="Main"><button data-nav="board" aria-current="${CState.view==='board'?'page':'false'}">Projects</button><button data-nav="config" aria-current="${['config','folders','plugin'].includes(CState.view)?'page':'false'}">Settings</button></nav><span class="spacer"></span>${status}${settings}</header>`;
@@ -1037,7 +1039,9 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 payload["hosts"] = self.plugin.detect_global()
                 payload["releases"] = self.plugin.releases()
-                roots = sorted(str(status.root) for status in self.watcher.projects.values())
+                # Setup rows are for GSD Path installs; other frameworks have none.
+                roots = sorted(str(status.root) for status in self.watcher.projects.values()
+                               if status.flavor == PATH_FLAVOR)
                 payload["projects"] = [self.plugin.detect_project(root) for root in roots]
             except Exception as error:  # detection must never break the dashboard
                 payload["hosts"] = {}

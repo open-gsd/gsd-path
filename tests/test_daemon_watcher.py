@@ -176,6 +176,25 @@ class WatcherTests(unittest.TestCase):
         self.assertEqual(status.attention, [])
         self.assertEqual(calls, [str(self.project)])
 
+    def test_other_framework_gets_its_own_card(self) -> None:
+        make_project(self.project)
+        (self.project / ".planning").mkdir()
+        (self.project / ".planning" / "STATE.md").write_text("---\nmilestone: v1.0\n---\n")
+        core_id = f"{self.project}::gsd-core"
+        watcher = self.watcher()
+        added = self.events_of(watcher.poll_once(), "project-added")
+        self.assertEqual(sorted(event["id"] for event in added), [str(self.project), core_id])
+        self.assertEqual(watcher.projects[str(self.project)].flavor, "gsd-path")
+        core = watcher.projects[core_id].to_dict()
+        self.assertEqual((core["id"], core["root"], core["flavor"]), (core_id, str(self.project), "gsd-core"))
+        self.assertEqual(core["workflow"]["state"], "unverified")
+        # Removing one framework's folder removes only its card.
+        (self.project / ".planning" / "STATE.md").unlink()
+        (self.project / ".planning").rmdir()
+        removed = self.events_of(watcher.poll_once(), "project-removed")
+        self.assertEqual([(event["id"], event["root"]) for event in removed], [(core_id, str(self.project))])
+        self.assertEqual(list(watcher.projects), [str(self.project)])
+
 
 if __name__ == "__main__":
     unittest.main()

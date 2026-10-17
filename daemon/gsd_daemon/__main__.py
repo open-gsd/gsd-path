@@ -6,20 +6,22 @@ import sys
 
 from . import __version__
 from .config import Config
-from .discovery import scan
-from .model import aggregate
+from .discovery import scan_projects
+from .flavors import probe_foreign, project_id
+from .model import PATH_FLAVOR, aggregate
 from .probe import probe_project, utc_now_iso
 from .serve import DEFAULT_PORT
 from .watcher import Watcher
 
 
 def _cmd_scan(config: Config) -> dict:
-    roots = scan(config.parents, config.excludes, config.max_depth)
     projects = []
-    for root in roots:
-        status = probe_project(root, enrich=False)
+    for root, flavor in scan_projects(config.parents, config.excludes, config.max_depth):
+        status = probe_project(root, enrich=False) if flavor == PATH_FLAVOR else probe_foreign(root, flavor)
         projects.append({
             "root": status.root,
+            "id": project_id(root, flavor),
+            "flavor": flavor,
             "project": status.project,
             "milestone": status.milestone,
             "phase": status.phase,

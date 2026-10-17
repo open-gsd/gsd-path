@@ -4,7 +4,7 @@ import { boardRow, filterCounts, setupPill, updateBanner, visibleProjects } from
 import { projectHash, settingsHash } from "../route";
 import { targetVersion } from "../skills";
 import type { usePlugin } from "../skillsApi";
-import { DASH } from "../status";
+import { DASH, flavorOf } from "../status";
 import type { Status } from "../status";
 import { Cells } from "../ui";
 import "./skills.css";
@@ -53,10 +53,10 @@ export function Board({ status, offline, now, skills }: { status: Status | null;
           <div className="board-th">
             <span>Project</span><span>Current milestone</span><span>Status</span><span className="num">Tasks</span><span className="num">Usage</span><span>Setup</span>
           </div>
-          {shown.map((project) => ({ ...boardRow(project, now), setup: setupOf(project.root) })).map((row) => (
-            <div key={row.root} className="board-row" onClick={() => { location.hash = projectHash(row.root); }}>
+          {shown.map((project) => ({ ...boardRow(project, now), setup: flavorOf(project) ? null : setupOf(project.root) })).map((row) => (
+            <div key={row.id} className="board-row" onClick={() => { location.hash = projectHash(row.id); }}>
               <div>
-                <a className="pname" href={projectHash(row.root)}><i className={`dot small ${row.tone}`} />{row.name}</a>
+                <a className="pname" href={projectHash(row.id)}><i className={`dot small ${row.tone}`} />{row.name}{row.flavor && <span className="pill mute flavor">{row.flavor}</span>}</a>
                 <div className="ppath">{row.path}</div>
               </div>
               <div>
@@ -72,6 +72,7 @@ export function Board({ status, offline, now, skills }: { status: Status | null;
               <div className="num">{row.cost}<div className="meta">{row.turns}</div></div>
               <div>
                 {row.setup ? <span className={`pill ${row.setup.tone}`}>{row.setup.label}</span>
+                  : row.flavor ? <span className="meta">{DASH}</span>
                   : <span className="meta" title={setupError ?? undefined}>{plugin ? "Not reported" : setupError ? "Not available" : DASH}</span>}
               </div>
             </div>

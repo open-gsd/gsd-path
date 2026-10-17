@@ -5,6 +5,8 @@ import re
 import subprocess
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from .flavors import foreign_flavors
+from .model import PATH_FLAVOR
 from .probe import is_not_started, is_project_root
 from .gitinfo import _git
 from . import subprocess_platform
@@ -82,22 +84,39 @@ def _dedupe_worktrees(roots: List[str]) -> List[str]:
             for members in groups.values()]
 
 
-def scan(parents: Iterable[str], excludes: Iterable[str] = (), max_depth: int = 6) -> List[str]:
+def scan_projects(parents: Iterable[str], excludes: Iterable[str] = (),
+                  max_depth: int = 6) -> List[Tuple[str, str]]:
+    """(root, flavor) for every project card: GSD Path, gsd-pi and gsd-core."""
     excluded = _normalized(excludes)
     found: List[str] = []
+    foreign: List[Tuple[str, str]] = []
     for parent in _normalized(parents):
         if _is_excluded(parent, excluded) or not os.path.isdir(parent):
             continue
-        _walk(parent, 0, max_depth, excluded, found)
+        _walk(parent, 0, max_depth, excluded, found, foreign)
     for root in list(found):
         found.extend(path for path in _bound_worktrees(root) if not _is_excluded(path, excluded))
-    return sorted(_dedupe_worktrees(found))
+    return sorted([(root, PATH_FLAVOR) for root in _dedupe_worktrees(found)] + _dedupe_foreign(foreign))
 
 
-def _walk(current: str, depth: int, max_depth: int,
-          excluded: List[str], found: List[str]) -> None:
+def scan(parents: Iterable[str], excludes: Iterable[str] = (), max_depth: int = 6) -> List[str]:
+    return [root for root, flavor in scan_projects(parents, excludes, max_depth) if flavor == PATH_FLAVOR]
+
+
+def _dedupe_foreign(pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    # One card per framework per repository: the main checkout wins over its worktrees.
+    groups: Dict[Tuple[str, str], List[str]] = {}
+    for root, flavor in pairs:
+        groups.setdefault((os.path.normcase(_git_common_dir(root) or root), flavor), []).append(root)
+    return [(min(members, key=_dedupe_rank), flavor) for (_, flavor), members in groups.items()]
+
+
+def _walk(current: str, depth: int, max_depth: int, excluded: List[str],
+          found: List[str], foreign: List[Tuple[str, str]]) -> None:
     if depth > max_depth or _is_excluded(current, excluded):
         return
+    # Other frameworks never stop the walk, so they never hide a GSD Path project below them.
+    foreign.extend((current, flavor) for flavor in foreign_flavors(current))
     if is_project_root(current):
         found.append(current)
         return
@@ -115,7 +134,7 @@ def _walk(current: str, depth: int, max_depth: int,
         name = entry.name
         if name in SKIP_DIRS or name.startswith("."):
             continue
-        _walk(entry.path, depth + 1, max_depth, excluded, found)
+        _walk(entry.path, depth + 1, max_depth, excluded, found, foreign)
     # A project install with no milestone is listed as "Not started", but only
     # when no project is below it, so it never hides a started project.
     if len(found) == before and is_not_started(current):

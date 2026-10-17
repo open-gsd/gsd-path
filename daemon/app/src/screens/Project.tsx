@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { facts, milestoneRows, nowBox, phaseTrack, usageTiles } from "../project";
 import { filesHash, statsHash } from "../route";
 import { api } from "../shell";
-import { DASH, duration, healthTone, int, money, nameOf, shortDate, shortTime, tokens } from "../status";
+import { DASH, duration, flavorOf, healthTone, idOf, int, money, nameOf, shortDate, shortTime, tokens } from "../status";
 import type { Project } from "../status";
 import { Fold, Table } from "../ui";
 import type { usePlugin } from "../skillsApi";
@@ -12,7 +12,7 @@ import { SetupCard } from "./SetupCard";
 
 type Row = Record<string, unknown>;
 type Records = { verify_records: Row[]; usage_records: Row[]; turns: Row[]; activity: Row[]; sources: Row[] };
-type Activity = { root?: string; at?: string; type?: string; detail?: string };
+type Activity = { root?: string; id?: string; at?: string; type?: string; detail?: string };
 
 const WAVE_MARK = { done: "✓", now: "●", blocked: "●", todo: "○" };
 const GOOD = new Set(["pass", "met", "approve", "approved"]);
@@ -31,6 +31,9 @@ function RecordTable({ rows, columns }: { rows: Row[] | undefined; columns: [str
   return <Table head={columns.map(([, label]) => label)} rows={rows.map((row) => columns.map(([key]) => cell(row[key])))} />;
 }
 
+// gsd-pi and gsd-core projects have no GSD Path install to set up.
+const NoSetup = ({ children }: { children: ReactNode }) => <>{children}</>;
+
 export function ProjectPage({ project: p, now, stamp, skills }: { project: Project; now: number; stamp: string | null; skills: ReturnType<typeof usePlugin> }) {
   const [activity, setActivity] = useState<Activity[]>([]);
   const [records, setRecords] = useState<{ data?: Records; error?: string; busy?: boolean; at?: string }>({});
@@ -39,23 +42,24 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
     // Keep the last list when a read fails.
     api<{ events?: Activity[] }>("GET", "/activity").then((result) => setActivity(result.events ?? []), () => {});
   }, [p.root, stamp]);
-  useEffect(() => setRecords({}), [p.root]);
+  useEffect(() => setRecords({}), [idOf(p)]);
 
   const loadRecords = async () => {
     setRecords((old) => ({ ...old, busy: true, error: undefined }));
     try {
-      const data = await api<Records>("GET", "/api/project-data?" + new URLSearchParams({ root: p.root }));
+      const data = await api<Records>("GET", "/api/project-data?" + new URLSearchParams({ root: idOf(p) }));
       setRecords({ data, at: new Date().toLocaleTimeString() });
     } catch (error) {
       setRecords({ error: String(error) });
     }
   };
 
-  const source = (path: string, label: string) => <a className="link" href={filesHash(p.root, path)}>{label} ↗</a>;
+  const source = (path: string, label: string) => <a className="link" href={filesHash(idOf(p), path)}>{label} ↗</a>;
+  const Setup = flavorOf(p) ? NoSetup : SetupCard;
   const box = nowBox(p), tiles = usageTiles(p), sp = p.spend;
   const tasks = p.tasks ?? [], criteria = p.criteria ?? [], reviews = p.reviews ?? [], ledger = p.ledger ?? [];
   const answers = p.answers ?? [], attention = p.attention ?? [];
-  const events = activity.filter((event) => event.root === p.root).slice(0, 30);
+  const events = activity.filter((event) => (event.id ?? event.root) === idOf(p)).slice(0, 30);
   const section = (title: string, count: string | number, rows: unknown[], table: ReactNode) =>
     rows.length > 0 && <Fold title={title} count={count}>{table}</Fold>;
 
@@ -63,10 +67,10 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
     <main className="page project">
       <a className="crumb" href="#/projects">‹ Projects</a>
       <div className="phead">
-        <h1 className="title"><i className={`dot ${healthTone(p)}`} />{nameOf(p)}</h1>
+        <h1 className="title"><i className={`dot ${healthTone(p)}`} />{nameOf(p)}{flavorOf(p) && <span className="pill mute flavor">{flavorOf(p)}</span>}</h1>
         <span className="mono">Project folder: {p.project_root || p.root}</span>
         {p.worktree_root && <span className="mono">Worktree: {p.worktree_root}</span>}
-        <a className="right" href={filesHash(p.root)}>History &amp; files ↗</a>
+        <a className="right" href={filesHash(idOf(p))}>History &amp; files ↗</a>
       </div>
       <dl className="facts">{facts(p, now).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>
       {p.handoff && <p className="handoff">{p.handoff.outcome} — {p.handoff.next}</p>}
@@ -150,11 +154,11 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
         </section>
 
         <section>
-          <SetupCard project={p} skills={skills}>
+          <Setup project={p} skills={skills}>
           <h2>Usage</h2>
-          {!tiles || !sp ? <p className="note">No host session logs matched this project yet. <a href={statsHash(p.root)}>See charts ›</a></p> : <>
+          {!tiles || !sp ? <p className="note">No host session logs matched this project yet. <a href={statsHash(idOf(p))}>See charts ›</a></p> : <>
             <dl className="tiles">{tiles.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>
-            <a className="see-charts" href={statsHash(p.root)}>See charts ›</a>
+            <a className="see-charts" href={statsHash(idOf(p))}>See charts ›</a>
             <h2>Models</h2>
             <Table head={["Model", "Host", "Turns", "Tokens", "Cost"]} num={[2, 3, 4]} rows={(sp.models ?? []).map((m) => [
               <span className="mono">{m.model}</span>, m.host, int(m.turns), tokens(m.tokens), money(m.cost)])} />
@@ -180,7 +184,7 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
               <span className="mono">{shortDate(event.at)}</span>, event.type, event.detail])} />
           ) : <p className="note">No recorded changes yet.</p>}
           {p.lesson && <><h2>Latest lesson</h2><p className="vision">{p.lesson}</p></>}
-          </SetupCard>
+          </Setup>
         </section>
       </div>
 

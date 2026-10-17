@@ -4,6 +4,14 @@ Changes to the desktop app in `daemon/app` and the monitor daemon it bundles.
 The app has its own version and `app-v<version>` tags, separate from the
 [npm package](../../CHANGELOG.md). Newest first.
 
+## [Unreleased]
+
+### Added
+- The Projects board lists gsd-pi (`.gsd/`) and gsd-core (`.planning/`)
+  projects. A folder with more than one framework shows one card per
+  framework, with a framework badge. These cards are read-only and show as
+  **Unverified** until the app reads their status.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed

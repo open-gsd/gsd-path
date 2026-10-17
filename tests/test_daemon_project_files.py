@@ -188,6 +188,21 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertEqual(sources['.project/build/usage.jsonl']['status'], 'partial')
         self.assertEqual(sources['.project/intent/INTENT.md']['status'], 'missing')
 
+    def test_other_framework_card_is_selected_by_its_id(self):
+        core_id = f'{self.root}::gsd-core'
+        self.watcher.projects[core_id] = ProjectStatus(root=str(self.root), id=core_id, flavor='gsd-core')
+        code, data = self.request(root=core_id)
+        self.assertEqual(code, 200, data)
+        self.assertIn('.project/STATE.md', {f['path'] for f in data['files']})
+        self.assertEqual(self.request(root=f'{self.root}::gsd-pi')[0], 403)
+        conn = http.client.HTTPConnection('127.0.0.1', self.port)
+        self.addCleanup(conn.close)
+        conn.request('GET', '/api/project-data?' + urlencode({'root': core_id}))
+        response = conn.getresponse()
+        data = json.loads(response.read())
+        self.assertEqual(response.status, 200, data)
+        self.assertEqual((data['root'], data['id'], data['project']['flavor']), (str(self.root), core_id, 'gsd-core'))
+
     def test_markdown_preview_does_not_execute_html_or_fetch_images(self):
         import importlib.util
         if importlib.util.find_spec('markdown_it') is None:
