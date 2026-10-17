@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { canReset, fieldValue, integrationOptions, lockOf, modelKey, pathChanges, savedNote, scopeQuery } from "./settingsPath";
+import { canReset, fieldValue, integrationOptions, lockOf, modelKey, pathChanges, pathProjects, savedNote, scopeQuery } from "./settingsPath";
 import type { PathData } from "./settingsPath";
+import type { Project } from "./status";
 
 const user: PathData = {
   scope: "user", locked: null, approved_review_panel: null,
@@ -19,6 +20,14 @@ const project: PathData = {
     review_panel: { value: "off", source: "built-in" },
   },
 };
+
+describe("pathProjects", () => {
+  it("offers only GSD Path cards for the project scope", () => {
+    const card = (root: string, flavor?: string) => ({ root, id: flavor && flavor !== "gsd-path" ? `${root}::${flavor}` : root, flavor }) as Project;
+    const shown = pathProjects([card("/work/both", "gsd-path"), card("/work/both", "gsd-core"), card("/work/pi", "gsd-pi"), card("/work/old")]);
+    expect(shown.map((p) => p.id)).toEqual(["/work/both", "/work/old"]);
+  });
+});
 
 describe("scopeQuery", () => {
   it("names the project root only for project scope", () => {

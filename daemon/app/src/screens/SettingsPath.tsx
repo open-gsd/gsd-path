@@ -1,6 +1,6 @@
 // Settings → Path settings: user defaults or one project. The same fields and rules as the daemon dashboard.
 import { useEffect, useState } from "react";
-import { canReset, fieldValue, integrationOptions, lockOf, modelKey, pathChanges, savedNote, scopeQuery } from "../settingsPath";
+import { canReset, fieldValue, integrationOptions, lockOf, modelKey, pathChanges, pathProjects, savedNote, scopeQuery } from "../settingsPath";
 import type { PathData, PathDrafts } from "../settingsPath";
 import { api } from "../shell";
 import { nameOf } from "../status";
@@ -9,7 +9,7 @@ import { FixText } from "../ui";
 import { SaveBar } from "./SettingsParts";
 
 export function PathTab({ status }: { status: Status | null }) {
-  const projects = status?.projects ?? [];
+  const projects = pathProjects(status?.projects ?? []);
   /** The project root; empty for the user defaults. */
   const [root, setRoot] = useState("");
   const [host, setHost] = useState("");
