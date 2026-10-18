@@ -200,6 +200,14 @@ class GsdCoreReaderTests(unittest.TestCase):
             ("01-01", "done"), ("02-01", "blocked"), ("03-01", "done"), ("03-02", "pending")])
         self.assertIn(("blocked", "02-01"), {(a["kind"], a["ref"]) for a in card["attention"]})
 
+    def test_only_superseded_nested_plans_read_like_no_plans(self) -> None:
+        state = STATE.format(status="planning").replace("current_phase: 2", "current_phase: 3")
+        (self.base / "STATE.md").write_text(state, encoding="utf-8")
+        gamma = self.base / "phases" / "03-gamma-work"
+        write(gamma / "03-RESEARCH.md", "research\n")
+        write(gamma / "plans" / "PLAN-01-store.md", "---\nphase: 03\nstatus: superseded\n---\n")
+        self.assertEqual(self.probe()["phase"], "plan")  # same as the flat layout
+
     def test_phase_numbers_compare_as_numbers(self) -> None:
         write(self.base / "phases" / "01.1-hotfix" / "01.1-CONTEXT.md", "ctx\n")
         write(self.base / "phases" / "01.10-later" / "01.10-RESEARCH.md", "research\n")

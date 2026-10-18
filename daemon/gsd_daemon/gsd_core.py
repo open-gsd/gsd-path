@@ -110,8 +110,6 @@ def _step(folder: Path, plans: List[TaskSummary], verdict: Optional[str]) -> Opt
         return None
     if plans:
         return "verify" if all(plan.status == "done" for plan in plans) else "execute"
-    if (folder / "plans").is_dir() and any(NESTED_PLAN_RE.match(p.name) for p in (folder / "plans").iterdir()):
-        return "execute"  # every nested plan is superseded: nothing left to verify yet
     names = {entry.name for entry in folder.iterdir()} if folder.is_dir() else set()
     if any(name.endswith("-RESEARCH.md") for name in names):
         return "plan"
