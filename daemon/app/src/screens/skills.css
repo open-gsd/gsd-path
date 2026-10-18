@@ -51,3 +51,4 @@ a.btn:hover{color:var(--text)}
 .board.with-setup{min-width:780px}
 .board.with-setup .board-th,.board.with-setup .board-row{grid-template-columns:minmax(150px,1.4fr) minmax(150px,1.1fr) minmax(110px,1fr) 44px 92px 132px}
 .board.with-setup .meta{margin-top:0}
+.fw-versions{white-space:pre-line}

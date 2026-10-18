@@ -5,6 +5,7 @@ import { failure, notDetected, sharedRoots, skillRows, targetVersion } from "../
 import type { Failure, SkillRow, UninstallPlan } from "../skills";
 import { applyUninstall, installSkills, message, planUninstall } from "../skillsApi";
 import type { usePlugin } from "../skillsApi";
+import { Frameworks } from "./Frameworks";
 import { FailureCard, Output, PlanBox, ReleasePicker } from "./SkillsParts";
 import "./skills.css";
 
@@ -128,6 +129,8 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
             onConfirm={() => remove(panel.row)} onCancel={() => setPanel(null)} />
         </div>
       )}
+
+      <Frameworks plugin={plugin} reload={reload} />
 
       {plugin && (
         <p className="note">

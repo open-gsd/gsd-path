@@ -411,7 +411,8 @@ one global op-lock — a second concurrent operation gets
   local_hosts?, hooks?, dry_run?}` → `{ok, argv, stdout_tail, error}`.
 - `POST /api/plugin/update` — `{scope, root?, dry_run?}`.
 - `POST /api/plugin/check` — reads the registry now →
-  `{ok, error, latest, update_available, installed}`. `latest` is the registry
+  `{ok, error, latest, update_available, installed, frameworks, framework_errors}`.
+  The same check reads the latest gsd-pi and gsd-core versions (see below). `latest` is the registry
   `latest`; `update_available` compares the installed versions with the
   release in use (the chosen release, or `latest` when none is chosen).
 - `POST /api/plugin/release` — `{version}` chooses a published release;
@@ -447,6 +448,39 @@ one global op-lock — a second concurrent operation gets
   nothing remains; git hooks (`pre-commit`, `commit-msg`, `pre-push`) only
   when marker-matched. Nothing under `.project/` is ever planned or
   removed.
+
+### gsd-pi and gsd-core versions
+
+`GET /api/plugin/status` also carries `frameworks`: for `gsd-pi` and
+`gsd-core`, `{installed, hosts, latest, checked, update_available, detected}`.
+
+- `installed` is the version of the global npm package behind the `gsd` or
+  `gsd-core` command (found on `PATH` and the usual Node folders, because the
+  app's daemon starts with a short `PATH`).
+- `hosts` lists gsd-core's agent host installs, `[{host, dir, version}]`,
+  read from `<config dir>/gsd-core/VERSION` in each host's config folder
+  (the folders gsd-core itself uses, with their env overrides).
+- `latest` comes from the npm registry only when **Check for updates** runs
+  (`POST /api/plugin/check`), and is cached in `~/.gsd-path/frameworks.json`.
+  Until then no update is claimed.
+
+`POST /api/frameworks/update` — `{name: "gsd-pi"|"gsd-core", dry_run?}`.
+`dry_run` returns the commands without running them →
+`{ok, commands, stdout_tail, error}`; without it the commands run in order, the
+first failure stops the update, and each run is logged to
+`~/.gsd-path/frameworks.log`. Like the plugin routes it needs the app token and
+runs one operation at a time. The commands are each framework's own update:
+
+- gsd-pi: `gsd update` (gsd-pi installs `@opengsd/gsd-pi@latest` with the
+  package manager that owns it and checks the result).
+- gsd-core: `npm install -g @opengsd/gsd-core@latest` when the global command
+  is installed, then for every host install
+  `npx -y --package=@opengsd/gsd-core@latest -- gsd-core --<host> --global --config-dir <dir>`,
+  the same command as gsd-core's `/gsd-update`.
+
+After a successful update the framework's own cached update notice
+(`~/.gsd/.update-check`, `~/.cache/gsd/gsd-update-check*.json`) is removed,
+as its updater does.
 
 Power users can always drive the plugin installer directly with
 `node scripts/install.mjs`, `python3 scripts/install.py`, or `npx @opengsd/gsd-path`

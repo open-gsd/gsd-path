@@ -408,7 +408,7 @@ class PostOriginTests(unittest.TestCase):
     """Every POST route refuses cross-site pages, DNS rebinding, and non-JSON bodies."""
 
     ROUTES = ("/api/plugin/install", "/api/plugin/update", "/api/plugin/uninstall",
-              "/api/plugin/check", "/api/plugin/release",
+              "/api/plugin/check", "/api/plugin/release", "/api/frameworks/update",
               "/api/config/parents", "/api/config", "/api/path-config", "/api/refresh")
 
     def setUp(self) -> None:
@@ -424,14 +424,15 @@ class PostOriginTests(unittest.TestCase):
         self.scans = []
         self.watcher = Watcher(Config(parents=[], history=False, session_dirs=[]))
         with mock.patch("threading.Thread.start"):  # no background poll: scans come only from requests
-            self.server = serve(self.watcher, port=0, plugin=self.plugin)
+            self.frameworks = mock.Mock()
+            self.server = serve(self.watcher, port=0, plugin=self.plugin, frameworks=self.frameworks)
         self.server.RequestHandlerClass.scan = staticmethod(lambda scan_sessions=True: self.scans.append(1))
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
         self.port = self.server.server_address[1]
-        self.body = json.dumps({"scope": "project", "root": str(self.root), "confirm": True,
+        self.body = json.dumps({"scope": "project", "root": str(self.root), "confirm": True, "name": "gsd-pi",
                                 "action": "add", "path": str(self.root)})
 
     def post(self, path, headers, body=None):
@@ -452,6 +453,7 @@ class PostOriginTests(unittest.TestCase):
                 status, payload = self.post(path, headers)
                 self.assertEqual(status, code, payload)
         self.assertEqual(self.plugin.method_calls, [])
+        self.assertEqual(self.frameworks.method_calls, [])  # no update ran
         self.assertEqual(self.scans, [])
         self.assertEqual(self.watcher.config.parents, [])
         self.assertFalse((self.root / "daemon.json").exists())

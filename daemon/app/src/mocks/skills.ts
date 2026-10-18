@@ -43,13 +43,33 @@ function slow<T>(work: () => T): Promise<T> {
   }, 900));
 }
 
+// gsd-pi and gsd-core, as the daemon's frameworks.status() reports them.
+const frameworks = {
+  "gsd-pi": { installed: "1.21.1", hosts: [], latest: "1.22.0", checked: "2026-10-18T12:00:00Z", update_available: true, detected: true },
+  "gsd-core": { installed: "1.11.0", latest: "1.17.0", checked: "2026-10-18T12:00:00Z", update_available: true, detected: true,
+    hosts: [{ host: "claude", dir: `${HOME}/.claude`, version: "1.13.0" }, { host: "codex", dir: `${HOME}/.codex`, version: "1.3.1" }] },
+};
+function updateFramework(data: Body & { name?: string }) {
+  const item = frameworks[data.name as keyof typeof frameworks];
+  const commands = data.name === "gsd-pi" ? [["/opt/homebrew/bin/gsd", "update"]]
+    : [["/opt/homebrew/bin/npm", "install", "-g", "@opengsd/gsd-core@latest"],
+      ...item.hosts.map((h) => ["/opt/homebrew/bin/npx", "-y", "--package=@opengsd/gsd-core@latest", "--", "gsd-core", `--${h.host}`, "--global", "--config-dir", h.dir])];
+  if (data.dry_run) return { ok: true, commands, stdout_tail: "", error: null };
+  return slow(() => {
+    item.installed = item.latest;
+    item.hosts.forEach((h) => { h.version = item.latest; });
+    item.update_available = false;
+    return { ok: true, commands, stdout_tail: commands.map((argv) => "$ " + argv.join(" ")).join("\n"), error: null };
+  });
+}
+
 function pluginStatus() {
   const hosts = Object.fromEntries(HOSTS.map(([id]) => {
     const root = rootOf(id);
     return [id, { installed: root in installed, version: installed[root] ?? null, root }];
   }));
   const latest = releases.latest;
-  return { latest, update_available: Object.values(installed).some((version) => version !== latest), hosts, projects, releases };
+  return { latest, update_available: Object.values(installed).some((version) => version !== latest), hosts, projects, releases, frameworks };
 }
 
 function install(body: { hosts?: string[]; dry_run?: boolean }) {
@@ -195,6 +215,7 @@ export function mockSkills(_method: string, url: URL, body: unknown): unknown {
       return releases;
     }
     case "/api/project/op": return projectOp(data);
+    case "/api/frameworks/update": return updateFramework(data);
     // Watched folders, for the setup wizard. The Settings page owns the other keys of this route.
   }
   return undefined;

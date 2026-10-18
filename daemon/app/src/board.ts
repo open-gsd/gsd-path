@@ -1,6 +1,6 @@
 // The Projects board: filters, search and one row per project.
 import { ago, DASH, flavorOf, healthTone, idOf, milestoneStack, nameOf, phaseCells, reasons, sortProjects, spendCell, stateLabel, stateOf } from "./status";
-import { isNewer, pendingSkills, targetVersion } from "./skills";
+import { isNewer, pendingFrameworks, pendingSkills, targetVersion } from "./skills";
 import type { HostInfo, PluginStatus, ProjectSetup } from "./skills";
 import type { Cell, Project, Tone } from "./status";
 
@@ -62,7 +62,7 @@ export function updateBanner(hosts: HostInfo[], plugin: PluginStatus | null, pro
     const setup = plugin.projects.find((item) => item.root === p.root);
     return setup && runtimePending(setup, targetVersion(plugin));
   }).map((p) => "runtime for " + nameOf(p));
-  const items = [...skills, ...runtimes];
+  const items = [...skills, ...runtimes, ...pendingFrameworks(plugin)];
   if (!items.length) return null;
   return { count: items.length, title: `${items.length} ${items.length === 1 ? "update" : "updates"} available`, text: items.join(", ") };
 }
