@@ -140,12 +140,11 @@ describe("failure", () => {
       text: "Permission denied writing to ~/.claude/skills. Run `chmod -R u+w ~/.claude/skills`, then try again.",
     });
   });
-  it("says nothing was changed only when the installer rolled back", () => {
+  it("says nothing was changed only when the installer rolled back or refused", () => {
     expect(failure("installed", ["Codex", "Zed"], "installation failed and was rolled back: disk full")).toMatchObject({
       title: "Codex and Zed were not installed", unchanged: "Nothing was changed.", fix: null });
-  });
-  it("warns that a partial install changed some folders", () => {
-    expect(failure("installed", ["Cursor"], "partial install (exit 2): cursor failed").unchanged)
-      .toBe("Some folders were changed. Read the installer output.");
+    expect(failure("installed", ["Cursor"], "installer refused the request (exit 2), nothing was changed: error: bad flag").unchanged)
+      .toBe("Nothing was changed.");
+    expect(failure("installed", ["Cursor"], "host cursor failed").unchanged).toBeNull();
   });
 });

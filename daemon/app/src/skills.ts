@@ -106,8 +106,7 @@ export function failure(done: "installed" | "updated" | "removed", labels: strin
   return {
     title: `${joinNames(labels)} ${labels.length > 1 ? "were" : "was"} not ${done}`,
     text: error,
-    unchanged: error.startsWith("partial install") ? "Some folders were changed. Read the installer output."
-      : error.includes("rolled back") ? "Nothing was changed." : null,
+    unchanged: error.startsWith("installer refused") || error.includes("rolled back") ? "Nothing was changed." : null,
     fix: error.split("`")[1] ?? null,
   };
 }
