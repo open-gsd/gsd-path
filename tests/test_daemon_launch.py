@@ -280,6 +280,34 @@ class VenvTests(LaunchCase):
         self.assertEqual(ensure_venv(installer), __version__)
         self.assertEqual(locked, [None])
 
+    @unittest.skipIf(sys.platform == "win32", "Windows venvs copy their launcher on every run")
+    def test_venv_made_by_another_python_is_rebuilt_for_this_python(self):
+        # Field case: a venv made by Xcode 3.9, upgraded by a launch that found python.org 3.14.
+        other = Path(self.tmp.name) / "other" / "python3"
+        other.parent.mkdir()
+        other.write_text("")
+        installer = self.installer(ScriptRunner(), fake_venv=False)
+        bin_dir = installer.venv_python.parent
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "python3").symlink_to(other)
+        (bin_dir / "python").symlink_to("python3")
+
+        def respond(cmd):
+            if cmd[1:3] == ["-m", "venv"]:
+                subprocess.run(cmd + ["--without-pip"], check=True, capture_output=True)
+                return 0, ""
+            return installed("0.0.1")(cmd)
+        installer.runner = ScriptRunner(respond)
+        self.assertEqual(ensure_venv(installer), __version__)
+        minor = bin_dir / f"python3.{sys.version_info[1]}"
+        self.assertEqual({os.path.realpath(bin_dir / name) for name in ("python", "python3", minor)},
+                         {os.path.realpath(minor)})
+        self.assertNotEqual(os.path.realpath(installer.venv_python), os.path.realpath(other))
+        # A venv this Python made is upgraded in place, not rebuilt.
+        installer.runner = runner = ScriptRunner()
+        self.assertEqual(installer.install(no_tray=True, no_autostart=True), 0)
+        self.assertEqual(runner.calls[0], [sys.executable, "-m", "venv", str(installer.venv_dir)])
+
     def test_install_failure_is_a_blocking_problem(self):
         def respond(cmd):
             return (1, "") if cmd[1:3] == ["install", "--upgrade"] else installed(None)(cmd)

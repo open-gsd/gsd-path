@@ -270,7 +270,14 @@ class Installer:
                  f"home {self.home}")
 
         self._step("Create isolated virtualenv")
-        self._exec([sys.executable, "-m", "venv", str(self.venv_dir)])
+        create = [sys.executable, "-m", "venv", str(self.venv_dir)]
+        # venv only adds bin/python3 when it is missing, so a venv made by another
+        # Python keeps serving that Python while pip installs into this one. Start over.
+        base = getattr(sys, "_base_executable", None) or sys.executable
+        if (self.platform != "win32" and os.path.lexists(self.venv_python)
+                and os.path.realpath(self.venv_python) != os.path.realpath(base)):
+            create.append("--clear")
+        self._exec(create)
 
         self._step("Install gsd-path-daemon into the virtualenv")
         self._exec([self.venv_pip, "install", "--upgrade", str(self.package_dir)])
