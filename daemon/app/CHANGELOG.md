@@ -22,8 +22,8 @@ The app has its own version and `app-v<version>` tags, separate from the
   `~/.gsd/projects/` is followed; every other link is still refused.
 
 ### Fixed
-- The project page tables no longer squeeze short columns, such as task
-  ID and wave, to one character per line. Task file paths wrap at `/`.
+- The Tasks table no longer squeezes short columns, such as task ID and
+  wave, to one character per line. Task file paths wrap at `/`.
 
 ## [0.1.2] - 2026-10-03
 

@@ -133,8 +133,8 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
           {section("Tasks and files", `${p.tasks_done ?? 0} of ${p.tasks_total || tasks.length}`, tasks,
             <Table head={["ID", "Task", "Wave", "Status", "Files"]} rows={tasks.map((task) => [
               <span className="mono id">{task.id}</span>, task.title,
-              task.wave != null ? `${task.wave} ${p.waves?.[task.wave] ?? ""}` : DASH,
-              `${task.status === "done" ? "✓" : task.status === "failed" ? "✗" : "○"} ${task.status || "pending"}`,
+              <span className="whole">{task.wave != null ? `${task.wave} ${p.waves?.[task.wave] ?? ""}` : DASH}</span>,
+              <span className="whole">{`${task.status === "done" ? "✓" : task.status === "failed" ? "✗" : "○"} ${task.status || "pending"}`}</span>,
               task.files.length ? <span className="mono">{task.files.map((file) => <div key={file}>{file.split("/").map((part, at, all) => <Fragment key={at}>{part}{at < all.length - 1 && <>/<wbr /></>}</Fragment>)}</div>)}</span> : DASH,
             ])} />)}
           {section("Reviews", reviews.length, reviews,

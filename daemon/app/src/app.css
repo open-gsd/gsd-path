@@ -176,10 +176,11 @@ b{font-weight:600}
 /* Tables inside cards */
 .t{width:100%;border-collapse:collapse;font-size:13px}
 .t th{padding:10px 16px;background:var(--chrome);font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;text-align:left;white-space:nowrap}
-.t td{padding:10px 16px;border-top:1px solid var(--line);vertical-align:top;overflow-wrap:break-word}
+.t td{padding:10px 16px;border-top:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
 .t .num{text-align:right}
 .t .mono{font-size:12px}
 .t .id{white-space:nowrap}
+.t .whole{overflow-wrap:normal}
 .card.scroll-x{overflow-x:auto}
 .good{color:var(--accent)}.poor{color:var(--danger)}
 
