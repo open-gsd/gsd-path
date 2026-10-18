@@ -21,6 +21,12 @@ The app has its own version and `app-v<version>` tags, separate from the
   or gsd-core card at its own `STATE.md`. A `.gsd` folder that links into
   `~/.gsd/projects/` is followed; every other link is still refused.
 
+### Fixed
+- On macOS and Linux, when the app or `gsd-path-daemon install` finds a
+  `~/.gsd-path/venv` made by another Python, it rebuilds the venv for the
+  current Python. Before, the venv mixed two Pythons: each launch reinstalled
+  the daemon but still ran the old one.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
