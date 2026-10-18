@@ -1,5 +1,5 @@
 // One project: the same sections as projectPage() and projectRecords() in the daemon dashboard.
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { facts, milestoneRows, nowBox, phaseTrack, usageTiles } from "../project";
 import { filesHash, statsHash } from "../route";
@@ -129,13 +129,13 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
 
           {section("Success criteria", `${criteria.filter((c) => c.verdict === "met").length} of ${criteria.length} met`, criteria,
             <Table head={["ID", "Criterion", "Verdict"]}
-              rows={criteria.map((c) => [<span className="mono">{c.id || DASH}</span>, c.text, <Verdict value={c.verdict} />])} />)}
+              rows={criteria.map((c) => [<span className="mono id">{c.id || DASH}</span>, c.text, <Verdict value={c.verdict} />])} />)}
           {section("Tasks and files", `${p.tasks_done ?? 0} of ${p.tasks_total || tasks.length}`, tasks,
             <Table head={["ID", "Task", "Wave", "Status", "Files"]} rows={tasks.map((task) => [
-              <span className="mono">{task.id}</span>, task.title,
+              <span className="mono id">{task.id}</span>, task.title,
               task.wave != null ? `${task.wave} ${p.waves?.[task.wave] ?? ""}` : DASH,
               `${task.status === "done" ? "✓" : task.status === "failed" ? "✗" : "○"} ${task.status || "pending"}`,
-              task.files.length ? <span className="mono">{task.files.map((file) => <div key={file}>{file}</div>)}</span> : DASH,
+              task.files.length ? <span className="mono">{task.files.map((file) => <div key={file}>{file.split("/").map((part, at, all) => <Fragment key={at}>{part}{at < all.length - 1 && <>/<wbr /></>}</Fragment>)}</div>)}</span> : DASH,
             ])} />)}
           {section("Reviews", reviews.length, reviews,
             <Table head={["Review", "Cycle", "Depth", "Verdict", "Note"]} num={[1]} rows={reviews.map((review) => [

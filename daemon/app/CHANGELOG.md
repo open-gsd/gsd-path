@@ -21,6 +21,10 @@ The app has its own version and `app-v<version>` tags, separate from the
   or gsd-core card at its own `STATE.md`. A `.gsd` folder that links into
   `~/.gsd/projects/` is followed; every other link is still refused.
 
+### Fixed
+- The project page tables no longer squeeze short columns, such as task
+  ID and wave, to one character per line. Task file paths wrap at `/`.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
