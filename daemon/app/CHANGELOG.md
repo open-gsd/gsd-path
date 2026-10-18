@@ -21,6 +21,12 @@ The app has its own version and `app-v<version>` tags, separate from the
   or gsd-core card at its own `STATE.md`. A `.gsd` folder that links into
   `~/.gsd/projects/` is followed; every other link is still refused.
 
+### Fixed
+- When the installer refuses a request (exit 2), the failure card says
+  "installer refused the request" and "Nothing was changed." It no longer says
+  "partial install" and "Some folders were changed", because the installer
+  refuses before it writes anything.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
