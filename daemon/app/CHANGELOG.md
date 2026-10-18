@@ -12,7 +12,7 @@ The app has its own version and `app-v<version>` tags, separate from the
   framework, with a framework badge. These cards are read-only.
 - gsd-core cards show their milestone, phase step (discuss, research, plan,
   execute, verify), plans as tasks, phases as waves, the milestone timeline,
-  VERIFICATION and UAT results, and STATE.md blockers.
+  VERIFICATION and UAT results, and STATE.md concerns (amber).
 - gsd-pi cards show their milestone, phase step, slices as waves, tasks,
   every milestone, assessments, the verification ledger, STATE.md blockers and
   the next command. They read `gsd.db` read-only, with a fallback to the older
@@ -20,6 +20,9 @@ The app has its own version and `app-v<version>` tags, separate from the
 - **History & files** lists `.planning` and `.gsd` records and opens a gsd-pi
   or gsd-core card at its own `STATE.md`. A `.gsd` folder that links into
   `~/.gsd/projects/` is followed; every other link is still refused.
+- Cards that share a folder name their framework in the tray and the Stats
+  scope list, and Stats keeps each card's time per phase apart. The phase chart
+  of a gsd-pi or gsd-core card follows its own steps.
 
 ## [0.1.2] - 2026-10-03
 

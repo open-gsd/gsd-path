@@ -90,6 +90,11 @@ describe("phaseRows", () => {
     expect(rows).toHaveLength(9);
     expect(rows[8]).toEqual({ label: "shipped", value: "1m", percent: 100 });
   });
+  it("orders a gsd-pi or gsd-core card by its own steps", () => {
+    const rows = phaseRows(payload({ phases: [{ phase: "execute", seconds: 60 }] }), ["discuss", "research", "plan", "execute", "verify"]);
+    if (typeof rows === "string") throw new Error(rows);
+    expect(rows.map((row) => row.label)).toEqual(["discuss", "research", "plan", "execute", "verify"]);
+  });
   it("gives the reason when no phase change is recorded", () => {
     expect(phaseRows(payload({ missing: { phases: "No phase change recorded yet." } }))).toBe("No phase change recorded yet.");
   });

@@ -116,8 +116,9 @@ class GsdCoreReaderTests(unittest.TestCase):
             (".planning/phases/02-beta-work/02-UAT.md", "uat", "pending")])
         self.assertEqual((card["vision"], card["intent"]), ("Users trust it.", "Plan 02-01 done"))
         self.assertEqual(card["workflow"], {"state": "active", "label": "In execute"})
-        self.assertIn({"kind": "blocked", "label": "Needs CRON_SECRET in production", "ref": "STATE.md"}, card["attention"])
-        self.assertEqual(card["health"], "red")
+        # gsd-core's Blockers/Concerns are concerns that affect future work: amber, not red.
+        self.assertIn({"kind": "concern", "label": "Needs CRON_SECRET in production", "ref": "STATE.md"}, card["attention"])
+        self.assertEqual(card["health"], "amber")
 
     def test_step_follows_the_files_of_the_current_phase(self) -> None:
         state = self.base / "STATE.md"
@@ -156,7 +157,7 @@ class GsdCoreReaderTests(unittest.TestCase):
         (self.base / "STATE.md").write_text(state, encoding="utf-8")
         card = self.probe()
         self.assertEqual((card["phase"], card["current_wave"]), ("discuss", 3))
-        self.assertEqual(card["waves"]["3"], "3 Gamma Work")
+        self.assertEqual(card["waves"]["3"], "03 Gamma Work")  # padded like the phase folders
         self.assertEqual(card["workflow"], {"state": "active", "label": "In discuss"})
 
     def test_archived_roadmap_phases_do_not_become_waves(self) -> None:
@@ -171,8 +172,48 @@ class GsdCoreReaderTests(unittest.TestCase):
         between = STATE.format(status="milestone_complete").replace("milestone: v1.1", "milestone: none")
         (self.base / "STATE.md").write_text(between, encoding="utf-8")
         card = self.probe()
-        self.assertEqual((card["workflow"]["state"], card["milestone"]), ("shipped", None))
+        # Between milestones the card shows the last one shipped.
+        self.assertEqual((card["workflow"]["state"], card["milestone"]), ("shipped", "First Release"))
         self.assertNotIn("none", [m["number"] for m in card["roadmap_milestones"]])
+
+    def test_milestones_sort_by_version_and_placeholder_name_is_unset(self) -> None:
+        # Older gsd-core versions appended to MILESTONES.md.
+        write(self.base / "MILESTONES.md", "## v1.0 First Release (Shipped: 2026-07-01)\n\n"
+                                           "## v1.10 Tenth (Shipped: 2026-09-01)\n\n## v1.2 Second (Shipped: 2026-08-01)\n")
+        state = STATE.format(status="executing").replace("milestone: v1.1", "milestone: v1.11") \
+            .replace("milestone_name: Hardening", "milestone_name: milestone")
+        (self.base / "STATE.md").write_text(state, encoding="utf-8")
+        card = self.probe()
+        self.assertEqual([m["number"] for m in card["roadmap_milestones"]], ["v1.0", "v1.2", "v1.10", "v1.11"])
+        self.assertEqual(card["milestone"], "v1.11")
+
+    def test_plans_follow_gsd_core_counting_rules(self) -> None:
+        beta = self.base / "phases" / "02-beta-work"
+        write(beta / "02-02-PLAN.md", "---\nphase: 02\nstatus: superseded\n---\n")  # left out
+        write(beta / "02-01-SUMMARY.md", "---\nstatus: blocked\n---\n")  # not finished
+        nested = self.base / "phases" / "03-gamma-work" / "plans"
+        write(nested / "PLAN-01-store.md", "---\nphase: 03\n---\n")
+        write(nested / "PLAN-02-api.md", "---\nphase: 03\n---\n")
+        write(nested / "SUMMARY-01.md", "done\n")
+        card = self.probe()
+        self.assertEqual([(t["id"], t["status"]) for t in card["tasks"]], [
+            ("01-01", "done"), ("02-01", "blocked"), ("03-01", "done"), ("03-02", "pending")])
+        self.assertIn(("blocked", "02-01"), {(a["kind"], a["ref"]) for a in card["attention"]})
+
+    def test_phase_numbers_compare_as_numbers(self) -> None:
+        write(self.base / "phases" / "01.1-hotfix" / "01.1-CONTEXT.md", "ctx\n")
+        write(self.base / "phases" / "01.10-later" / "01.10-RESEARCH.md", "research\n")
+        for current, step in (("1.1", "research"), ("1.10", "plan")):  # as floats, 1.1 and 1.10 are equal
+            with self.subTest(current=current):
+                state = STATE.format(status="planning").replace("current_phase: 2", f"current_phase: {current}")
+                (self.base / "STATE.md").write_text(state, encoding="utf-8")
+                self.assertEqual(self.probe()["phase"], step)
+
+    def test_paused_and_generic_project_title(self) -> None:
+        (self.base / "STATE.md").write_text(STATE.format(status="paused"), encoding="utf-8")
+        write(self.base / "PROJECT.md", "# Project\n")
+        card = self.probe()
+        self.assertEqual((card["workflow"]["state"], card["workflow"]["label"], card["project"]), ("idle", "Paused", None))
 
     def test_project_without_phases_is_not_started(self) -> None:
         bare = Path(self.tmp.name) / "bare"

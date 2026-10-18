@@ -41,7 +41,7 @@ class Watcher:
             mtime = (probe.tree_mtime(Path(root) / ".project"),
                      probe.tree_mtime(Path(root) / ".gsd-path" / "status_runtime.py"),
                      probe.tree_mtime(Path(root) / ".gsd-path" / "runtime.json")) if flavor == PATH_FLAVOR \
-                else (probe.tree_mtime(flavors.state_dir(root, flavor)),)
+                else (probe.tree_mtime(flavors.state_dir(root, flavor), flavors.SKIP[flavor]),)
             old = self.projects.get(key)
             if old is not None and any(mtime) and self._mtimes.get(key) == mtime:
                 current[key] = old

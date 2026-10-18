@@ -128,7 +128,9 @@ def file_index(root):
         def failed(error, folder=folder):
             errors.append({'source': folder, 'status': 'failed', 'error': str(error)})
         for parent, dirs, files in os.walk(top, followlinks=False, onerror=failed):
-            dirs[:] = [d for d in dirs if d != '.git' and not (Path(parent) / d).is_symlink()]
+            dirs[:] = [d for d in dirs if d != '.git' and not (Path(parent) / d).is_symlink()
+                       # gsd-pi's old layout kept whole checkouts in .gsd/worktrees.
+                       and not (folder == '.gsd' and parent == str(top) and d == 'worktrees')]
             names.update((Path(folder) / (Path(parent) / f).relative_to(top)).as_posix() for f in files)
     entries = []
     for name in sorted(names):

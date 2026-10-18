@@ -37,13 +37,14 @@ def usage_by_day(records: Iterable[dict], prices: dict) -> Optional[dict]:
     return {"days": [days[date] for date in sorted(days)], "unpriced": unpriced}
 
 
-def phase_seconds(events: Iterable[dict], roots: Iterable[str], now: datetime) -> Optional[List[dict]]:
+def phase_seconds(events: Iterable[dict], cards: Iterable[str], now: datetime) -> Optional[List[dict]]:
     """Time in each phase from recorded phase changes: a phase lasts until the
-    next change in that project, and the last one until now."""
-    wanted = {os.path.abspath(root) for root in roots}
+    next change in that card, and the last one until now. Cards are ids: the root
+    for GSD Path, so older events without an id still count for it."""
+    wanted = {os.path.abspath(card) for card in cards}
     changes: Dict[str, list] = {}
     for event in events:
-        root = event.get("root")
+        root = event.get("id") or event.get("root")
         at = _parse_iso(event.get("at"))
         detail = event.get("detail")
         if (event.get("type") != "phase-changed" or not isinstance(root, str) or at is None
@@ -118,7 +119,9 @@ def route(handler, _body=None) -> dict:
     if usage is None:
         missing["days"] = "No host sessions matched. Check the session folders in Settings."
 
-    phases = phase_seconds(_history_events(), roots, datetime.now(timezone.utc))
+    # By card: cards that share a folder must not cut each other's phase time short.
+    phases = phase_seconds(_history_events(), [project.id or str(project.root) for project in projects],
+                           datetime.now(timezone.utc))
     if phases is None:
         missing["phases"] = "No phase change recorded yet. The monitor records one when it sees it happen."
 

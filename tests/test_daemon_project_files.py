@@ -261,8 +261,9 @@ class ProjectFilesTests(unittest.TestCase):
         (self.root / '.planning/milestones').mkdir(parents=True)
         (self.root / '.planning/STATE.md').write_bytes(b'---\nmilestone: v1.1\n---\n')
         (self.root / '.planning/milestones/v1.0-ROADMAP.md').write_bytes(b'# v1.0\n')
-        (self.root / '.gsd').mkdir()
+        (self.root / '.gsd/worktrees/M001').mkdir(parents=True)
         (self.root / '.gsd/STATE.md').write_bytes(b'# GSD State\n')
+        (self.root / '.gsd/worktrees/M001/app.js').write_bytes(b'checkout\n')  # gsd-pi's old layout: not records
         # Both folders are often ignored; Files lists them like .project.
         (self.root / '.gitignore').write_bytes(b'.gsd/\n.planning/\n')
         code, data = self.request()
@@ -271,6 +272,7 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertEqual(groups['.planning/STATE.md'], 'Project records')
         self.assertEqual(groups['.planning/milestones/v1.0-ROADMAP.md'], 'Archived milestone')
         self.assertEqual(groups['.gsd/STATE.md'], 'Project records')
+        self.assertNotIn('.gsd/worktrees/M001/app.js', groups)
         self.assertEqual(self.request('read', path='.gsd/STATE.md')[1]['text'], '# GSD State\n')
 
     @requires_symlink

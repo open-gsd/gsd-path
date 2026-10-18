@@ -1,7 +1,7 @@
 // The Stats page: turns the daemon's GET /api/stats payload into what the charts show.
 // A chart with no data is a reason text, never a zero and never an empty axis.
 import { statsHash } from "./route";
-import { duration, idOf, money, nameOf, PHASES, shortDate, tokens } from "./status";
+import { duration, idOf, labelOf, money, PHASES, shortDate, tokens } from "./status";
 import type { Project } from "./status";
 
 export type Day = { date: string; tokens: number; turns: number; cost: number | null };
@@ -79,13 +79,13 @@ export function unpricedNote(unpriced: string[]): string | null {
 
 export type PhaseRow = { label: string; value: string; percent: number | null };
 
-/** The eight phases in order, then any other recorded phase. No record: "not yet", no bar. */
-export function phaseRows(payload: StatsPayload): PhaseRow[] | string {
+/** The card's phases in order (GSD Path's eight by default), then any other recorded phase. No record: "not yet", no bar. */
+export function phaseRows(payload: StatsPayload, order: string[] = PHASES): PhaseRow[] | string {
   const phases = payload.phases;
   if (!phases?.length) return reason(payload, "phases");
   const seconds = new Map(phases.map((item) => [item.phase, item.seconds]));
   const peak = Math.max(...seconds.values());
-  const names = [...PHASES, ...phases.map((item) => item.phase).filter((phase) => !PHASES.includes(phase))];
+  const names = [...order, ...phases.map((item) => item.phase).filter((phase) => !order.includes(phase))];
   return names.map((label) => {
     const spent = seconds.get(label);
     if (spent == null) return { label, value: "not yet", percent: null };
@@ -121,7 +121,7 @@ export function verifyChart(payload: StatsPayload): VerifyChart | string {
 /** The scope switch: All projects, then one entry per project. */
 export function scopes(projects: Project[], root: string | null): { label: string; href: string; current: boolean }[] {
   return [{ label: "All projects", href: statsHash(null), current: root === null },
-    ...projects.map((p) => ({ label: nameOf(p), href: statsHash(idOf(p)), current: idOf(p) === root }))];
+    ...projects.map((p) => ({ label: labelOf(p), href: statsHash(idOf(p)), current: idOf(p) === root }))];
 }
 
 /** Load when the scope changes; for the same scope at most once per minute. */

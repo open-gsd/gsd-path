@@ -618,12 +618,15 @@ def time_in_phase_seconds(root: Union[str, Path], phase: Optional[str],
     return max(0, int((now - since).total_seconds()))
 
 
-def tree_mtime(path: Union[str, Path]) -> Optional[float]:
+def tree_mtime(path: Union[str, Path], skip: Tuple[str, ...] = ()) -> Optional[float]:
+    """Newest mtime under path; folders named in skip, at the top level, are not walked."""
     try:
         latest = os.stat(path).st_mtime
     except OSError:
         return None
     for dirpath, dirnames, filenames in os.walk(path):
+        if dirpath == str(path):
+            dirnames[:] = [d for d in dirnames if d not in skip]
         for name in filenames:
             try:
                 latest = max(latest, os.stat(os.path.join(dirpath, name)).st_mtime)
@@ -767,7 +770,7 @@ def health_for(attention: List[dict]) -> str:
     kinds = {item.get("kind") for item in attention}
     if kinds & {"blocked", "failed"}:
         return "red"
-    if kinds & {"question", "stale", "unverified"}:
+    if kinds & {"question", "stale", "unverified", "concern"}:
         return "amber"
     return "green"
 

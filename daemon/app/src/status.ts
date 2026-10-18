@@ -70,6 +70,8 @@ export const PHASES = ["inspect", "define", "research", "decide", "roadmap", "pl
 
 export const nameOf = (p: Project) => p.repository || p.project || p.root;
 export const idOf = (p: Project) => p.id || p.root;
+/** The name with the framework, where cards that share a folder sit side by side (tray, stats, switcher). */
+export const labelOf = (p: Project) => nameOf(p) + (flavorOf(p) ? ` · ${flavorOf(p)}` : "");
 /** The framework badge; GSD Path cards have none. */
 export const flavorOf = (p: Project) => (p.flavor && p.flavor !== "gsd-path" ? p.flavor : null);
 export const stateOf = (p: Project) => p.workflow?.state ?? "unverified";

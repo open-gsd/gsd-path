@@ -60,16 +60,23 @@ completion, from files on disk:
   named from the ROADMAP `### Phase N:` heading. A ROADMAP phase with no folder
   yet is a wave at `discuss` when its number is above the highest phase folder
   or equals the STATE.md `current_phase`; lower ROADMAP phases (archived
-  milestones) are skipped. Each `NN-PP-PLAN.md` is a task, done when its
-  `NN-PP-SUMMARY.md` exists. ROADMAP checkboxes are not read.
-- **Milestones**: `MILESTONES.md` headings (`## vX.Y Name (Shipped: …)`) plus
-  the STATE.md `milestone` and `milestone_name`.
+  milestones) are skipped. Each `NN-PP-PLAN.md` (or nested
+  `plans/PLAN-NN*.md`) is a task, done when its SUMMARY exists, as gsd-core
+  counts them: a `status: superseded` plan is left out, and a SUMMARY with
+  `status: blocked` marks the task blocked. ROADMAP checkboxes are not read.
+- **Milestones**: `MILESTONES.md` headings (`## vX.Y Name (Shipped: …)`),
+  sorted by version, plus the STATE.md `milestone` and `milestone_name` (the
+  placeholder name `milestone` is ignored). Between milestones the card shows
+  the last one shipped.
 - **Reviews**: `NN-VERIFICATION.md` and `NN-UAT.md` with their `status`.
   `passed` reads as pass and `gaps_found` as failed. `human_needed` adds an
   attention item.
-- **Attention**: items under the STATE.md `Blockers` heading.
+- **Attention**: items under the STATE.md `Blockers/Concerns` heading, as
+  amber concerns (gsd-core lists issues that affect future work there), and
+  blocked plans.
 - **State**: **Shipped** when STATE.md says `milestone_complete` or every wave
   has a passed VERIFICATION; **Blocked** when STATE.md `status` is `blocked`;
+  **Paused** when it is `paused`;
   **Not started** with no phase folder; otherwise the step, such as **In execute**.
 
 ## Install (one command)
