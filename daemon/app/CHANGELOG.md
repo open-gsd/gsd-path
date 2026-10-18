@@ -22,7 +22,8 @@ The app has its own version and `app-v<version>` tags, separate from the
   `~/.gsd/projects/` is followed; every other link is still refused.
 - The Skills page lists gsd-pi and gsd-core with their installed versions
   (gsd-core per agent host) and the latest release. **Check for updates** reads
-  them too, the update banner names any that are behind, and **Update…** shows
+  them too (a failed check shows its error next to the framework), the update
+  banner names any that are behind, and **Update…** shows
   the commands and then runs each framework's own update.
 
 ## [0.1.2] - 2026-10-03

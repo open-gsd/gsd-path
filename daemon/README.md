@@ -462,7 +462,8 @@ one global op-lock — a second concurrent operation gets
   (the folders gsd-core itself uses, with their env overrides).
 - `latest` comes from the npm registry only when **Check for updates** runs
   (`POST /api/plugin/check`), and is cached in `~/.gsd-path/frameworks.json`.
-  Until then no update is claimed.
+  Until then no update is claimed. A failed registry read keeps the last known
+  `latest` and is returned in `framework_errors` (`{name: error|null}`).
 
 `POST /api/frameworks/update` — `{name: "gsd-pi"|"gsd-core", dry_run?}`.
 `dry_run` returns the commands without running them →
@@ -476,7 +477,9 @@ runs one operation at a time. The commands are each framework's own update:
 - gsd-core: `npm install -g @opengsd/gsd-core@latest` when the global command
   is installed, then for every host install
   `npx -y --package=@opengsd/gsd-core@latest -- gsd-core --<host> --global --config-dir <dir>`,
-  the same command as gsd-core's `/gsd-update`.
+  the same command as gsd-core's `/gsd-update`. `npm` and `npx` come from the
+  folder of the `gsd-core` command when they are there, so the update lands in
+  the same npm prefix.
 
 After a successful update the framework's own cached update notice
 (`~/.gsd/.update-check`, `~/.cache/gsd/gsd-update-check*.json`) is removed,
