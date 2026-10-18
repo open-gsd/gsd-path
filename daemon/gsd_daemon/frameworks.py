@@ -197,16 +197,17 @@ class Frameworks:
         hosts = self.core_hosts()
         if not package and not hosts:
             raise ValueError("gsd-core is not installed: no `gsd-core` command and no agent host install")
+        bin_dir = package["bin_dir"] if package else None
         commands = []
         if package:
-            commands.append([self._tool("npm"), "install", "-g", f"{PACKAGES[name]}@latest"])
+            commands.append([self._tool("npm", bin_dir), "install", "-g", f"{PACKAGES[name]}@latest"])
         # The same per-host command as gsd-core's /gsd-update, with the folder spelled out.
-        commands += [[self._tool("npx"), "-y", f"--package={PACKAGES[name]}@latest", "--", "gsd-core",
+        commands += [[self._tool("npx", bin_dir), "-y", f"--package={PACKAGES[name]}@latest", "--", "gsd-core",
                       f"--{h['host']}", "--global", "--config-dir", h["dir"]] for h in hosts]
         return commands
 
-    def _tool(self, command: str) -> str:
-        found = shutil.which(command, path=self.search_path())
+    def _tool(self, command: str, bin_dir: Optional[str] = None) -> str:
+        found = (bin_dir and shutil.which(command, path=bin_dir)) or shutil.which(command, path=self.search_path())
         if not found:
             raise ValueError(f"`{command}` was not found; install Node.js to update gsd-core")
         return found

@@ -15,10 +15,10 @@ type Panel =
 
 const update = (name: string, dry_run: boolean) => api<Result>("POST", "/api/frameworks/update", { name, dry_run });
 
-export function Frameworks({ plugin, reload }: { plugin: PluginStatus | null; reload: () => void }) {
+export function Frameworks({ plugin, errors, reload }: { plugin: PluginStatus | null; errors: Record<string, string | null>; reload: () => void }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const rows = frameworkRows(plugin);
+  const rows = frameworkRows(plugin, errors);
   if (!rows.length) return null;
 
   const run = async (row: FrameworkRow, label: string, work: () => Promise<Panel>) => {
@@ -54,7 +54,10 @@ export function Frameworks({ plugin, reload }: { plugin: PluginStatus | null; re
               <b>{row.name}</b>
               <span className="mono skills-path">{row.where}</span>
               <span className="sk-num-left fw-versions">{row.version}</span>
-              <span><span className={`pill ${row.tone}`}>{row.status}</span></span>
+              <span>
+                <span className={`pill ${row.tone}`}>{row.status}</span>
+                {row.error && <div className="sk-field-error">The check failed: {row.error}</div>}
+              </span>
               <span className="skills-actions">
                 {row.update && <button className="btn small primary" disabled={!!busy} onClick={() => preview(row)}>Update…</button>}
               </span>

@@ -14,7 +14,7 @@ from gsd_daemon.config import Config
 from gsd_daemon.frameworks import Frameworks
 from gsd_daemon.serve import serve
 from gsd_daemon.watcher import Watcher
-from tests._platform import requires_symlink
+from tests._platform import posix_only, requires_symlink
 
 
 def write(path: Path, text: str) -> Path:
@@ -54,6 +54,7 @@ class FrameworksTests(unittest.TestCase):
         latest = {"@opengsd%2Fgsd-pi": "1.22.0", "@opengsd%2Fgsd-core": "1.17.0"}
         return json.dumps({"version": next(v for k, v in latest.items() if k in url)}).encode()
 
+    @posix_only
     @requires_symlink
     def test_installed_versions_come_from_the_package_and_each_host(self) -> None:
         self.install("gsd-pi", "gsd", "1.21.1")
@@ -71,6 +72,7 @@ class FrameworksTests(unittest.TestCase):
         # Latest is unknown until the user checks: no update is claimed.
         self.assertEqual((status["gsd-pi"]["latest"], status["gsd-pi"]["update_available"]), (None, False))
 
+    @posix_only
     @requires_symlink
     def test_a_command_from_another_package_is_not_the_framework(self) -> None:
         package = self.home / "node" / "lib" / "node_modules" / "gsd"
@@ -82,6 +84,7 @@ class FrameworksTests(unittest.TestCase):
         self.assertEqual(self.frameworks().status()["gsd-pi"], {
             "installed": None, "hosts": [], "latest": None, "checked": None, "update_available": False, "detected": False})
 
+    @posix_only
     @requires_symlink
     def test_check_reads_the_registry_and_keeps_the_last_version_on_failure(self) -> None:
         self.install("gsd-pi", "gsd", "1.22.0")
@@ -98,6 +101,7 @@ class FrameworksTests(unittest.TestCase):
         self.assertEqual(errors["gsd-core"], "offline")
         self.assertEqual(self.frameworks(fetch=offline).status()["gsd-core"]["latest"], "1.17.0")
 
+    @posix_only
     @requires_symlink
     def test_update_runs_each_framework_own_update(self) -> None:
         self.install("gsd-pi", "gsd", "1.21.1")
@@ -125,6 +129,7 @@ class FrameworksTests(unittest.TestCase):
         self.assertTrue(frameworks.update("gsd-pi")["ok"])
         self.assertEqual([argv for argv, _ in self.calls], [[str(self.bin / "gsd"), "update"]])
 
+    @posix_only
     @requires_symlink
     def test_a_failed_command_stops_the_update(self) -> None:
         self.install("gsd-core", "gsd-core", "1.11.0")
@@ -135,6 +140,21 @@ class FrameworksTests(unittest.TestCase):
         self.assertEqual((result["ok"], result["error"]), (False, "EACCES: permission denied"))
         self.assertEqual(len(self.calls), 1)  # the host install did not run
         self.assertTrue(notice.exists())
+
+    @posix_only
+    @requires_symlink
+    def test_gsd_core_updates_with_the_npm_of_its_own_prefix(self) -> None:
+        self.install("gsd-core", "gsd-core", "1.11.0")
+        write(self.home / ".claude" / "gsd-core" / "VERSION", "1.13.0\n")
+        brew = self.home / "brew" / "bin"
+        for tool in ("npm", "npx"):
+            write(brew / tool, "#!/bin/sh\n").chmod(0o755)
+        frameworks = self.frameworks(env={"PATH": os.pathsep.join([str(brew), str(self.bin)])})
+        commands = frameworks.update("gsd-core", dry_run=True)["commands"]
+        self.assertEqual([argv[0] for argv in commands], [str(self.bin / "npm"), str(self.bin / "npx")])
+
+        (self.bin / "npm").unlink()  # no npm next to the command: the search path decides
+        self.assertEqual(frameworks.update("gsd-core", dry_run=True)["commands"][0][0], str(brew / "npm"))
 
     def test_nothing_to_update_is_refused(self) -> None:
         frameworks = self.frameworks()

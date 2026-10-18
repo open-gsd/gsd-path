@@ -18,7 +18,7 @@ export type FrameworkStatus = {
   installed: string | null; hosts: { host: string; dir: string; version: string | null }[];
   latest: string | null; checked: string | null; update_available: boolean; detected: boolean;
 };
-export type FrameworkRow = { name: string; where: string; version: string; status: string; tone: "ok" | "acc" | "mute"; update: boolean };
+export type FrameworkRow = { name: string; where: string; version: string; status: string; tone: "ok" | "acc" | "mute"; update: boolean; error: string | null };
 /** The answer of install, update and the project operations. */
 export type OpResult = { ok: boolean; argv?: string[]; stdout_tail?: string; error?: string | null; source_notice?: string };
 export type UninstallPlan = { plan: { path: string; kind: string; reason: string }[]; skipped: { path: string; reason: string }[] };
@@ -119,8 +119,9 @@ export function failure(done: "installed" | "updated" | "removed", labels: strin
   };
 }
 
-/** One row per gsd-pi / gsd-core install found on this computer. gsd-core lists its CLI and every agent host. */
-export function frameworkRows(plugin: PluginStatus | null): FrameworkRow[] {
+/** One row per gsd-pi / gsd-core install found on this computer. gsd-core lists its CLI and every agent host.
+ *  `errors` are the failed registry checks of the last Check for updates; the row keeps the last known version. */
+export function frameworkRows(plugin: PluginStatus | null, errors: Record<string, string | null> = {}): FrameworkRow[] {
   return Object.entries(plugin?.frameworks ?? {}).filter(([, item]) => item.detected).map(([name, item]) => {
     const parts = [...(item.installed ? [`CLI\u00a0${item.installed}`] : []), ...item.hosts.map((h) => `${h.host}\u00a0${h.version ?? "?"}`)];
     return {
@@ -129,6 +130,7 @@ export function frameworkRows(plugin: PluginStatus | null): FrameworkRow[] {
       status: !item.latest ? "Not checked yet" : item.update_available ? `Update to ${item.latest}` : "Up to date",
       tone: !item.latest ? "mute" : item.update_available ? "acc" : "ok",
       update: item.update_available,
+      error: errors[name] ?? null,
     };
   });
 }

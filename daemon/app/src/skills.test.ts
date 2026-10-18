@@ -156,7 +156,7 @@ describe("frameworkRows", () => {
   it("lists the CLI and every host, and offers the update when one is behind", () => {
     const rows = frameworkRows(plugin({ frameworks: { "gsd-core": core } }));
     expect(rows).toEqual([{ name: "gsd-core", where: "/Users/me/.claude, /Users/me/.codex",
-      version: "CLI\u00a01.11.0\nclaude\u00a01.13.0\ncodex\u00a01.3.1", status: "Update to 1.17.0", tone: "acc", update: true }]);
+      version: "CLI\u00a01.11.0\nclaude\u00a01.13.0\ncodex\u00a01.3.1", status: "Update to 1.17.0", tone: "acc", update: true, error: null }]);
     expect(pendingFrameworks(plugin({ frameworks: { "gsd-core": core } }))).toEqual(["gsd-core 1.17.0"]);
   });
   it("says not checked before the first check, and hides frameworks that are not installed", () => {
@@ -166,5 +166,9 @@ describe("frameworkRows", () => {
       .toEqual([["gsd-pi", "global command", "Not checked yet", false]]);
     expect(pendingFrameworks(plugin({ frameworks: { "gsd-pi": pi } }))).toEqual([]);
     expect(frameworkRows(plugin())).toEqual([]);  // an older daemon sends no frameworks
+  });
+  it("shows a failed registry check next to the framework and keeps the last known version", () => {
+    const rows = frameworkRows(plugin({ frameworks: { "gsd-core": core } }), { "gsd-pi": null, "gsd-core": "offline" });
+    expect(rows.map((row) => [row.name, row.status, row.error])).toEqual([["gsd-core", "Update to 1.17.0", "offline"]]);
   });
 });

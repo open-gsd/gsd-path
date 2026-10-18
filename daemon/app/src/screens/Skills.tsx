@@ -21,6 +21,7 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // what runs now, for the status line
   const [check, setCheck] = useState<{ text: string; bad: boolean } | null>(null);
+  const [frameworkErrors, setFrameworkErrors] = useState<Record<string, string | null>>({});
   const rows = skillRows(hosts, plugin), target = targetVersion(plugin);
   const missing = notDetected(hosts, plugin);
 
@@ -61,8 +62,11 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
   const checkNow = async () => {
     setBusy("Checking for updates…");
     setCheck(null);
+    setFrameworkErrors({});
     try {
-      const result = await api<{ ok: boolean; error: string | null; latest: string | null }>("POST", "/api/plugin/check", {});
+      const result = await api<{ ok: boolean; error: string | null; latest: string | null; framework_errors?: Record<string, string | null> }>(
+        "POST", "/api/plugin/check", {});
+      setFrameworkErrors(result.framework_errors ?? {});
       setCheck(result.ok ? { text: result.latest ? `Checked. The latest release is ${result.latest}.` : "Checked. No release is published.", bad: false }
         : { text: result.error || "The check failed.", bad: true });
     } catch (failed) {
@@ -130,7 +134,7 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
         </div>
       )}
 
-      <Frameworks plugin={plugin} reload={reload} />
+      <Frameworks plugin={plugin} errors={frameworkErrors} reload={reload} />
 
       {plugin && (
         <p className="note">
