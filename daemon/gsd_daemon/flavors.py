@@ -19,8 +19,9 @@ FOREIGN = {
     "gsd-pi": (".gsd", ("STATE.md", "gsd.db", "milestones")),
     "gsd-core": (".planning", ("STATE.md", "ROADMAP.md")),
 }
-# gsd-pi's old layout kept whole checkouts in .gsd/worktrees; the state walks leave them out.
-SKIP = {"gsd-pi": ("worktrees",), "gsd-core": ()}
+# Left out of the change watch: gsd-pi's old layout kept whole checkouts in .gsd/worktrees,
+# and gsd.db-shm is SQLite's shared index, which the daemon's own read-only reads touch.
+SKIP = {"gsd-pi": ("worktrees", "gsd.db-shm"), "gsd-core": ()}
 
 # The records each framework keeps, state file first: the card's source links and coverage.
 RECORDS = {

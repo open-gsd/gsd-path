@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import sys
 import tempfile
@@ -112,6 +113,27 @@ class GsdPiReaderTests(unittest.TestCase):
         writer.execute("INSERT INTO tasks VALUES ('M002', 'S02', 'T03', 'Search body', 'pending', '[]')")
         writer.commit()
         self.assertIn("S02-T03", [t["id"] for t in self.probe()["tasks"]])
+
+    def test_reading_a_leftover_wal_is_not_project_activity(self) -> None:
+        # A writer that stopped without a checkpoint leaves gsd.db-wal and gsd.db-shm behind.
+        # The first reader then rebuilds the shared index; the watch must not take that as activity.
+        import shutil
+        from gsd_daemon import flavors, probe
+        self.make_db(schema="PRAGMA journal_mode=WAL;" + SCHEMA)
+        writer = sqlite3.connect(self.base / "gsd.db")
+        writer.execute("INSERT INTO tasks VALUES ('M002', 'S02', 'T03', 'Search body', 'pending', '[]')")
+        writer.commit()
+        left = self.root.parent / "left" / ".gsd"
+        shutil.copytree(self.base, left)  # copied while the writer is open: -wal and -shm included
+        writer.close()
+        self.base = left
+        self.root = left.parent
+        old = probe.tree_mtime(left, flavors.SKIP["gsd-pi"]) - 100
+        for path in [left, *left.iterdir()]:
+            os.utime(path, (old, old))
+        self.assertIn("S02-T03", [t["id"] for t in self.probe()["tasks"]])
+        self.assertGreater((left / "gsd.db-shm").stat().st_mtime, old)  # the read rebuilt the index
+        self.assertEqual(probe.tree_mtime(left, flavors.SKIP["gsd-pi"]), old)
 
     def test_older_schema_without_optional_columns_or_tables(self) -> None:
         self.make_db("""

@@ -28,7 +28,10 @@ not apply to them.
 A gsd-pi card is read from `.gsd/`. gsd-pi keeps its record in `gsd.db`, and
 the daemon opens it read-only. A project with no rows there is read from the
 older markdown layout (`milestones/M###/` with `slices/S##/` and task
-summaries), and then from the milestone registry in `STATE.md`.
+summaries), and then from the milestone registry in `STATE.md`. When a
+`gsd.db-wal` file is present, SQLite's read-only reads update its shared index
+`gsd.db-shm`, as any reader does; the change watch ignores that file, so the
+card's activity time is gsd-pi's own.
 
 - **Phase strip**: the same five steps as a gsd-core card. The STATE.md
   `**Phase:**` value maps onto them (for example `executing` is execute and
