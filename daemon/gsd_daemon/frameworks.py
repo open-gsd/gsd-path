@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from . import subprocess_platform
+from . import release_source, subprocess_platform
 from .plugin import _is_newer, _tail
 
 PACKAGES = {"gsd-pi": "@opengsd/gsd-pi", "gsd-core": "@opengsd/gsd-core"}
@@ -66,7 +66,8 @@ def _run(argv: Sequence[str], env: Dict[str, str]) -> Tuple[int, str, str]:
 
 
 def _fetch(url: str) -> bytes:
-    with urllib.request.urlopen(urllib.request.Request(url), timeout=FETCH_TIMEOUT_S) as response:
+    with urllib.request.urlopen(urllib.request.Request(url), timeout=FETCH_TIMEOUT_S,
+                                context=release_source.ssl_context()) as response:
         return response.read()
 
 
