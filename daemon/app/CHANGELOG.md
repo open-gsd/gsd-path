@@ -29,6 +29,12 @@ The app has its own version and `app-v<version>` tags, separate from the
   banner names any that are behind, and **Update…** shows
   the commands and then runs each framework's own update.
 
+### Fixed
+- Release and framework update checks work when the daemon runs under a
+  python.org macOS Python with no CA certificates installed. The daemon then
+  also trusts the macOS system roots (`/etc/ssl/cert.pem`); certificate checks
+  stay on.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
