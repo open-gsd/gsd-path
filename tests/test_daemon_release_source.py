@@ -6,6 +6,7 @@ import io
 import json
 import shutil
 import ssl
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -49,28 +50,8 @@ def tarball(version, extra=None, links=()):
 def integrity(data):
     return "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode("ascii")
 
-# A self-signed certificate for 127.0.0.1 (valid to 2126). It plays both the
-# registry's certificate and the only root in a stand-in macOS system bundle.
-TEST_KEY = """-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgrZ6oMmEi++5eG0Bn
-It2W2+VbvjN36Pq+9G7fykAoeByhRANCAASJ7ykP1pStJC4OCjbNkwglBK+Eh5mN
-vsUBpITyaBfXcwWi/R2fO9VtpzpF9MlbXx2i2maa9ALBELoqs99GnfDU
------END PRIVATE KEY-----
-"""
-TEST_CERT = """-----BEGIN CERTIFICATE-----
-MIIBhTCCASqgAwIBAgIJANGMReQIbk69MAoGCCqGSM49BAMCMCExHzAdBgNVBAMM
-FmdzZC1wYXRoIHRlc3QgcmVnaXN0cnkwIBcNMjYxMDE5MDk1MDQ2WhgPMjEyNjA5
-MjUwOTUwNDZaMCExHzAdBgNVBAMMFmdzZC1wYXRoIHRlc3QgcmVnaXN0cnkwWTAT
-BgcqhkjOPQIBBggqhkjOPQMBBwNCAASJ7ykP1pStJC4OCjbNkwglBK+Eh5mNvsUB
-pITyaBfXcwWi/R2fO9VtpzpF9MlbXx2i2maa9ALBELoqs99GnfDUo0kwRzAPBgNV
-HREECDAGhwR/AAABMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgKEMBMG
-A1UdJQQMMAoGCCsGAQUFBwMBMAoGCCqGSM49BAMCA0kAMEYCIQC0LZ2tks9ENon4
-il55+VIBysD8eq6CHhZnrXFmUgSUbwIhAJHoDv6mbEDxviLpUMfE8o9+SWF9tNZC
-4yusNRDI/IFl
------END CERTIFICATE-----
-"""
 
-
+@unittest.skipUnless(shutil.which("openssl"), "needs the openssl CLI to make a test certificate")
 class TlsTests(unittest.TestCase):
     """A python.org macOS build without "Install Certificates" has no CA file or path."""
 
@@ -78,9 +59,16 @@ class TlsTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        (root / "key.pem").write_text(TEST_KEY)
+        # A throwaway self-signed certificate for 127.0.0.1, made per run so no
+        # key lives in the repo. It plays both the registry's certificate and
+        # the only root in a stand-in macOS system bundle.
         self.bundle = root / "cert.pem"
-        self.bundle.write_text(TEST_CERT)
+        subprocess.run(
+            ["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1",
+             "-nodes", "-days", "1", "-subj", "/CN=gsd-path test registry",
+             "-addext", "subjectAltName=IP:127.0.0.1",
+             "-keyout", str(root / "key.pem"), "-out", str(self.bundle)],
+            check=True, capture_output=True)
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
