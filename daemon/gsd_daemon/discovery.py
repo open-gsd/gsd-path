@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import os
 import re
 import subprocess
@@ -103,12 +104,19 @@ def scan(parents: Iterable[str], excludes: Iterable[str] = (), max_depth: int = 
     return [root for root, flavor in scan_projects(parents, excludes, max_depth) if flavor == PATH_FLAVOR]
 
 
+@functools.lru_cache(maxsize=None)
+def _git_location(root: str) -> Tuple[Optional[str], Optional[str]]:
+    """(common dir, checkout top) of a gsd-pi/gsd-core folder, once per daemon run.
+    ponytail: a folder that becomes or stops being a worktree is seen after a daemon restart."""
+    common = _git_common_dir(root)
+    return common, (_git(root, "rev-parse", "--show-toplevel") if common else None)
+
+
 def _dedupe_foreign(pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
     # One card per framework per folder: the same folder in a worktree merges into the main checkout.
     groups: Dict[Tuple[str, str, str], List[Tuple[str, str]]] = {}
     for root, flavor in pairs:
-        common = _git_common_dir(root)
-        top = _git(root, "rev-parse", "--show-toplevel") if common else None
+        common, top = _git_location(root)
         relative = os.path.relpath(os.path.realpath(root), os.path.realpath(top)) if top else ""
         groups.setdefault((os.path.normcase(common or root), os.path.normcase(relative), flavor), []).append((root, top or root))
     return [(min(members, key=lambda m: (not os.path.isdir(os.path.join(m[1], ".git")), len(m[0]), m[0]))[0], flavor)

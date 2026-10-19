@@ -876,7 +876,7 @@ function render() {
   const current = ["project","files"].includes(CState.view) ? projects.find(p => (p.id||p.root) === CState.root) : null;
   let header, body;
   if (current) {
-    header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to projects">‹ Projects</button><select class="switcher" data-switch aria-label="Project">${projects.map(q => `<option value="${esc(q.id||q.root)}"${q === current ? " selected" : ""}>${esc(q.repository || q.project || q.root)}</option>`).join("")}</select><span class="spacer"></span>${status}${settings}</header>`;
+    header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to projects">‹ Projects</button><select class="switcher" data-switch aria-label="Project">${projects.map(q => `<option value="${esc(q.id||q.root)}"${q === current ? " selected" : ""}>${esc(q.repository || q.project || q.root)}${q.flavor && q.flavor !== 'gsd-path' ? ' · ' + esc(q.flavor) : ''}</option>`).join("")}</select><span class="spacer"></span>${status}${settings}</header>`;
     body = `<main class="page">${CState.view==='files'?filesPage(current):projectPage(current)+projectRecords(current)}</main>`;
   } else {
     header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="OpenGSD Path projects">${ICON.mark}OpenGSD Path</button><nav class="topnav" aria-label="Main"><button data-nav="board" aria-current="${CState.view==='board'?'page':'false'}">Projects</button><button data-nav="config" aria-current="${['config','folders','plugin'].includes(CState.view)?'page':'false'}">Settings</button></nav><span class="spacer"></span>${status}${settings}</header>`;

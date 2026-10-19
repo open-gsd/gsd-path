@@ -140,7 +140,7 @@ def read(status: ProjectStatus, base: Path) -> List[dict]:
 
     status.phases = list(STEPS)
     title = re.search(r"^#\s+(.+?)\s*$", _text(base / "PROJECT.md"), re.MULTILINE)
-    status.project = title.group(1) if title else None
+    status.project = title.group(1) if title and title.group(1).lower() != "project" else None
     status.vision = (_section_paragraph(base / "PROJECT.md", "Core Value")
                      or _section_paragraph(base / "PROJECT.md", "What This Is"))
     status.intent = _section_paragraph(base / "STATE.md", "Next Action")
@@ -166,6 +166,9 @@ def read(status: ProjectStatus, base: Path) -> List[dict]:
             "goal": m.get("vision") or None, "archive": None})
         if m["id"] == current:
             status.milestone = m["title"] or m["id"]
+    if current is None and status.roadmap_milestones:
+        # Nothing open: the card's milestone is the last one shipped.
+        status.milestone = status.roadmap_milestones[-1]["slug"]
 
     slices = [s for s in data["slices"] if s["milestone_id"] == current]
     index = {s["id"]: wave for wave, s in enumerate(slices, 1)}

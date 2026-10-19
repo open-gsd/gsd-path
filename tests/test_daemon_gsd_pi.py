@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import sys
 import tempfile
@@ -113,6 +114,27 @@ class GsdPiReaderTests(unittest.TestCase):
         writer.commit()
         self.assertIn("S02-T03", [t["id"] for t in self.probe()["tasks"]])
 
+    def test_reading_a_leftover_wal_is_not_project_activity(self) -> None:
+        # A writer that stopped without a checkpoint leaves gsd.db-wal and gsd.db-shm behind.
+        # The first reader then rebuilds the shared index; the watch must not take that as activity.
+        import shutil
+        from gsd_daemon import flavors, probe
+        self.make_db(schema="PRAGMA journal_mode=WAL;" + SCHEMA)
+        writer = sqlite3.connect(self.base / "gsd.db")
+        writer.execute("INSERT INTO tasks VALUES ('M002', 'S02', 'T03', 'Search body', 'pending', '[]')")
+        writer.commit()
+        left = self.root.parent / "left" / ".gsd"
+        shutil.copytree(self.base, left)  # copied while the writer is open: -wal and -shm included
+        writer.close()
+        self.base = left
+        self.root = left.parent
+        old = probe.tree_mtime(left, flavors.SKIP["gsd-pi"]) - 100
+        for path in [left, *left.iterdir()]:
+            os.utime(path, (old, old))
+        self.assertIn("S02-T03", [t["id"] for t in self.probe()["tasks"]])
+        self.assertGreater((left / "gsd.db-shm").stat().st_mtime, old)  # the read rebuilt the index
+        self.assertEqual(probe.tree_mtime(left, flavors.SKIP["gsd-pi"]), old)
+
     def test_older_schema_without_optional_columns_or_tables(self) -> None:
         self.make_db("""
         CREATE TABLE milestones (id TEXT PRIMARY KEY, title TEXT, status TEXT);
@@ -173,6 +195,25 @@ class GsdPiReaderTests(unittest.TestCase):
                 write(self.base / "STATE.md", STATE.format(phase=phase, blocker="None"))
                 card = self.probe()
                 self.assertEqual((card["phase"], card["health"]), (step, "green"))
+
+    def test_shipped_project_shows_its_last_milestone_and_skips_old_worktrees(self) -> None:
+        self.make_db()
+        connection = sqlite3.connect(self.base / "gsd.db")
+        connection.execute("UPDATE milestones SET status = 'complete'")
+        connection.commit()
+        connection.close()
+        write(self.base / "STATE.md", "# GSD State\n\n**Active Milestone:** None\n**Phase:** complete\n")
+        write(self.base / "PROJECT.md", "# Project\n")  # gsd-pi's generic title
+        card = self.probe()
+        self.assertEqual((card["workflow"]["state"], card["milestone"], card["project"]), ("shipped", "Notes", None))
+        # gsd-pi's old layout kept whole checkouts in .gsd/worktrees: a change there is not project activity.
+        from gsd_daemon import flavors, probe
+        (self.base / "worktrees" / "M002").mkdir(parents=True)
+        before = probe.tree_mtime(self.base, flavors.SKIP["gsd-pi"])
+        write(self.base / "worktrees" / "M002" / "app.js", "x\n")
+        import os
+        os.utime(self.base / "worktrees" / "M002" / "app.js", (before + 100, before + 100))
+        self.assertEqual(probe.tree_mtime(self.base, flavors.SKIP["gsd-pi"]), before)
 
     def test_project_without_milestones_is_not_started(self) -> None:
         write(self.base / "STATE.md", "# GSD State\n\n**Active Milestone:** None\n**Phase:** pre-planning\n")

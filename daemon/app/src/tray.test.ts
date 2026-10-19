@@ -16,7 +16,8 @@ describe("trayStatus", () => {
 describe("attentionCards", () => {
   it("opens a gsd-pi or gsd-core card by its id, not its shared folder", () => {
     const pi = { ...building, id: "/work/gsd-path::gsd-pi", flavor: "gsd-pi" };
-    expect(attentionCards([pi])[0].root).toBe("/work/gsd-path::gsd-pi");
+    expect(attentionCards([pi])[0]).toMatchObject({ root: "/work/gsd-path::gsd-pi", name: "gsd-path · gsd-pi" });
+    expect(trayRows([building]).map((row) => row.name)).toEqual(["gsd-path"]);
     expect(trayRows([building, pi]).map((row) => row.root).sort()).toEqual(["/work/gsd-path", "/work/gsd-path::gsd-pi"]);
   });
   it("lists only projects that need attention, red before amber, then by name", () => {

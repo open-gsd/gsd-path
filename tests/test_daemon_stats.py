@@ -86,6 +86,13 @@ class PhaseSecondsTests(unittest.TestCase):
                   self.event("2026-10-01T10:00:00+00:00", "plan -> build", root="/q")]
         self.assertEqual(stats.phase_seconds(events, ["/p", "/q"], self.NOW), [{"phase": "build", "seconds": 10800}])
 
+    def test_cards_that_share_a_folder_keep_their_own_phase_time(self):
+        core = "/p::gsd-core"
+        events = [self.event("2026-10-01T10:00:00+00:00", "plan -> build"),  # older GSD Path event: no id
+                  {**self.event("2026-10-01T11:00:00+00:00", "plan -> execute"), "id": core}]
+        self.assertEqual(stats.phase_seconds(events, ["/p"], self.NOW), [{"phase": "build", "seconds": 7200}])
+        self.assertEqual(stats.phase_seconds(events, [core], self.NOW), [{"phase": "execute", "seconds": 3600}])
+
     def test_no_recorded_change_is_missing(self):
         self.assertIsNone(stats.phase_seconds([], ["/p"], self.NOW))
         self.assertIsNone(stats.phase_seconds([self.event("bad time", "a -> b")], ["/p"], self.NOW))

@@ -19,6 +19,10 @@ FOREIGN = {
     "gsd-pi": (".gsd", ("STATE.md", "gsd.db", "milestones")),
     "gsd-core": (".planning", ("STATE.md", "ROADMAP.md")),
 }
+# Left out of the change watch: gsd-pi's old layout kept whole checkouts in .gsd/worktrees,
+# and gsd.db-shm is SQLite's shared index, which the daemon's own read-only reads touch.
+SKIP = {"gsd-pi": ("worktrees", "gsd.db-shm"), "gsd-core": ()}
+
 # The records each framework keeps, state file first: the card's source links and coverage.
 RECORDS = {
     "gsd-pi": (("STATE.md", "State"), ("PROJECT.md", "Project"), ("REQUIREMENTS.md", "Requirements"),
@@ -55,7 +59,7 @@ def foreign_flavors(root: Union[str, Path]) -> List[str]:
 
 def probe_foreign(root: Union[str, Path], flavor: str) -> ProjectStatus:
     root = str(root)
-    mtime = tree_mtime(state_dir(root, flavor))
+    mtime = tree_mtime(state_dir(root, flavor), SKIP[flavor])
     status = ProjectStatus(
         root=root,
         id=project_id(root, flavor),

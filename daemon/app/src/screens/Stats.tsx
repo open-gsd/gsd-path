@@ -5,7 +5,7 @@ import { settingsHash } from "../route";
 import { api } from "../shell";
 import { costChart, phaseRows, reloadDue, scopes, tokenChart, unpricedNote, verifyChart, waveRows } from "../stats";
 import type { Chart, StatsPayload } from "../stats";
-import { idOf } from "../status";
+import { idOf, phasesOf } from "../status";
 import type { Status } from "../status";
 import "./stats.css";
 
@@ -59,7 +59,8 @@ export function Stats({ status, root }: { status: Status | null; root: string | 
   const data = now?.data;
   const end = stamp ? stamp.slice(0, 10) : null;
   const tokens = data && tokenChart(data, end), cost = data && costChart(data, end);
-  const phases = data && phaseRows(data), verify = data && verifyChart(data);
+  const scoped = projects.find((p) => idOf(p) === root);
+  const phases = data && phaseRows(data, scoped ? phasesOf(scoped) : undefined), verify = data && verifyChart(data);
   const waves = data && waveRows(data, projects.find((p) => idOf(p) === root)?.waves);
   const unpriced = data ? unpricedNote(data.unpriced) : null;
 
