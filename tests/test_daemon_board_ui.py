@@ -80,7 +80,7 @@ class BoardUITests(unittest.TestCase):
             "repository": "gsd-path"})
         watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={project.root: project})
         watcher.poll_once.return_value = []
-        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock(), frameworks=Mock(**{"status.return_value": {}}))
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.addCleanup(server.watcher_stop.set)
@@ -109,7 +109,7 @@ class BoardUITests(unittest.TestCase):
             "project_root": "/projects/gsd-path/app", "repository": "gsd-path"})
         watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={project.root: project})
         watcher.poll_once.return_value = []
-        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock(), frameworks=Mock(**{"status.return_value": {}}))
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.addCleanup(server.watcher_stop.set)
@@ -146,7 +146,7 @@ class BoardUITests(unittest.TestCase):
         project = ProjectStatus(root=str(tracked), project="Widget", **project_identity(tracked))
         watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={project.root: project})
         watcher.poll_once.return_value = []
-        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock(), frameworks=Mock(**{"status.return_value": {}}))
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.addCleanup(server.watcher_stop.set)
@@ -170,7 +170,7 @@ class BoardUITests(unittest.TestCase):
                 "outcome": "plan/done", "next": "Invoke $gsd-path to continue with build. <review>"}})
         watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={project.root: project})
         watcher.poll_once.return_value = []
-        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock(), frameworks=Mock(**{"status.return_value": {}}))
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.addCleanup(server.watcher_stop.set)
@@ -196,7 +196,7 @@ class BoardUITests(unittest.TestCase):
                 'workflow': workflow})
         watcher = Mock(config=Config(parents=[], session_dirs=[]), projects=projects)
         watcher.poll_once.return_value = []
-        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock(), frameworks=Mock(**{"status.return_value": {}}))
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.addCleanup(server.watcher_stop.set)
@@ -236,7 +236,7 @@ class BoardUITests(unittest.TestCase):
             watcher = Mock(config=Config(parents=[], session_dirs=[]),
                            projects={str(project): ProjectStatus(root=str(project), project="Demo")})
             watcher.poll_once.return_value = []
-            server, _ = serve_in_thread(watcher, port=0, plugin=manager)
+            server, _ = serve_in_thread(watcher, port=0, plugin=manager, frameworks=Mock(**{"status.return_value": {}}))
             self.addCleanup(server.server_close)
             self.addCleanup(server.shutdown)
             self.addCleanup(server.watcher_stop.set)
@@ -284,7 +284,7 @@ class BoardUITests(unittest.TestCase):
             watcher = Mock(config=config, projects={})
             watcher.poll_once.return_value = []
             with mock.patch.object(config, "save", side_effect=lambda: Config.save(config, root / "config.json")):
-                server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+                server, _ = serve_in_thread(watcher, port=0, plugin=Mock(), frameworks=Mock(**{"status.return_value": {}}))
                 self.addCleanup(server.server_close)
                 self.addCleanup(server.shutdown)
                 self.addCleanup(server.watcher_stop.set)
@@ -329,7 +329,7 @@ class BoardUITests(unittest.TestCase):
         env = mock.patch.dict("os.environ", {"GSD_DAEMON_HISTORY": str(history)})
         env.start()
         self.addCleanup(env.stop)
-        server, _ = serve_in_thread(watcher, port=0, plugin=plugin)
+        server, _ = serve_in_thread(watcher, port=0, plugin=plugin, frameworks=Mock(**{"status.return_value": {}}))
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.addCleanup(server.watcher_stop.set)

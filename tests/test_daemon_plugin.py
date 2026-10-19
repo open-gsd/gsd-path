@@ -6,6 +6,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 
@@ -637,7 +638,7 @@ class EndpointTests(unittest.TestCase):
         make_global_install(cls.manager, "kimi", version="1.0.0")
         cls.manager._write_cache("9.9.9")
         watcher = Watcher(Config(parents=[str(parent)]))
-        cls.server = serve(watcher, port=0, plugin=cls.manager)
+        cls.server = serve(watcher, port=0, plugin=cls.manager, frameworks=mock.Mock(**{"status.return_value": {}}))
         cls.port = cls.server.server_address[1]
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()

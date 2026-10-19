@@ -15,6 +15,7 @@ from . import __version__
 from . import env_files, hosts, project_ops, settings_api, stats
 from .history import append_event, resolve_history_path
 from .model import PATH_FLAVOR, aggregate
+from .frameworks import Frameworks
 from .plugin import OP_LOCK, PluginManager
 from .path_settings import configure
 from .project_files import FileAccessError, request_files
@@ -33,6 +34,7 @@ _PLUGIN_ENDPOINTS = (
     "/api/plugin/uninstall",
     "/api/plugin/check",
     "/api/plugin/release",
+    "/api/frameworks/update",
 )
 TOKEN_HEADER = "X-GSD-Path-Token"
 
@@ -1049,6 +1051,11 @@ class _Handler(BaseHTTPRequestHandler):
                 payload["hosts"] = {}
                 payload["projects"] = []
                 payload["error"] = str(error)
+            try:
+                payload["frameworks"] = self.frameworks.status()
+            except Exception as error:
+                payload["frameworks"] = {}
+                payload["frameworks_error"] = str(error)
             self._respond(200, "application/json", json.dumps(payload, indent=2, sort_keys=True))
         elif path == "/activity":
             payload = {"generated_at": utc_now_iso(), "events": _read_activity()}
@@ -1296,7 +1303,15 @@ class _Handler(BaseHTTPRequestHandler):
             return 200, result
         if path == "/api/plugin/check":
             refresh = manager.refresh_source(ttl_hours=0)
-            return 200, {**manager.check_update(), "ok": refresh["refreshed"], "error": refresh["error"]}
+            # One check covers the GSD Path release and gsd-pi / gsd-core.
+            framework_errors = self.frameworks.check()
+            return 200, {**manager.check_update(), "ok": refresh["refreshed"], "error": refresh["error"],
+                         "frameworks": self.frameworks.status(), "framework_errors": framework_errors}
+        if path == "/api/frameworks/update":
+            try:
+                return 200, self.frameworks.update(body.get("name"), dry_run=dry_run)
+            except ValueError as error:
+                raise _BadRequest(str(error))
         if path == "/api/plugin/release":
             version = body.get("version", "")
             if version is not None and (not isinstance(version, str) or not version):
@@ -1342,7 +1357,7 @@ class _StopEvent(threading.Event):
 
 def serve(watcher: Watcher, port: int = DEFAULT_PORT,
           plugin: Optional[PluginManager] = None,
-          token: Optional[str] = None) -> ThreadingHTTPServer:
+          token: Optional[str] = None, frameworks: Optional[Frameworks] = None) -> ThreadingHTTPServer:
     # Bind before the first session scan: scanning every host session log on
     # the machine can take a while cold, and the dashboard must not wait on it.
     watcher.poll_once(scan_sessions=False)
@@ -1357,7 +1372,8 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
                     append_event(event)
 
     handler = type("Handler", (_Handler,),
-                   {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan),
+                   {"watcher": watcher, "plugin": plugin or PluginManager(), "frameworks": frameworks or Frameworks(),
+                    "scan": staticmethod(scan),
                     "scan_lock": scan_lock, "wake": staticmethod(wake.set),
                     "token": token})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
@@ -1379,13 +1395,14 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
 
 
 def serve_in_thread(
-    watcher: Watcher, port: int = DEFAULT_PORT, plugin: Optional[PluginManager] = None
+    watcher: Watcher, port: int = DEFAULT_PORT, plugin: Optional[PluginManager] = None,
+    frameworks: Optional[Frameworks] = None,
 ) -> Tuple[ThreadingHTTPServer, threading.Thread]:
     """Start the dashboard server on a daemon thread; returns (server, thread).
 
     Callers shut it down with server.shutdown() + server.server_close().
     """
-    server = serve(watcher, port, plugin=plugin)
+    server = serve(watcher, port, plugin=plugin, frameworks=frameworks)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread

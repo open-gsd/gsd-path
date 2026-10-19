@@ -23,6 +23,11 @@ The app has its own version and `app-v<version>` tags, separate from the
 - Cards that share a folder name their framework in the tray and the Stats
   scope list, and Stats keeps each card's time per phase apart. The phase chart
   of a gsd-pi or gsd-core card follows its own steps.
+- The Skills page lists gsd-pi and gsd-core with their installed versions
+  (gsd-core per agent host) and the latest release. **Check for updates** reads
+  them too (a failed check shows its error next to the framework), the update
+  banner names any that are behind, and **Update…** shows
+  the commands and then runs each framework's own update.
 
 ## [0.1.2] - 2026-10-03
 

@@ -124,6 +124,10 @@ describe("updateBanner", () => {
     expect(updateBanner(hosts, plugin(), status.projects)).toEqual({
       count: 2, title: "2 updates available", text: "skills for Codex and Zed, runtime for gsd-path" });
   });
+  it("lists a gsd-pi or gsd-core update", () => {
+    const frameworks = { "gsd-pi": { installed: "1.21.1", hosts: [], latest: "1.22.0", checked: null, update_available: true, detected: true } };
+    expect(updateBanner(hosts, plugin({ hosts: {}, projects: [], frameworks }), [])?.text).toBe("gsd-pi 1.22.0");
+  });
   it("counts one update in the singular", () => {
     const one = plugin({ hosts: { claude: { installed: true, version: "1.4.0" } } });
     expect(updateBanner(hosts, one, status.projects)).toEqual({ count: 1, title: "1 update available", text: "runtime for gsd-path" });

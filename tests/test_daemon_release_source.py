@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 
@@ -262,7 +263,8 @@ class RouteTests(Case):
         self.registry = Registry(["1.3.2", "1.4.0"], latest="1.4.0")
         self.plugin = self.manager(self.registry)
         server, _ = serve_in_thread(Watcher(Config(parents=[], history=False, session_dirs=[])),
-                                    port=0, plugin=self.plugin)
+                                    port=0, plugin=self.plugin,
+                                    frameworks=mock.Mock(**{"status.return_value": {}, "check.return_value": {}}))
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         self.addCleanup(server.watcher_stop.set)
