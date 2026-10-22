@@ -1152,6 +1152,25 @@ class PipelineStateTests(unittest.TestCase):
         run_git(repo, "commit", "-m", "fixture: plan intent correction base")
         return repo
 
+    def test_blocked_plan_stops_router_until_explicit_resume(self) -> None:
+        repo = self._plan_intent_correction_repo(status="blocked")
+        before = (repo / ".project/STATE.md").read_bytes()
+        self.assertEqual(pipeline_state.route_state(repo)["route"]["action"], "block")
+        status = pipeline_state.status_state(repo)
+        for key in ("next", "phase_next", "router_next"):
+            self.assertTrue(status["handoff"][key].startswith("block:"))
+            self.assertIn("correction or user decision", status["handoff"][key])
+        self.assertEqual((repo / ".project/STATE.md").read_bytes(), before)
+
+        pipeline_state.transition_state(
+            repo,
+            {"phase": "plan", "status": "blocked", "branch": "gsd-path/M001", "archive": None},
+            {"status": "active"},
+            "planning resumed",
+        )
+        route = pipeline_state.route_state(repo)["route"]
+        self.assertEqual((route["action"], route["phase"]), ("run-phase", "plan"))
+
     def test_plan_intent_correction_transitions_to_define_from_active(self) -> None:
         repo = self._plan_intent_correction_repo()
         result = pipeline_state.transition_state(

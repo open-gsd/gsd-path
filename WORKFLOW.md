@@ -336,6 +336,11 @@ exists).
 `.project/research/SYNTHESIS.md`, plus relevant existing code. **Output:**
 `.project/plan/PLAN.md` and one full task file per task in `.project/tasks/`.
 
+A failed plan revision records `plan/blocked`. The router stops there and asks
+for the correction or user decision named by the plan gate. It does not
+automatically restart planning. After resolving the blocker, invoke
+`$gsd-path-plan` explicitly; its resume records `planning resumed`.
+
 Order work by risk and dependency:
 
 1. Wave one burns down assumptions that could invalidate the plan.
