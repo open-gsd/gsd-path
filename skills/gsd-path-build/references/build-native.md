@@ -619,7 +619,11 @@ dispatch contract and perform steps 1–5 by hand.
    Log waiver — or, in program flow (ROADMAP.md exists), to abandon the
    milestone under the Milestone abandon procedure — listing the
    orchestrator's recommended option first marked `(recommended)` with a
-   one-line reason drawn from the review evidence. Never choose silently.
+   one-line reason drawn from the review evidence. When the cap cycle is
+   later than 1 and a blocking group in its `groups` has `first_seen_cycle`
+   1, recommend sending it
+   to define: fix cycles since cycle 1 have not closed that criterion, so it
+   is likely unbounded. Never choose silently.
    When the canonical verdict is `pass` and `wave-N.cycleC.panel.md` reports
    `Actionable` greater than 0, do not advance silently: present **Outcome**
    with the canonical pass plus the actionable count, **Review** linking the

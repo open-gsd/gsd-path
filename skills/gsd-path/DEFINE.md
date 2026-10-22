@@ -273,7 +273,8 @@ question. The rules change for every primary mode:
    for kept prohibitions, each with a recommended ruling first. A ruling
    observable where the user sees the work becomes or amends a success
    criterion; write every ruling into `## Edge coverage` and
-   `## Prohibitions`. Program mode skips this step (each milestone runs it
+   `## Prohibitions`. Bound every absence criterion in the edge round
+   (search space, check, absent result). Program mode skips this step (each milestone runs it
    in milestone mode); milestone mode runs it inside its confirmation.
 7. Classify the proposed milestone lane before writing the approval draft.
    Milestone mode keeps `Lane: milestone` and skips this classification.

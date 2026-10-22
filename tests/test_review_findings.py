@@ -480,6 +480,24 @@ class SkepticSelectionTest(unittest.TestCase):
         self.assertTrue(result["all_refuted"])
 
 
+class CapCycleTest(unittest.TestCase):
+    def test_cap_marks_criterion_blocked_since_cycle_one(self):
+        # build-native cap escalation recommends define on first_seen_cycle 1 at a cap cycle > 1.
+        fixture = Fixture(self, cycles=2, skeptics="off")
+        fixture.lens("contract", cycle=1, t001_fails=["Parses CSV rows — found: no, parser.py:1"])
+        fixture.lens("adversarial", cycle=1, verdict="pass")
+        fixture.lens("contract", cycle=2, t001_fails=[
+            "Parses CSV rows — found: still no, parser.py:2",
+            "Rejects malformed rows — found: accepts them, parser.py:9",
+        ])
+        fixture.lens("adversarial", cycle=2, verdict="pass")
+        _, result = fixture.run(cycle=2)
+        self.assertTrue(result["cap_reached"])
+        groups = {group["locator"]: group for group in result["groups"]}
+        self.assertEqual((groups["t001_ac1"]["first_seen_cycle"], groups["t001_ac1"]["repeat"]), (1, True))
+        self.assertEqual((groups["t001_ac2"]["first_seen_cycle"], groups["t001_ac2"]["repeat"]), (2, False))
+
+
 class CarryForwardTest(unittest.TestCase):
     def test_earlier_refutation_with_unchanged_evidence_is_carried(self):
         fixture = Fixture(self)

@@ -232,8 +232,10 @@ the user's ruling per applicable edge in INTENT.md `## Edge coverage`:
 `criterion SCn` (stated in a success criterion), `held-out` (a named test
 pins it), or `dismissed` with a reason. The prohibition probe asks what each
 criterion must never silently become and records kept items in
-`## Prohibitions` as `criterion SCn`, `judgment`, or `dismissed`. Define
-never rules on an edge itself. `scripts/check_handoffs.py intent` checks
+`## Prohibitions` as `criterion SCn`, `judgment`, or `dismissed`. An
+absence criterion ("X does not exist") must state its search space, its
+check, and the result that counts as absent; reviewers judge it over that
+space only. Define never rules on an edge itself. `scripts/check_handoffs.py intent` checks
 both tables before every approval question, and the `define/done` transition
 refuses an intent whose tables are incomplete. An INTENT.md without these
 sections predates the probes and is not rechecked.

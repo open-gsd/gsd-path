@@ -96,6 +96,23 @@ Present the kept items with a recommended ruling and record each as a row:
 Work that affects no person directly records a single row instead, and no
 other: `| N1 | all | none | dismissed | <why no person is affected> |`.
 
+## Absence criteria
+
+A criterion that claims absence ("X does not exist", "no X anywhere",
+"never Y"), including one written from a prohibition, has no end until it
+says where to look. Each review can look somewhere new, so the build loops
+to the cycle cap. Every absence criterion states:
+
+- the search space: the files, surfaces, or artifacts to check;
+- the check: the command or observation that covers that space;
+- the absent result: the output that counts as absent.
+
+When one is missing, propose a bounded form in the same question round as
+the edges, recommended form first, and amend the criterion after the user
+rules. Do not choose the search space yourself: a narrower space is a scope
+ruling. Under pre-approval, an unbounded absence criterion is a required
+answer: stop and ask.
+
 ## INTENT.md tables
 
 ```markdown
@@ -131,7 +148,8 @@ rechecked; a near-miss heading fails the gate rather than switching it off.
   the owning task's Approach so the coder knows the line.
 - **Review.** A row pins the reading of its criterion. A reviewer does not
   pass a reading that contradicts a ruling in either table, and cites each
-  held-out edge and judgment prohibition id with its evidence.
+  held-out edge and judgment prohibition id with its evidence. An absence
+  criterion is judged over its stated search space only.
 - **Final review.** A criterion that carries a held-out edge or a judgment
   prohibition is `met` only when its Check, Observed, or Reference cites
   every such id with the evidence: the held-out test's recorded passing
