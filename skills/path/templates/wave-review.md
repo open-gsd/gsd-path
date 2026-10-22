@@ -52,9 +52,10 @@ Contract violations (blocking):
 ## Intent coverage
 
 <!-- One heading per INTENT.md success criterion owned by a task in this
-     wave, ending `: pass` or `: fail`. `scripts/check_handoffs.py wave
-     --review <this file>` gates the SC id set and verdicts. Omit this
-     section when no task in the wave owns an SC.
+     wave, ending `: pass` or `: fail`, in ascending SC id order (SC2
+     before SC4), with an em dash (—) after the id. `scripts/check_handoffs.py
+     wave --review <this file>` gates the SC ids, their order, and
+     verdicts. Omit this section when no task in the wave owns an SC.
      Copy every word of the criterion from INTENT.md `## Success criteria`:
      join indented continuation lines and sub-bullets with a single space
      (the `- ` markers of sub-bullets are optional). The gate compares every

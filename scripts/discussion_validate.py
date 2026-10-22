@@ -1128,14 +1128,29 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
                         is_last_cycle=cycle == max(cycles),
                     )
                 )
+            if cycle != max(cycles) and "blocked" not in wave_verdicts[cycle]:
+                # A superseded pass cycle is allowed only when it could not close
+                # the wave: it fails the checks a last cycle must pass.
+                try:
+                    for path, depth, lens in expected:
+                        validate_wave_review(
+                            path,
+                            expected_tasks,
+                            wave_criteria[wave],
+                            depth,
+                            lens,
+                            task_texts,
+                            is_last_cycle=True,
+                        )
+                except ArchiveError:
+                    pass
+                else:
+                    raise ArchiveError(
+                        f"superseded review cycle {cycle} for wave {wave} "
+                        "must include a blocked Wave verdict"
+                    )
 
         last_cycle = max(cycles)
-        for cycle, verdicts in wave_verdicts.items():
-            if cycle != last_cycle and "blocked" not in verdicts:
-                raise ArchiveError(
-                    f"superseded review cycle {cycle} for wave {wave} "
-                    "must include a blocked Wave verdict"
-                )
         if any(verdict != "pass" for verdict in wave_verdicts[last_cycle]):
             raise ArchiveError(f"last review cycle for wave {wave} did not pass")
         if any(task_verdict != "pass" for task_verdict in task_verdicts[last_cycle]):

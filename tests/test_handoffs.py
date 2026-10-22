@@ -2923,7 +2923,39 @@ Tasks reviewed: 2
         t002 = "## T002 — Demo task T002: pass\n\n- ✅ The demo test suite is green. — unittest OK\n\n"
         blocked = ("Wave verdict: pass", "Wave verdict: blocked")
         order = "must review exactly T001, T002 in task id order"
+        sc1 = "### SC1 — The demo command prints hello.: pass\n- ✅ hello.py output\n"
+        sc2 = "### SC2 — The demo test suite is green.: pass\n- ✅ unittest\n"
         cases = (
+            # Issue #437: completion compares SC headings by position, so the gate does too.
+            (
+                "SC sections out of ascending order",
+                [(sc1 + sc2, sc2 + sc1)],
+                "Intent coverage must cover exactly SC1, SC2 in ascending SC order",
+            ),
+            (
+                "SC heading with an ASCII hyphen",
+                [("### SC2 — The demo", "### SC2 - The demo")],
+                "has an invalid Intent coverage heading: ### SC2 - The demo test suite is "
+                "green.: pass; use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)",
+            ),
+            (
+                "SC verdict without a space after the colon",
+                [("green.: pass", "green.:pass")],
+                "has an invalid Intent coverage heading: ### SC2 — The demo test suite is green.:pass; "
+                "use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)",
+            ),
+            (
+                "SC heading with trailing whitespace",
+                [("green.: pass", "green.: pass ")],
+                "has an invalid Intent coverage heading: ### SC2 — The demo test suite is green.: pass; "
+                "use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)",
+            ),
+            (
+                "indented SC heading",
+                [("### SC2 — The demo", " ### SC2 — The demo")],
+                "has an invalid Intent coverage heading: ### SC2 — The demo test suite is green.: pass; "
+                "use `### SCn — <criterion>: pass` or `: fail` with an em dash (—)",
+            ),
             ("sections in PLAN table order", [(t001 + t002, t002 + t001)], order),
             ("blocked review, sections out of order", [blocked, (t001 + t002, t002 + t001)], order),
             ("blocked review, unknown task", [blocked, ("## T002 — Demo", "## T009 — Demo")], order),

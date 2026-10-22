@@ -30,8 +30,9 @@ criteria. The same applies to the entry `orchestrator regression Verify of
 Then check each INTENT.md success criterion owned by a task in this wave
 against that same isolated product. In each `### SCn —` heading, copy the
 complete criterion text from INTENT.md `## Success criteria` (see Review
-file format below). Mark `pass` or `fail` with evidence; a failed owned SC
-blocks the wave. Omit the Intent coverage section when no task in the wave owns
+file format below). Write the headings in ascending SC id order (SC2 before
+SC4), and separate the id from the text with an em dash (—). Mark `pass`
+or `fail` with evidence; a failed owned SC blocks the wave. Omit the Intent coverage section when no task in the wave owns
 an SC. When INTENT.md `## Edge coverage` or `## Prohibitions` has rows for
 an owned SC, judge it against those rulings too: cite each `held-out` edge
 id with its held-out test's recorded output and each `judgment` prohibition

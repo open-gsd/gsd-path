@@ -272,6 +272,51 @@ Depth: {depth}
                 with self.assertRaisesRegex(ArchiveError, expected_error):
                     discussion_validate.review_cycle_counts(project)
 
+    def test_superseded_pass_cycle_that_could_not_close_the_wave(self) -> None:
+        # Issue #437: a pass cycle with SC headings out of order is not a valid last
+        # cycle, so a later cycle may supersede it. A valid pass cycle may not.
+        cycle_text = """# Review — wave 1, cycle {cycle}
+
+Wave verdict: pass
+Cycle: {cycle}
+Depth: full
+Tasks reviewed: 1
+
+## T001 — demo: pass
+
+- ✅ demo works — evidence recorded in tests/ExampleTest.py:14 from the Verify output.
+
+## Intent coverage
+
+{coverage}"""
+        sc1 = "### SC1 — demo works: pass\n\n- ✅ Evidence recorded in tests/ExampleTest.py:21 from the Verify output.\n\n"
+        sc2 = "### SC2 — demo is fast: pass\n\n- ✅ Evidence recorded in tests/ExampleTest.py:30 from the Verify output.\n\n"
+        for first, accepted in ((sc2 + sc1, True), (sc1 + sc2, False)):
+            with self.subTest(accepted=accepted), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                self.make_project(project, "full")
+                (project / "intent" / "INTENT.md").write_text(
+                    "# Intent\n\n## Success criteria\n\n1. demo works\n2. demo is fast\n",
+                    encoding="utf-8",
+                )
+                plan = project / "plan" / "PLAN.md"
+                plan.write_text(
+                    plan.read_text(encoding="utf-8") + "| SC2 | T001 | AC2 |\n",
+                    encoding="utf-8",
+                )
+                for cycle, coverage in ((1, first), (2, sc1 + sc2)):
+                    (project / "review" / f"wave-1.cycle{cycle}.md").write_text(
+                        cycle_text.format(cycle=cycle, coverage=coverage),
+                        encoding="utf-8",
+                    )
+                if accepted:
+                    self.assertEqual(discussion_validate.review_cycle_counts(project), [2])
+                else:
+                    with self.assertRaisesRegex(
+                        ArchiveError, "superseded review cycle 1 for wave 1"
+                    ):
+                        discussion_validate.review_cycle_counts(project)
+
     def test_singleton_full_and_verify_only_cycles_still_pass(self) -> None:
         for depth in ("full", "verify-only"):
             with self.subTest(depth=depth), tempfile.TemporaryDirectory() as directory:
