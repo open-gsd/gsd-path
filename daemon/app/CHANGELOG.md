@@ -35,6 +35,12 @@ The app has its own version and `app-v<version>` tags, separate from the
   "partial install" and "Some folders were changed", because the installer
   refuses before it writes anything.
 
+### Fixed
+- On macOS and Linux, when the app or `gsd-path-daemon install` finds a
+  `~/.gsd-path/venv` made by another Python, it rebuilds the venv for the
+  current Python. Before, the venv mixed two Pythons: each launch reinstalled
+  the daemon but still ran the old one.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
