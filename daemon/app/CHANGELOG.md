@@ -41,6 +41,10 @@ The app has its own version and `app-v<version>` tags, separate from the
   current Python. Before, the venv mixed two Pythons: each launch reinstalled
   the daemon but still ran the old one.
 
+### Fixed
+- The Tasks table no longer squeezes short columns, such as task ID and
+  wave, to one character per line. Task file paths wrap at `/`.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
