@@ -612,7 +612,8 @@ class PluginManager:
         error = None
         if rc != 0:
             detail = _tail(stderr) or _tail(stdout)
-            prefix = "partial install (exit 2): " if rc == 2 else ""
+            # install.py exits 2 only when it refuses the arguments, before it writes anything.
+            prefix = "installer refused the request (exit 2), nothing was changed: " if rc == 2 else ""
             error = prefix + detail
         return {
             "ok": rc == 0,

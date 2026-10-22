@@ -29,6 +29,12 @@ The app has its own version and `app-v<version>` tags, separate from the
   banner names any that are behind, and **Update…** shows
   the commands and then runs each framework's own update.
 
+### Fixed
+- When the installer refuses a request (exit 2), the failure card says
+  "installer refused the request" and "Nothing was changed." It no longer says
+  "partial install" and "Some folders were changed", because the installer
+  refuses before it writes anything.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
