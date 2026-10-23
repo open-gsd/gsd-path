@@ -13,8 +13,9 @@ no other process → `writerLeaseHeld: true`; each `health` call counted as one
 `status-answers.json` are live captures from gsd-atlas d23b44c, with only the
 repo path rewritten to `/tmp/atlas-probe/repo`. A follower has no indexer, so
 its envelope carries `indexer: null` and top-level `degraded: ["follower"]`.
-The status capture was taken after six `health` calls. The error envelope
-follows `src/query/envelope.ts` (`gsd-atlas.error/1`, code in `diagnostics`).
+The status capture was taken after six `health` calls. `health-not-indexed.json`
+is the live `health`-before-build capture (`gsd-atlas.error/1`, code in
+`diagnostics`).
 
 Refresh these from a live run on the first released gsd-atlas version
 (launch checklist step 3) before the panel PRs ship.
