@@ -213,15 +213,36 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 harness.review(repo, "--wait", "60", verdict="blocked")["status"], "blocked"
             )
 
-            for diagnose_entry in (pipeline_diagnose.diagnose, diagnose_installed):
-                with self.subTest(entrypoint=diagnose_entry.__name__):
-                    result = diagnose_entry(repo)
-                    findings = [
-                        item for item in result["findings"] if item["id"] == "review-cycles"
-                    ]
-                    self.assertEqual(len(findings), 1)
-                    self.assertIn("wave 1 review cycle 1 is blocked", findings[0]["evidence"])
-                    self.assertIn("next review cycle", findings[0]["retry"])
+            def retry_argv() -> list[str]:
+                retries = []
+                for diagnose_entry in (pipeline_diagnose.diagnose, diagnose_installed):
+                    with self.subTest(entrypoint=diagnose_entry.__name__):
+                        result = diagnose_entry(repo)
+                        findings = [
+                            item for item in result["findings"] if item["id"] == "review-cycles"
+                        ]
+                        self.assertEqual(len(findings), 1)
+                        self.assertIn("wave 1 review cycle 1 is blocked", findings[0]["evidence"])
+                        self.assertNotIn("<", findings[0]["retry"])
+                        retries.append(shlex.split(findings[0]["retry"], comments=True))
+                self.assertEqual(retries[0][2:], retries[1][2:])
+                self.assertTrue(retries[0][1].endswith("dispatch_driver.py"))
+                return retries[0][2:]
+
+            # No repair task exists yet: the next step is fix-tasks, not a re-review.
+            self.assertEqual(
+                retry_argv(),
+                ["fix-tasks", "--repo", str(repo.resolve()), "--wave", "1", "--cycle", "1"],
+            )
+            created = harness.driver(repo, "fix-tasks", "--wave", "1", "--cycle", "1")
+            self.assertEqual(created["status"], "created", created)
+            landed = harness.round(repo, "--wait", "60", wave=created["plan_wave"])
+            self.assertEqual(landed["status"], "done", landed)
+            # The repair landed: the source wave's next cycle judges it.
+            self.assertEqual(
+                retry_argv(),
+                ["review", "--repo", str(repo.resolve()), "--wave", "1", "--cycle", "2"],
+            )
 
     def test_diagnose_stays_silent_while_build_waves_are_still_running(self) -> None:
         harness = dispatch_tests.DispatchDriverTests(

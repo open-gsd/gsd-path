@@ -256,7 +256,15 @@ def _state_template() -> Path:
 
 
 def _command(module: object, *arguments: object) -> str:
-    script = Path(str(getattr(module, "__file__"))).resolve()
+    return _script_command(Path(str(getattr(module, "__file__"))), *arguments)
+
+
+def _dispatch_command(*arguments: object) -> str:
+    return _script_command(Path(str(build_state.__file__)).with_name("dispatch_driver.py"), *arguments)
+
+
+def _script_command(path: Path, *arguments: object) -> str:
+    script = path.resolve()
     def text(value: object) -> str:
         # Agents paste this into Git Bash on Windows, where unquoted
         # backslashes are escapes; forward slashes need no quoting.
@@ -394,25 +402,36 @@ def _build_completion_findings(repo: Path) -> list[dict[str, str]]:
                 "review-cycles",
                 "stuck",
                 f"{error.code}: {error}",
-                "dispatch_driver.py complete reports the same typed blocker; follow "
-                "its recovery (reconcile failed or blocked tasks, resolve a "
-                "dependency deadlock before new dispatch)",
+                _dispatch_command("complete", "--repo", repo)
+                + "  # reports the same typed blocker; follow its recovery (reconcile "
+                "failed or blocked tasks, resolve a dependency deadlock before new dispatch)",
             )
         ]
     blocked = ready_result.get("blocked_review")
     if blocked:
+        wave, cycle = blocked["wave"], blocked["cycle"]
         waiting = ", ".join(
-            str(wave) for wave in blocked.get("waiting_waves") or []
+            str(item) for item in blocked.get("waiting_waves") or []
         )
+        if any((repo / ".project" / "tasks").glob(f"*-fix-wave-{wave}-cycle-{cycle}.md")):
+            retry = (
+                _dispatch_command("review", "--repo", repo, "--wave", wave, "--cycle", cycle + 1)
+                + "  # add the owner's --child-command; the source wave's next review cycle "
+                "in full at the current HEAD; "
+                "pass --repair-evidence when review_findings.py repair-evidence accepts a landed repair"
+            )
+        else:
+            retry = (
+                _dispatch_command("fix-tasks", "--repo", repo, "--wave", wave, "--cycle", cycle)
+                + "  # then land the repair wave; the source wave's next review cycle judges it"
+            )
         return [
             _finding(
                 "review-cycles",
                 "stuck",
-                f"wave {blocked['wave']} review cycle {blocked['cycle']} is blocked "
+                f"wave {wave} review cycle {cycle} is blocked "
                 + (f"and holds waiting waves {waiting}" if waiting else "and holds completion"),
-                "run the source wave's next review cycle in full at the current "
-                "HEAD (dispatch_driver.py review --wave <N> --cycle <C>); "
-                "review_findings.py repair-evidence first when its receipt is accepted",
+                retry,
             )
         ]
     if ready_result.get("current_wave") is not None:
@@ -425,10 +444,12 @@ def _build_completion_findings(repo: Path) -> list[dict[str, str]]:
                 "review-cycles",
                 "stuck",
                 str(error),
-                "compare each PLAN.md wave with .project/review/wave-N.cycleC.md "
-                "and run the missing cycle's review "
-                "(dispatch_driver.py review --wave <N> --cycle <C>); a repair wave "
-                "is judged by its source wave's next cycle",
+                "compare each PLAN.md wave with the .project/review/wave-N.cycleC.md "
+                "files, then run the missing cycle's review: "
+                + _dispatch_command("review", "--repo", repo)
+                + " with that wave's --wave and --cycle and the owner's --child-command; "
+                "a repair wave is judged by "
+                "its source wave's next cycle",
             )
         ]
     return []
