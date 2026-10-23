@@ -1407,6 +1407,12 @@ def _route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
             mode="milestone" if status == "done" else "normal",
             reason=f"state is {phase}/{status}",
         )
+    if phase == "plan" and status == "blocked":
+        return _route_result(
+            state,
+            "block",
+            reason="plan is blocked; resolve the correction or user decision named by the plan gate before resuming",
+        )
     if phase == "plan" and status != "done":
         return _route_result(state, "run-phase", phase="plan", reason=f"state is {phase}/{status}")
     if phase == "plan":
