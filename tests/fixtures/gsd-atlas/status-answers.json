@@ -1,0 +1,126 @@
+{
+  "schema": "gsd-atlas.status/1",
+  "ok": true,
+  "data": {
+    "range": {
+      "since": 1792164439806,
+      "until": 1792769239806
+    },
+    "report": {
+      "range": {
+        "since": 1792164439806,
+        "until": 1792769239806
+      },
+      "answers": {
+        "total": 6,
+        "ok": 6,
+        "byTool": {
+          "atlas_status": 6
+        },
+        "truncated": 0,
+        "latency": {
+          "count": 6,
+          "p50UpperBoundMs": 100,
+          "p95UpperBoundMs": 100,
+          "overflow": false,
+          "buckets": {
+            "le1": 1,
+            "le2": 0,
+            "le5": 0,
+            "le10": 0,
+            "le20": 0,
+            "le50": 0,
+            "le100": 5,
+            "le200": 0,
+            "le500": 0,
+            "le1000": 0,
+            "le2000": 0,
+            "le5000": 0,
+            "inf": 0
+          }
+        }
+      },
+      "degraded": {
+        "follower": 1
+      },
+      "freshness": {
+        "count": 1,
+        "p50UpperBoundMs": 250,
+        "p95UpperBoundMs": 250,
+        "overflow": false,
+        "buckets": {
+          "le10": 0,
+          "le50": 0,
+          "le100": 0,
+          "le250": 1,
+          "le500": 0,
+          "le1000": 0,
+          "le2000": 0,
+          "le5000": 0,
+          "inf": 0
+        }
+      },
+      "indexHealth": {
+        "files": 1,
+        "errorFiles": 0,
+        "staleFiles": 0,
+        "sizeBytes": 135168,
+        "at": 1792769200149
+      },
+      "tokens": {
+        "estimatedTotal": 981,
+        "byTool": {
+          "atlas_status": 981
+        },
+        "label": "estimate"
+      }
+    },
+    "tenant": {
+      "storeId": "ee011689bf131350",
+      "location": {
+        "dir": "/tmp/atlas-probe/repo/.git/gsd-atlas",
+        "kind": "git-common"
+      },
+      "leader": true,
+      "store": {
+        "schemaVersion": 2,
+        "worktrees": [
+          {
+            "worktree": "/tmp/atlas-probe/repo",
+            "seq": 2,
+            "stalePaths": 0,
+            "files": 1
+          }
+        ],
+        "sizeBytes": 135168,
+        "writerLeaseHeld": true,
+        "leaseHolder": {
+          "pid": 65462,
+          "startedAt": 1792769239804,
+          "version": "0.0.0"
+        }
+      },
+      "indexer": null,
+      "governor": {
+        "queued": 0,
+        "running": 1,
+        "leases": 0,
+        "leasedBytes": 0
+      },
+      "metrics": {
+        "recording": true,
+        "queued": 0,
+        "dropped": 0,
+        "rejected": 0,
+        "writeFailures": 0
+      },
+      "startup": "pending",
+      "idle": {
+        "lastRoundAt": null,
+        "rounds": 0,
+        "failedSteps": 0
+      }
+    }
+  },
+  "diagnostics": []
+}

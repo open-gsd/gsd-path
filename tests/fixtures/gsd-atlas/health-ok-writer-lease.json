@@ -1,0 +1,53 @@
+{
+  "schema": "gsd-atlas.atlas-status/1",
+  "ok": true,
+  "data": {
+    "repo": "/tmp/atlas-probe/repo",
+    "worktrees": [
+      {
+        "worktree": "/tmp/atlas-probe/repo",
+        "seq": 2,
+        "staleCount": 0
+      }
+    ],
+    "store": {
+      "schemaVersion": 2,
+      "sizeBytes": 135168,
+      "writerLeaseHeld": true,
+      "rebuilt": false
+    },
+    "indexer": {
+      "watchMode": "native",
+      "queued": 0,
+      "running": 0,
+      "failed": 0,
+      "reconciling": false,
+      "lastReconcileAt": 1792769200348,
+      "lastIndexedAt": null
+    },
+    "governor": {
+      "queued": 0,
+      "running": 1,
+      "leases": 0
+    },
+    "tiers": [
+      {
+        "module": "javascript",
+        "grammar": true,
+        "precise": false,
+        "platform": false
+      },
+      {
+        "module": "typescript",
+        "grammar": true,
+        "precise": true,
+        "platform": false
+      }
+    ],
+    "policy": "off",
+    "health": "ok",
+    "reasons": []
+  },
+  "diagnostics": [],
+  "answer_id": "a_985029a829f3ccbb"
+}

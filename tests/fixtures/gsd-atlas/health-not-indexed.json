@@ -1,0 +1,13 @@
+{
+  "schema": "gsd-atlas.error/1",
+  "ok": false,
+  "data": null,
+  "diagnostics": [
+    {
+      "code": "not_indexed",
+      "severity": "error",
+      "message": "This repository has not been indexed yet. Run \"gsd-atlas build\" in a terminal inside it, then ask again."
+    }
+  ],
+  "answer_id": "a_d30e969157ec10f9"
+}
