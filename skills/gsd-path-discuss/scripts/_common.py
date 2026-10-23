@@ -14,6 +14,7 @@ import sys
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
 
+import atexit
 import contextlib
 import errno
 import json
@@ -23,6 +24,7 @@ import shlex
 import shutil
 import signal
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import BinaryIO, Iterable, Iterator, List, Optional, Sequence, Tuple
@@ -875,8 +877,50 @@ def find_bash() -> str:
     )
 
 
+def _remove_quietly(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _command_script_dir() -> str:
+    """A temp directory for command scripts that cannot dirty the running tree.
+
+    TMPDIR/TEMP/TMP may point into the tree being verified, and a script file
+    there shows up in git status and blocks landings (#448), so fall back to a
+    system directory when the environment temp sits inside the current tree.
+    """
+    candidate = os.path.realpath(tempfile.gettempdir())
+    tree = os.path.realpath(os.getcwd())
+    if candidate != tree and not candidate.startswith(tree + os.sep):
+        return candidate
+    for fallback in (
+        os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "Temp"),
+        "/var/tmp",
+        "/tmp",
+    ):
+        resolved = os.path.realpath(fallback)
+        if os.path.isdir(resolved) and resolved != tree and not resolved.startswith(tree + os.sep):
+            return resolved
+    raise OSError("no temp directory outside the current worktree for a command script")
+
+
 def bash_argv(command: str) -> List[str]:
-    return [find_bash(), "-c", command]
+    if os.name != "nt":
+        return [find_bash(), "-c", command]
+    # Git for Windows' bash (MSYS2) cuts an argument that carries a double
+    # quote near 8 KB before bash sees it, so a long Verify dies mid-script
+    # or silently passes when the cut lands in comments (#448). Run the exact
+    # bytes from a temp file outside every worktree instead.
+    bash = find_bash()
+    descriptor, path = tempfile.mkstemp(
+        prefix="gsd-path-command-", suffix=".sh", dir=_command_script_dir()
+    )
+    with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(command)
+    atexit.register(_remove_quietly, path)
+    return [bash, path]
 
 
 # cmd.exe re-parses the arguments of a .cmd or .bat target, so these would
