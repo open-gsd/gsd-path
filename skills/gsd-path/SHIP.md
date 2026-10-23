@@ -90,7 +90,14 @@ so the position is unchanged. Then:
    head and holds the exact output; there is no reusable ledger entry.
    Single-repo re-entry at the same command and commit reuses the execution,
    including a failed one, and finishes interrupted collection without running
-   the command again.
+   the command again. The one exception is an owner-diagnosed host failure (for
+   example a host toolchain version the project does not pin): re-run
+   `workflow_run.py prepare-final` with `--rerun` to retire the recorded
+   execution, run the command again, and append a second ledger entry marked
+   `rerun` — the failed entry stays as history. Product failures never take
+   `--rerun`; they go through the patch plan. The sidecar inherits the
+   orchestrator environment, PATH included, by design: the Verify must run the
+   project's own toolchain, so a host/PATH mismatch is a host failure.
    Missing legacy output requires evidence reconciliation, not a blind rerun.
    Any non-zero result stops this step; preserve its stderr and diagnose through
    the bundled forensics contract. Do not launch reviewers while project Verify
@@ -146,7 +153,8 @@ so the position is unchanged. Then:
    verdict `met` with a non-`none` Check or Reference, and every criterion
    listed in PLAN.md's Surface contract requires a matching `Surface` field
    and a non-`none` Check. A non-zero exit is
-   `ship/blocked`; never rerun project Verify to repair the evidence.
+   `ship/blocked`; never rerun project Verify to repair the evidence (a
+   host-caused command failure uses the `prepare-final --rerun` route above).
 6. Redispatch one complete corrected brief for a missing or invalid reviewer
    artifact under the same logical task name, following the runtime dispatch
    contract. Before dispatch, record the invalid destination's exact SHA-256.
