@@ -1,0 +1,46 @@
+{
+  "schema": "gsd-atlas.atlas-status/1",
+  "data": {
+    "repo": "/tmp/atlas-probe/repo",
+    "health": "degraded",
+    "reasons": [
+      "follower"
+    ],
+    "worktrees": [
+      {
+        "worktree": "/tmp/atlas-probe/repo",
+        "seq": 41,
+        "staleCount": 0
+      }
+    ],
+    "store": {
+      "schemaVersion": 2,
+      "sizeBytes": 1048576,
+      "writerLeaseHeld": false,
+      "rebuilt": false
+    },
+    "indexer": {
+      "watchMode": "watch",
+      "queued": 0,
+      "running": 0,
+      "failed": 0,
+      "reconciling": false,
+      "lastReconcileAt": null,
+      "lastIndexedAt": 1760791313000
+    },
+    "tiers": [
+      {
+        "module": "python",
+        "grammar": true,
+        "precise": true,
+        "platform": false
+      },
+      {
+        "module": "typescript",
+        "grammar": true,
+        "precise": false,
+        "platform": false
+      }
+    ]
+  }
+}

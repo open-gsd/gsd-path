@@ -1,0 +1,8 @@
+{
+  "schema": "gsd-atlas.error/1",
+  "ok": false,
+  "data": null,
+  "diagnostics": [
+    { "code": "not_indexed", "severity": "error", "message": "no index for this repository" }
+  ]
+}
