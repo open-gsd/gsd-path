@@ -1034,6 +1034,19 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         repair_introductions[receipt.task] = (receipt.wave, receipt.cycle)
     wave_artifacts = archive_milestone.canonical_wave_files(archive / "review")
     archive_milestone.validate_wave_skeptic_files(archive / "review", wave_depths, wave_artifacts)
+    # A repair wave — every task of the wave carries a Review findings section —
+    # is judged by the next review cycle of its source wave, never by an
+    # artifact of its own (build-native.md); an artifact it does have is still
+    # validated below. The heading test matches build_state's parsed-section
+    # rule, so a template comment mentioning the section does not qualify.
+    repair_waves = {
+        wave for wave in wave_numbers
+        if wave_tasks[wave]
+        and all(
+            re.search(r"(?m)^## Review findings\s*$", task_texts[task_id])
+            for task_id, _ in wave_tasks[wave]
+        )
+    }
     for path, wave, cycle, lens in wave_artifacts:
         if lens == "panel":
             artifacts.setdefault(wave, {}).setdefault(cycle, {})[lens] = path
@@ -1049,7 +1062,9 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
         if verdict not in {"pass", "blocked"}:
             raise ArchiveError(f"{path.name} has an invalid wave verdict")
         artifacts.setdefault(wave, {}).setdefault(cycle, {})[lens] = path
-    if sorted(artifacts) != wave_numbers:
+    if any(wave not in wave_numbers for wave in artifacts) or any(
+        wave not in artifacts for wave in wave_numbers if wave not in repair_waves
+    ):
         raise ArchiveError("review cycle waves do not match PLAN.md")
     for receipt in repair_receipts:
         if receipt.wave not in artifacts or receipt.cycle not in artifacts[receipt.wave]:
@@ -1065,7 +1080,7 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
             )
 
     counts = []
-    for wave in wave_numbers:
+    for wave in sorted(artifacts):
         cycles = artifacts[wave]
         if sorted(cycles) != list(range(1, max(cycles) + 1)):
             raise ArchiveError(f"review cycles for wave {wave} are not contiguous")
@@ -1226,8 +1241,9 @@ def render_manifest(repo: Path) -> dict:
     )
     listed_contents = "\n".join(f"- {path}" for path in archive_file_inventory(archive))
     cycle_text = "/".join(str(cycle) for cycle in cycles)
+    wave_numbers, _wave_depths = plan_wave_depths((archive / "plan" / "PLAN.md").read_text(encoding="utf-8"))
     count_text = (
-        f"{len(cycles)}  Tasks: {len(tasks)} done / {len(tasks)} total  "
+        f"{len(wave_numbers)}  Tasks: {len(tasks)} done / {len(tasks)} total  "
         f"Review cycles used: {cycle_text}"
         + (f"  Attested: {attested}" if attested else "")
     )
@@ -1288,7 +1304,12 @@ def validate_manifest(project: Path, archive: Path, state: PipelineState) -> tup
     validate_gap_reviews(archive, reviewed_head)
     task_files, attested = archive_milestone.landed_task_evidence(project, archive / "tasks", reviewed_head)
     cycle_counts = review_cycle_counts(archive)
-    wave_count = len(cycle_counts)
+    # Waves counts PLAN waves; an unreviewed repair wave contributes no cycle
+    # but is still a wave, so the count comes from the PLAN, not the cycles.
+    manifest_wave_numbers, _manifest_depths = plan_wave_depths(
+        (archive / "plan" / "PLAN.md").read_text(encoding="utf-8")
+    )
+    wave_count = len(manifest_wave_numbers)
     counts = re.fullmatch(
         r"(\d+)\s+Tasks:\s+(\d+) done / (\d+) total\s+Review cycles used:\s+([1-9]\d*(?:/[1-9]\d*)*)"
         r"(?:\s+Attested:\s+([1-9]\d*))?",

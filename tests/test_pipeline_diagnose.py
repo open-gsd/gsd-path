@@ -20,6 +20,7 @@ from scripts import (
 )
 
 from tests import test_archive_milestone as archive_tests
+from tests import test_dispatch_driver as dispatch_tests
 from tests.test_pipeline_undo import write_plan_tasks
 from tests.test_task_briefs import PLAN_WAVE
 
@@ -170,6 +171,121 @@ class PipelineDiagnoseTests(unittest.TestCase):
             self.assertFalse(
                 any(item["severity"] == "stuck" for item in result["findings"])
             )
+
+    def test_diagnose_reports_the_review_set_that_complete_would_refuse(self) -> None:
+        # Issue #361: diagnose runs the review-set check complete runs, so a
+        # completion-blocking mismatch surfaces while it is cheap to repair.
+        harness = dispatch_tests.DispatchDriverTests(
+            "test_complete_proves_every_wave_then_enters_ship"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            harness.fixture(repo, wave_t002=2)
+            self.assertEqual(harness.round(repo, "--wait", "60")["status"], "done")
+            self.assertEqual(harness.review(repo, "--wait", "60")["status"], "pass")
+            self.assertEqual(harness.round(repo, "--wait", "60", wave=2)["status"], "done")
+
+            for diagnose_entry in (pipeline_diagnose.diagnose, diagnose_installed):
+                with self.subTest(entrypoint=diagnose_entry.__name__):
+                    result = diagnose_entry(repo)
+                    findings = [
+                        item for item in result["findings"] if item["id"] == "review-cycles"
+                    ]
+                    self.assertEqual(len(findings), 1)
+                    self.assertEqual(findings[0]["severity"], "stuck")
+                    self.assertIn(
+                        "review cycle waves do not match PLAN.md", findings[0]["evidence"]
+                    )
+
+    def test_diagnose_names_a_blocked_review_holding_completion(self) -> None:
+        # Issue #361: complete refuses while ready reports blocked_review; the
+        # refusal must be diagnosable, not silent.
+        harness = dispatch_tests.DispatchDriverTests(
+            "test_complete_proves_every_wave_then_enters_ship"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            harness.fixture(repo, wave_t002=2)
+            self.assertEqual(harness.round(repo, "--wait", "60")["status"], "done")
+            self.assertEqual(
+                harness.review(repo, "--wait", "60", verdict="blocked")["status"], "blocked"
+            )
+
+            def retry_argv() -> list[str]:
+                retries = []
+                for diagnose_entry in (pipeline_diagnose.diagnose, diagnose_installed):
+                    with self.subTest(entrypoint=diagnose_entry.__name__):
+                        result = diagnose_entry(repo)
+                        findings = [
+                            item for item in result["findings"] if item["id"] == "review-cycles"
+                        ]
+                        self.assertEqual(len(findings), 1)
+                        self.assertIn("wave 1 review cycle 1 is blocked", findings[0]["evidence"])
+                        self.assertNotIn("<", findings[0]["retry"])
+                        retries.append(shlex.split(findings[0]["retry"], comments=True))
+                self.assertEqual(retries[0][2:], retries[1][2:])
+                self.assertTrue(retries[0][1].endswith("dispatch_driver.py"))
+                return retries[0][2:]
+
+            # Diagnose emits forward slashes on Windows so Git Bash can paste them.
+            repo_arg = repo.resolve().as_posix() if os.name == "nt" else str(repo.resolve())
+            # No repair task exists yet: the next step is fix-tasks, not a re-review.
+            self.assertEqual(
+                retry_argv(),
+                ["fix-tasks", "--repo", repo_arg, "--wave", "1", "--cycle", "1"],
+            )
+            created = harness.driver(repo, "fix-tasks", "--wave", "1", "--cycle", "1")
+            self.assertEqual(created["status"], "created", created)
+            landed = harness.round(repo, "--wait", "60", wave=created["plan_wave"])
+            self.assertEqual(landed["status"], "done", landed)
+            # The repair landed: the source wave's next cycle judges it.
+            self.assertEqual(
+                retry_argv(),
+                ["review", "--repo", repo_arg, "--wave", "1", "--cycle", "2"],
+            )
+
+    def test_diagnose_stays_silent_while_build_waves_are_still_running(self) -> None:
+        harness = dispatch_tests.DispatchDriverTests(
+            "test_complete_proves_every_wave_then_enters_ship"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            harness.fixture(repo, wave_t002=2)
+            self.assertEqual(harness.round(repo, "--wait", "60")["status"], "done")
+
+            for diagnose_entry in (pipeline_diagnose.diagnose, diagnose_installed):
+                with self.subTest(entrypoint=diagnose_entry.__name__):
+                    result = diagnose_entry(repo)
+                    self.assertEqual(
+                        [item for item in result["findings"] if item["id"] == "review-cycles"],
+                        [],
+                    )
+
+    def test_diagnose_reports_typed_build_state_errors_from_the_completion_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            run_git(Path(tmp), "init", "-b", "gsd-path/M001", str(repo))
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(phase="build", status="active").encode("utf-8")
+            )
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture")
+            deadlock = pipeline_diagnose.BuildStateError(
+                "dependency-deadlock", "Wave 1 has unfinished tasks but no ready task", {}
+            )
+            with mock.patch.object(pipeline_diagnose, "build_ready", side_effect=deadlock):
+                result = pipeline_diagnose.diagnose(repo)
+            findings = [item for item in result["findings"] if item["id"] == "review-cycles"]
+            self.assertEqual(len(findings), 1)
+            self.assertIn("dependency-deadlock", findings[0]["evidence"])
+            self.assertIn("complete", findings[0]["retry"])
 
     def test_branch_mismatch_is_stuck(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

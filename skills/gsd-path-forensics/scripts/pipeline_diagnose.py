@@ -24,16 +24,20 @@ from typing import Callable, Optional, Sequence
 def _load_diagnose_modules():
     if __package__:
         from . import archive_milestone
+        from . import build_state
         from . import detect_project
         from . import discussion_records
+        from . import discussion_validate
         from . import integration
         from . import isolation
         from . import pipeline_git
         from . import pipeline_state
         return (
             archive_milestone,
+            build_state,
             detect_project,
             discussion_records,
+            discussion_validate,
             integration,
             isolation,
             pipeline_git,
@@ -42,16 +46,20 @@ def _load_diagnose_modules():
     else:
         try:
             import archive_milestone
+            import build_state
             import detect_project
             import discussion_records
+            import discussion_validate
             import integration
             import isolation
             import pipeline_git
             import pipeline_state
             return (
                 archive_milestone,
+                build_state,
                 detect_project,
                 discussion_records,
+                discussion_validate,
                 integration,
                 isolation,
                 pipeline_git,
@@ -60,8 +68,10 @@ def _load_diagnose_modules():
         except ModuleNotFoundError as error:
             if error.name not in {
                 "archive_milestone",
+                "build_state",
                 "detect_project",
                 "discussion_records",
+                "discussion_validate",
                 "integration",
                 "isolation",
                 "pipeline_git",
@@ -71,8 +81,10 @@ def _load_diagnose_modules():
     try:
         from scripts import (
             archive_milestone,
+            build_state,
             detect_project,
             discussion_records,
+            discussion_validate,
             integration,
             isolation,
             pipeline_git,
@@ -80,8 +92,10 @@ def _load_diagnose_modules():
         )
         return (
             archive_milestone,
+            build_state,
             detect_project,
             discussion_records,
+            discussion_validate,
             integration,
             isolation,
             pipeline_git,
@@ -91,8 +105,10 @@ def _load_diagnose_modules():
         if error.name not in {
             "scripts",
             "scripts.archive_milestone",
+            "scripts.build_state",
             "scripts.detect_project",
             "scripts.discussion_records",
+            "scripts.discussion_validate",
             "scripts.integration",
             "scripts.isolation",
             "scripts.pipeline_git",
@@ -109,16 +125,20 @@ def _load_diagnose_modules():
         shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
         sys.path.insert(0, str(shared))
         import archive_milestone
+        import build_state
         import detect_project
         import discussion_records
+        import discussion_validate
         import integration
         import isolation
         import pipeline_git
         import pipeline_state
         return (
             archive_milestone,
+            build_state,
             detect_project,
             discussion_records,
+            discussion_validate,
             integration,
             isolation,
             pipeline_git,
@@ -128,8 +148,10 @@ def _load_diagnose_modules():
 
 (
     archive_milestone,
+    build_state,
     detect_project,
     discussion_records,
+    discussion_validate,
     integration,
     isolation,
     pipeline_git,
@@ -137,6 +159,9 @@ def _load_diagnose_modules():
 ) = _load_diagnose_modules()
 DetectError = detect_project.DetectError
 classify = detect_project.classify
+BuildStateError = build_state.BuildStateError
+build_ready = build_state.ready
+review_cycle_counts = discussion_validate.review_cycle_counts
 IsolationError = isolation.IsolationError
 _registered_worktrees = isolation._registered_worktrees
 _worktree_report = isolation._worktree_report
@@ -231,7 +256,15 @@ def _state_template() -> Path:
 
 
 def _command(module: object, *arguments: object) -> str:
-    script = Path(str(getattr(module, "__file__"))).resolve()
+    return _script_command(Path(str(getattr(module, "__file__"))), *arguments)
+
+
+def _dispatch_command(*arguments: object) -> str:
+    return _script_command(Path(str(build_state.__file__)).with_name("dispatch_driver.py"), *arguments)
+
+
+def _script_command(path: Path, *arguments: object) -> str:
+    script = path.resolve()
     def text(value: object) -> str:
         # Agents paste this into Git Bash on Windows, where unquoted
         # backslashes are escapes; forward slashes need no quoting.
@@ -352,6 +385,74 @@ def _leftover_worktrees(repo: Path) -> list[dict[str, object]]:
                 {"worktree": str(path), "branch": short, "recovery": "integrate"}
             )
     return leftovers
+
+
+def _build_completion_findings(repo: Path) -> list[dict[str, str]]:
+    """Mirror dispatch complete's build gates so a completion refusal is diagnosable.
+
+    Runs the same checks `dispatch_driver.py complete` runs, under the same
+    precondition (every wave's tasks done, no blocked review holding them), and
+    names the review set or typed build state that complete would refuse on.
+    """
+    try:
+        ready_result = build_ready(str(repo), allow_done=True)
+    except BuildStateError as error:
+        return [
+            _finding(
+                "review-cycles",
+                "stuck",
+                f"{error.code}: {error}",
+                _dispatch_command("complete", "--repo", repo)
+                + "  # reports the same typed blocker; follow its recovery (reconcile "
+                "failed or blocked tasks, resolve a dependency deadlock before new dispatch)",
+            )
+        ]
+    blocked = ready_result.get("blocked_review")
+    if blocked:
+        wave, cycle = blocked["wave"], blocked["cycle"]
+        waiting = ", ".join(
+            str(item) for item in blocked.get("waiting_waves") or []
+        )
+        if any((repo / ".project" / "tasks").glob(f"*-fix-wave-{wave}-cycle-{cycle}.md")):
+            retry = (
+                _dispatch_command("review", "--repo", repo, "--wave", wave, "--cycle", cycle + 1)
+                + "  # add the owner's --child-command; the source wave's next review cycle "
+                "in full at the current HEAD; "
+                "pass --repair-evidence when review_findings.py repair-evidence accepts a landed repair"
+            )
+        else:
+            retry = (
+                _dispatch_command("fix-tasks", "--repo", repo, "--wave", wave, "--cycle", cycle)
+                + "  # then land the repair wave; the source wave's next review cycle judges it"
+            )
+        return [
+            _finding(
+                "review-cycles",
+                "stuck",
+                f"wave {wave} review cycle {cycle} is blocked "
+                + (f"and holds waiting waves {waiting}" if waiting else "and holds completion"),
+                retry,
+            )
+        ]
+    if ready_result.get("current_wave") is not None:
+        return []
+    try:
+        review_cycle_counts(repo / ".project")
+    except archive_milestone.ArchiveError as error:
+        return [
+            _finding(
+                "review-cycles",
+                "stuck",
+                str(error),
+                "compare each PLAN.md wave with the .project/review/wave-N.cycleC.md "
+                "files, then run the missing cycle's review: "
+                + _dispatch_command("review", "--repo", repo)
+                + " with that wave's --wave and --cycle and the owner's --child-command; "
+                "a repair wave is judged by "
+                "its source wave's next cycle",
+            )
+        ]
+    return []
 
 
 def diagnose(repo: Path) -> dict[str, object]:
@@ -567,6 +668,8 @@ def diagnose(repo: Path) -> dict[str, object]:
                                 "$gsd-path-ship",
                             )
                         )
+        elif state.get("phase") == "build" and state.get("status") in {"active", "done"}:
+            findings.extend(_build_completion_findings(resolved))
 
     undo_transaction = by_name["undo-transaction"]
     route_action = (

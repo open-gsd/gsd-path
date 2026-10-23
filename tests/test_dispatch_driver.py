@@ -2374,6 +2374,26 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertTrue((root / ".project/build/evidence.json").is_file())
         self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
 
+    def test_complete_passes_after_an_appended_repair_wave_re_review(self) -> None:
+        # Issue #361: a blocked wave's fix lands in an appended wave; the source
+        # wave's next cycle judges the repair, so completion must not demand a
+        # review artifact of the repair wave's own.
+        root = self.root
+        self.fixture(root, wave_t002=2)
+        self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
+        self.assertEqual(self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")["plan_wave"], 3)
+        self.assertEqual([item["task"] for item in self.round(root, "--wait", "60", wave=3)["landed"]], ["T003"])
+        self.assertEqual(self.review(root, "--wait", "60", cycle=2)["status"], "pass")
+        self.assertEqual(self.round(root, "--wait", "60", wave=2)["status"], "done")
+        self.assertEqual(self.review(root, "--wait", "60", wave=2)["status"], "pass")
+        receipt = self.driver(root, "complete")
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual(receipt["review_cycles"], [2, 1])
+        self.assertEqual(self.state(root), "ship/active")
+        self.assertTrue((root / ".project/build/evidence.json").is_file())
+        self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
+
     def test_complete_recovers_build_done_after_passing_review(self) -> None:
         root = self.root
         self.fixture(root)

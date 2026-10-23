@@ -491,5 +491,252 @@ Tasks reviewed: 1
             self.assertEqual(discussion_validate.review_cycle_counts(project), [2])
 
 
+    def test_template_comment_does_not_make_a_wave_a_repair_wave(self) -> None:
+        # The stock task template mentions "## Review findings" inside a comment;
+        # only a parsed section marks a repair wave (parity with build_state's
+        # _sections rule), or every ordinary wave would waive its review.
+        comment = (
+            "<!-- Fix tasks only: add ## Review findings before Log, with one\n"
+            "     ### <canonical locator> block per group. -->\n"
+        )
+        for name, task_body, repaired in (
+            ("comment-mention", comment, False),
+            ("parsed-section", comment + "\n## Review findings\n", True),
+        ):
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                for directory_name in ("intent", "plan", "tasks", "review"):
+                    (project / directory_name).mkdir()
+                (project / "intent" / "INTENT.md").write_text(
+                    "# Intent\n\n## Success criteria\n\n1. demo works\n",
+                    encoding="utf-8",
+                )
+                (project / "plan" / "PLAN.md").write_text(
+                    """# Plan
+
+## Wave 1 — demo
+
+| Task | Title | Deps | Files |
+|------|-------|------|-------|
+| T001 | demo | — | src/demo.py |
+
+Review depth: full
+
+## Intent coverage
+
+| Criterion | Task | Acceptance |
+|-----------|------|------------|
+| SC1 | T001 | AC1 |
+""",
+                    encoding="utf-8",
+                )
+                (project / "tasks" / "T001-demo.md").write_text(
+                    f"---\nid: T001\ntitle: demo\nwave: 1\n---\n\n{task_body}",
+                    encoding="utf-8",
+                )
+                if repaired:
+                    self.assertEqual(discussion_validate.review_cycle_counts(project), [])
+                else:
+                    with self.assertRaisesRegex(
+                        ArchiveError, "review cycle waves do not match PLAN.md"
+                    ):
+                        discussion_validate.review_cycle_counts(project)
+
+    def test_appended_repair_wave_is_judged_by_its_source_wave_next_cycle(self) -> None:
+        # Issue #361: an appended fix wave's tasks all carry Review findings, so
+        # the wave needs no canonical review of its own; the source wave's next
+        # cycle judges it. A review it does have is still validated.
+        for own_review, expected in ((False, [2]), (True, [2, 1])):
+            with self.subTest(own_review=own_review), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                for directory_name in ("intent", "plan", "tasks", "review"):
+                    (project / directory_name).mkdir()
+                (project / "intent" / "INTENT.md").write_text(
+                    "# Intent\n\n## Success criteria\n\n1. demo works\n",
+                    encoding="utf-8",
+                )
+                (project / "plan" / "PLAN.md").write_text(
+                    """# Plan
+
+## Wave 1 — demo
+
+| Task | Title | Deps | Files |
+|------|-------|------|-------|
+| T001 | demo | — | src/demo.py |
+
+Review depth: full
+
+## Wave 2 — fix wave 1 cycle 1 review findings
+
+Goal: Repair the blocking findings of the wave 1 cycle 1 review without changing source task contracts.
+Review depth: full
+
+| Task | Title | Deps | Files |
+|------|-------|------|-------|
+| T002 | fix demo | T001 | src/demo.py |
+
+## Intent coverage
+
+| Criterion | Task | Acceptance |
+|-----------|------|------------|
+| SC1 | T001 | AC1 |
+""",
+                    encoding="utf-8",
+                )
+                (project / "tasks" / "T001-demo.md").write_text(
+                    "---\nid: T001\ntitle: demo\nwave: 1\n---\n",
+                    encoding="utf-8",
+                )
+                (project / "tasks" / "T002-fix.md").write_text(
+                    "---\nid: T002\ntitle: fix demo\nwave: 2\ndeps: [T001]\n"
+                    "files: [src/demo.py]\n---\n\n## Review findings\n\n"
+                    "### src/demo.py: greeting\n\nCriterion: demo works\n\n- greeting misspelled\n",
+                    encoding="utf-8",
+                )
+                (project / "review" / "wave-1.cycle1.md").write_text(
+                    """# Review — wave 1, cycle 1
+
+Wave verdict: blocked
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T001 — demo: fail
+
+- ❌ demo works — greeting misspelled in the verified tree
+
+## Intent coverage
+
+### SC1 — demo works: fail
+
+- ❌ greeting misspelled in the verified tree
+""",
+                    encoding="utf-8",
+                )
+                (project / "review" / "wave-1.cycle2.md").write_text(
+                    """# Review — wave 1, cycle 2
+
+Wave verdict: pass
+Cycle: 2
+Depth: full
+Tasks reviewed: 1
+
+## T001 — demo: pass
+
+- ✅ demo works — repair judged at the current HEAD in cycle two
+
+## Intent coverage
+
+### SC1 — demo works: pass
+
+- ✅ repair judged at the current HEAD in cycle two
+""",
+                    encoding="utf-8",
+                )
+                if own_review:
+                    (project / "review" / "wave-2.cycle1.md").write_text(
+                        """# Review — wave 2, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T002 — fix demo: pass
+
+- ✅ fix closes the carried finding — evidence recorded in tests/ExampleTest.py:14 from the Verify output.
+""",
+                        encoding="utf-8",
+                    )
+
+                self.assertEqual(discussion_validate.review_cycle_counts(project), expected)
+
+    def test_appended_repair_wave_review_is_still_gated(self) -> None:
+        # A repair wave that does carry a review artifact must pass it: a
+        # blocked last cycle refuses exactly like any other wave's.
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            for directory_name in ("intent", "plan", "tasks", "review"):
+                (project / directory_name).mkdir()
+            (project / "intent" / "INTENT.md").write_text(
+                "# Intent\n\n## Success criteria\n\n1. demo works\n",
+                encoding="utf-8",
+            )
+            (project / "plan" / "PLAN.md").write_text(
+                """# Plan
+
+## Wave 1 — demo
+
+| Task | Title | Deps | Files |
+|------|-------|------|-------|
+| T001 | demo | — | src/demo.py |
+
+Review depth: full
+
+## Wave 2 — fix wave 1 cycle 1 review findings
+
+Review depth: full
+
+| Task | Title | Deps | Files |
+|------|-------|------|-------|
+| T002 | fix demo | T001 | src/demo.py |
+
+## Intent coverage
+
+| Criterion | Task | Acceptance |
+|-----------|------|------------|
+| SC1 | T001 | AC1 |
+""",
+                encoding="utf-8",
+            )
+            (project / "tasks" / "T001-demo.md").write_text(
+                "---\nid: T001\ntitle: demo\nwave: 1\n---\n",
+                encoding="utf-8",
+            )
+            (project / "tasks" / "T002-fix.md").write_text(
+                "---\nid: T002\ntitle: fix demo\nwave: 2\ndeps: [T001]\n"
+                "files: [src/demo.py]\n---\n\n## Review findings\n\n"
+                "### src/demo.py: greeting\n\nCriterion: demo works\n\n- greeting misspelled\n",
+                encoding="utf-8",
+            )
+            (project / "review" / "wave-1.cycle1.md").write_text(
+                """# Review — wave 1, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T001 — demo: pass
+
+- ✅ demo works — evidence recorded in tests/ExampleTest.py:14 from the Verify output.
+
+## Intent coverage
+
+### SC1 — demo works: pass
+
+- ✅ Evidence recorded in tests/ExampleTest.py:21 from the Verify output.
+""",
+                encoding="utf-8",
+            )
+            (project / "review" / "wave-2.cycle1.md").write_text(
+                """# Review — wave 2, cycle 1
+
+Wave verdict: blocked
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T002 — fix demo: fail
+
+- ❌ fix does not close the carried finding — still reproduced in the verified tree
+""",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ArchiveError, "last review cycle for wave 2"):
+                discussion_validate.review_cycle_counts(project)
+
+
 if __name__ == "__main__":
     unittest.main()
