@@ -1,46 +1,50 @@
 {
   "schema": "gsd-atlas.atlas-status/1",
+  "ok": true,
   "data": {
     "repo": "/tmp/atlas-probe/repo",
-    "health": "degraded",
-    "reasons": [
-      "follower"
-    ],
     "worktrees": [
       {
         "worktree": "/tmp/atlas-probe/repo",
-        "seq": 41,
+        "seq": 2,
         "staleCount": 0
       }
     ],
     "store": {
       "schemaVersion": 2,
-      "sizeBytes": 1048576,
+      "sizeBytes": 135168,
       "writerLeaseHeld": false,
       "rebuilt": false
     },
-    "indexer": {
-      "watchMode": "watch",
+    "indexer": null,
+    "governor": {
       "queued": 0,
-      "running": 0,
-      "failed": 0,
-      "reconciling": false,
-      "lastReconcileAt": null,
-      "lastIndexedAt": 1760791313000
+      "running": 1,
+      "leases": 0
     },
     "tiers": [
       {
-        "module": "python",
+        "module": "javascript",
         "grammar": true,
-        "precise": true,
+        "precise": false,
         "platform": false
       },
       {
         "module": "typescript",
         "grammar": true,
-        "precise": false,
+        "precise": true,
         "platform": false
       }
+    ],
+    "policy": "off",
+    "health": "degraded",
+    "reasons": [
+      "follower"
     ]
-  }
+  },
+  "diagnostics": [],
+  "degraded": [
+    "follower"
+  ],
+  "answer_id": "a_0a75dc9c9e9b29a7"
 }

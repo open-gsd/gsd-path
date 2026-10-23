@@ -181,10 +181,19 @@ class AtlasFixtureContractTests(unittest.TestCase):
                     self.assertIn("staleCount", worktree)
                 self.assertIn("sizeBytes", data["store"])
                 self.assertIn("writerLeaseHeld", data["store"])
-                self.assertIn("failed", data["indexer"])
-                self.assertIsInstance(data["indexer"]["lastIndexedAt"], (int, type(None)))
+                self.assertIs(envelope["ok"], True)
+                self.assertEqual(envelope["diagnostics"], [])
+                if data["indexer"] is not None:
+                    self.assertIn("failed", data["indexer"])
+                    self.assertIn(data["indexer"]["watchMode"], ("native", "poll", "reconcile-only"))
+                    self.assertIsInstance(data["indexer"]["lastIndexedAt"], (int, type(None)))
                 for tier in data["tiers"]:
                     self.assertIn("module", tier)
+
+    def test_follower_fixture_has_no_indexer(self) -> None:
+        envelope = load_fixture("health-degraded-follower.json")
+        self.assertIsNone(envelope["data"]["indexer"])
+        self.assertEqual(envelope["degraded"], ["follower"])
 
     def test_error_fixture_carries_the_error_schema_and_diagnostics(self) -> None:
         envelope = load_fixture("health-not-indexed.json")
@@ -196,8 +205,8 @@ class AtlasFixtureContractTests(unittest.TestCase):
         envelope = load_fixture("status-answers.json")
         self.assertEqual(envelope["schema"], atlas.STATUS_SCHEMA)
         answers = envelope["data"]["report"]["answers"]
-        self.assertEqual(answers["total"], 3)
-        self.assertEqual(answers["byTool"], {"atlas_status": 3})
+        self.assertEqual(answers["total"], 6)
+        self.assertEqual(answers["byTool"], {"atlas_status": 6})
 
 
 if __name__ == "__main__":

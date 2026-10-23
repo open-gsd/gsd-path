@@ -1,25 +1,53 @@
 {
   "schema": "gsd-atlas.atlas-status/1",
+  "ok": true,
   "data": {
     "repo": "/tmp/atlas-probe/repo",
-    "health": "ok",
-    "reasons": [],
     "worktrees": [
-      { "worktree": "/tmp/atlas-probe/repo", "seq": 41, "staleCount": 0 }
+      {
+        "worktree": "/tmp/atlas-probe/repo",
+        "seq": 2,
+        "staleCount": 0
+      }
     ],
-    "store": { "schemaVersion": 2, "sizeBytes": 1048576, "writerLeaseHeld": true, "rebuilt": false },
+    "store": {
+      "schemaVersion": 2,
+      "sizeBytes": 135168,
+      "writerLeaseHeld": true,
+      "rebuilt": false
+    },
     "indexer": {
-      "watchMode": "watch",
+      "watchMode": "native",
       "queued": 0,
       "running": 0,
       "failed": 0,
       "reconciling": false,
-      "lastReconcileAt": null,
-      "lastIndexedAt": 1760791389000
+      "lastReconcileAt": 1792769200348,
+      "lastIndexedAt": null
+    },
+    "governor": {
+      "queued": 0,
+      "running": 1,
+      "leases": 0
     },
     "tiers": [
-      { "module": "python", "grammar": true, "precise": true, "platform": false },
-      { "module": "typescript", "grammar": true, "precise": false, "platform": false }
-    ]
-  }
+      {
+        "module": "javascript",
+        "grammar": true,
+        "precise": false,
+        "platform": false
+      },
+      {
+        "module": "typescript",
+        "grammar": true,
+        "precise": true,
+        "platform": false
+      }
+    ],
+    "policy": "off",
+    "health": "ok",
+    "reasons": []
+  },
+  "diagnostics": [],
+  "answer_id": "a_985029a829f3ccbb"
 }
