@@ -2417,12 +2417,43 @@ def validate_final(
     }
 
 
+def _reopened_patch_plan(root: Path, project_dir: str) -> bool:
+    """Whether the current stay in plan began with `patch plan reopened`.
+
+    Every event is logged under the phase it leaves the track in, so the
+    trailing run of `plan` log entries is the current stay in plan; its first
+    entry is the transition into plan. `planning resumed` after a blocked
+    patch planner stays inside that run.
+    """
+
+    try:
+        _state, text, _path = load_state(root.resolve(), project_dir)
+    except PipelineStateError as error:
+        raise HandoffError(str(error)) from error
+    entries = []
+    for line in (_common.section_body(text, "Log") or "").splitlines():
+        parts = line.split(" — ", 2)
+        if line.startswith("- ") and len(parts) == 3:
+            entries.append((parts[1].strip(), " ".join(parts[2].split())))
+    stay = []
+    for phase, event in reversed(entries):
+        if phase != "plan":
+            break
+        stay.append(event)
+    return bool(stay) and stay[-1] == "patch plan reopened"
+
+
 def validate_patch_findings(
     root: Path, project_dir: str = DEFAULT_PROJECT_DIR
 ) -> Dict[str, object]:
     """Validate the review-to-patch hand-off and return its summary."""
 
-    _require_state(root, "ship", "blocked", project_dir)
+    accepted = {("ship", "blocked")}
+    if _reopened_patch_plan(root, project_dir):
+        # Patch step 1 moves ship/blocked to plan/active before step 2 runs
+        # this check, and a blocked patch planner resumes into plan/active.
+        accepted.add(("plan", "active"))
+    _require_state_one_of(root, accepted, project_dir)
     handoff = _read(root, f"{project_dir}/review/PATCH-FINDINGS.md")
     reviewed_head = _reviewed_head(handoff, "PATCH-FINDINGS.md")
     if _line_value(handoff, "State:") != "ship/blocked":

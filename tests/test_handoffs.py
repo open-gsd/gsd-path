@@ -891,6 +891,86 @@ State: ship/blocked
             self.assertEqual(result["findings"], ["P001", "P002"])
             self.assertEqual(result["reviewed_head"], RESEARCH_HEAD)
 
+    def write_plan_state_log(self, root: Path, *log: str) -> None:
+        self.write_state(root, "plan", "active")
+        state = root / ".project/STATE.md"
+        text = state.read_text(encoding="utf-8")
+        state.write_bytes(
+            text.replace("- 2026-08-03 — plan — handoff ready\n", "".join(
+                f"- 2026-08-03 — {entry}\n" for entry in log
+            )).encode("utf-8"),
+        )
+
+    def test_patch_findings_accept_a_reopened_patch_plan(self) -> None:
+        logs = {
+            "reopened": (
+                "ship — final review blocked",
+                "plan — patch plan reopened",
+            ),
+            "resumed": (
+                "ship — final review blocked",
+                "plan — patch plan reopened",
+                "plan — patch planner blocked",
+                "plan — planning resumed",
+            ),
+        }
+        for name, log in logs.items():
+            with self.subTest(log=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_state_log(root, *log)
+                self.write_review_sources(root)
+                self.write_patch_findings(root)
+
+                result = check_handoffs.validate_patch_findings(root)
+
+                self.assertEqual(result["findings"], ["P001", "P002"])
+                self.assertEqual(result["reviewed_head"], RESEARCH_HEAD)
+
+    def test_patch_findings_reject_plan_active_without_a_patch_reopen(self) -> None:
+        logs = {
+            "normal plan": ("decide — decide approved", "plan — planning started"),
+            "normal resume": (
+                "plan — planning started",
+                "plan — planner blocked",
+                "plan — planning resumed",
+            ),
+            "earlier reopen": (
+                "plan — patch plan reopened",
+                "build — build started",
+                "plan — build repair planning",
+            ),
+        }
+        for name, log in logs.items():
+            with self.subTest(log=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_state_log(root, *log)
+                self.write_review_sources(root)
+                self.write_patch_findings(root)
+
+                with self.assertRaisesRegex(
+                    check_handoffs.HandoffError,
+                    "STATE.md must be one of ship/blocked, found plan/active",
+                ):
+                    check_handoffs.validate_patch_findings(root)
+
+    def test_patch_findings_reopened_plan_still_requires_the_reviewed_head(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_state_log(
+                root, "ship — final review blocked", "plan — patch plan reopened"
+            )
+            self.write_review_sources(root)
+            self.write_patch_findings(root)
+            final_review = root / ".project/review/FINAL.md"
+            final_review.write_bytes(
+                final_review.read_text(encoding="utf-8").replace(
+                    RESEARCH_HEAD, "b" * 40
+                ).encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "Reviewed HEAD differs"):
+                check_handoffs.validate_patch_findings(root)
+
     def test_patch_findings_explain_the_full_gap_locator_requirement(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
