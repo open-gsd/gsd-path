@@ -792,17 +792,7 @@ def pull_request_tag_message(
 
 
 def pull_request_tag_metadata(project: Path, tag_ref: str) -> dict[str, str]:
-    message = archive_milestone.require_git_success(
-        run_git(project, "for-each-ref", "--format=%(contents)", tag_ref),
-        "inspect pull-request milestone tag",
-    )
-    fields: dict[str, str] = {}
-    for line in message.splitlines():
-        match = re.fullmatch(r"(Mode|Pull-Request|Ship|Landing): (.+)", line)
-        if match:
-            if match.group(1) in fields:
-                raise ArchiveError("pull-request milestone tag repeats metadata")
-            fields[match.group(1)] = match.group(2)
+    fields = archive_milestone.tag_metadata_fields(project, tag_ref)
     if set(fields) != {"Mode", "Pull-Request", "Ship", "Landing"}:
         raise ArchiveError("pull-request milestone tag is missing metadata")
     if fields["Mode"] != "pull-request":
@@ -1462,13 +1452,21 @@ def validate_integrated(
         if run_git(project, "rev-parse", "--verify", "--quiet", tag_ref).returncode != 0:
             raise ArchiveError(f"missing milestone tag: {tag_name}")
         metadata = pull_request_tag_metadata(project, tag_ref)
-        if metadata["Ship"] != ship_commit:
+        # A rebase merge rewrites the ship commits, so historical validation
+        # over landed history finds the tag's Landing where the bound branch
+        # found its Ship (#450); archive validate proved the mapping.
+        if metadata["Ship"] != ship_commit and not (
+            shipped.get("rebased_ship") == metadata["Ship"]
+            and metadata["Landing"] == ship_commit
+        ):
             raise ArchiveError("pull-request milestone tag names the wrong ship commit")
         merge_commit = metadata["Landing"]
         pull_request = metadata["Pull-Request"]
         require_github_authentication()
         repository = github_repository(project)
-        pull = find_pull_request(repository, bound_branch, ship_commit, default_name)
+        # The PR head is the original ship commit, which the tag names; a
+        # rebase-merged landing rewrites it on the default branch (#450).
+        pull = find_pull_request(repository, bound_branch, metadata["Ship"], default_name)
         if pull is None:
             raise ArchiveError("GitHub pull request for the ship commit is missing")
         if pull["html_url"] != pull_request:
@@ -1484,8 +1482,14 @@ def validate_integrated(
             pull["number"],
             merge_commit,
         )
+        # Prove the pair the tag names: the original ship commit, whose objects
+        # archive validation already required to resolve (#450).
         require_pull_request_merge(
-            project, merge_commit, ship_commit, remote_default, allow_rebase=True
+            project,
+            merge_commit,
+            metadata["Ship"],
+            remote_default,
+            allow_rebase=True,
         )
         require_annotated_tag(
             project,
@@ -1495,7 +1499,7 @@ def validate_integrated(
             pull_request_tag_message(
                 archive_name,
                 pull_request,
-                ship_commit,
+                metadata["Ship"],
                 merge_commit,
             ),
         )
@@ -1561,6 +1565,7 @@ def validate_integrated(
         ship_commit,
         tag_name,
         merge_commit,
+        tag_ship=shipped.get("rebased_ship"),
         allow_missing_bound=state.integration in ("pull-request", "external-landing")
         or (historical and has_origin),
         retired=historical,
@@ -1609,10 +1614,14 @@ def require_published_integration(
     merge_commit: str,
     allow_missing_bound: bool = False,
     retired: bool = False,
+    tag_ship: Optional[str] = None,
 ) -> None:
     if allow_missing_bound:
         published_ship = live_remote_ref(project, f"refs/heads/{bound_branch}")
-        if published_ship is not None and published_ship != ship_commit:
+        # A surviving bound branch stays at the original ship commit, which a
+        # rebase merge rewrote into the landing validated here (#450).
+        expected_ships = {ship_commit} | ({tag_ship} if tag_ship else set())
+        if published_ship is not None and published_ship not in expected_ships:
             raise ArchiveError(
                 f"origin/{bound_branch} is {published_ship}, expected ship commit {ship_commit}"
             )

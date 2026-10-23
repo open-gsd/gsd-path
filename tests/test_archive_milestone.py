@@ -5546,6 +5546,100 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
     def test_pull_request_integration_rejects_rebase_landing_with_other_changes(self) -> None:
         self.integrate_rebase_merge(moved=True, forge=True)
 
+    def historical_rebase_validation_setup(self, root: Path, *, moved: bool = False):
+        repo = root / "primary"
+        repo.mkdir()
+        self.make_publishable_bound_repo(repo, root / "origin.git")
+        # A branch-only task commit plus a restamped FINAL.md put the reviewed
+        # HEAD after the main fork point, so the rebase rewrites it (#450);
+        # without this the rebased parent still covers the reviewed HEAD and
+        # the historical acceptance never engages.
+        (repo / "src").mkdir(exist_ok=True)
+        (repo / "src" / "controlroom.txt").write_bytes(b"branch-only task\n")
+        self.git(repo, "add", "src")
+        self.git(repo, "commit", "-q", "-m", "T001: branch-only task commit")
+        self.restamp_final_review(repo)
+        self.enable_pull_request_integration(repo)
+        archive_name, ship_sha = self.ship_canonical_bound(repo)
+        self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+        landing = self.rebase_merge(repo, ship_sha, moved=moved)
+        pull = self.merged_pull_request(ship_sha, landing)
+
+        def github():
+            return (
+                mock.patch.object(integration, "github_repository", return_value="open-gsd/demo"),
+                mock.patch.object(integration, "run_command", side_effect=self.github_api([pull])),
+            )
+
+        repository, command = github()
+        with repository, command:
+            integration.integrate(repo, "demo")
+        validation = root / "validation"
+        self.git(
+            repo, "worktree", "add", "-b", "validate-landed", str(validation), landing
+        )
+        return repo, validation, archive_name, ship_sha, landing, github
+
+    def test_rebase_merge_historical_validation_accepts_landed_main(self) -> None:
+        # Issue #450: after a rebase merge, validation over the landed default
+        # branch accepts the rebased ship copy through the tag's Ship/Landing
+        # pair and a re-proven replay.
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo, validation, archive_name, ship_sha, landing, github = (
+                self.historical_rebase_validation_setup(Path(temporary_directory))
+            )
+            repository, command = github()
+            with repository, command:
+                validated = integration.validate_integrated(
+                    validation, "demo", refresh=False, historical=True
+                )
+            self.assertEqual(validated["commit"], landing)
+            self.assertEqual(validated["landing"], landing)
+
+    def test_rebase_merge_historical_validation_rejects_a_mismatched_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo, validation, archive_name, ship_sha, landing, github = (
+                self.historical_rebase_validation_setup(Path(temporary_directory))
+            )
+            repository, command = github()
+            with repository, command:
+                # Baseline: the untouched tag validates historically.
+                integration.validate_integrated(validation, "demo", refresh=False, historical=True)
+            tag = f"milestone/{archive_name}"
+            contents = self.git(repo, "for-each-ref", "--format=%(contents)", f"refs/tags/{tag}").stdout
+            self.assertIn(f"Landing: {landing}", contents)
+            tampered = contents.replace(f"Landing: {landing}", f"Landing: {ship_sha}")
+            self.git(repo, "tag", "-d", tag)
+            self.git(repo, "tag", "-a", tag, "-m", tampered, landing)
+
+            repository, command = github()
+            with repository, command:
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError, "does not match ship parent"
+                ):
+                    integration.validate_integrated(validation, "demo", refresh=False, historical=True)
+
+    def test_validate_integrated_historical_flag_runs_from_default_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo, validation, archive_name, ship_sha, landing, github = (
+                self.historical_rebase_validation_setup(Path(temporary_directory))
+            )
+            repository, command = github()
+            with repository, command:
+                refused = archive_milestone.main(
+                    ["validate-integrated", "--repo", str(validation), "--slug", "demo"]
+                )
+            self.assertEqual(refused, 1)
+            repository, command = github()
+            with repository, command:
+                accepted = archive_milestone.main(
+                    [
+                        "validate-integrated", "--repo", str(validation),
+                        "--slug", "demo", "--historical",
+                    ]
+                )
+            self.assertEqual(accepted, 0)
+
     def reject_remote_ref(self, remote: Path, ref: str) -> Path:
         hook = remote / "hooks" / "pre-receive"
         hook.write_bytes(
