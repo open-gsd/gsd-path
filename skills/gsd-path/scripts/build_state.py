@@ -1044,10 +1044,13 @@ def _ledger_entries(path: Path) -> List[Dict[str, object]]:
 
 def verify_record(repo: str, command: str, commit: str, result: str,
                   execution: Optional[Dict[str, object]] = None,
-                  member: Optional[str] = None) -> Dict[str, object]:
+                  member: Optional[str] = None,
+                  rerun: bool = False) -> Dict[str, object]:
     """Append one verify run (command, commit, result, timestamp) to the ledger.
 
     A member run names its member and a commit in that member's repository.
+    ``rerun`` marks an owner-requested re-execution at the same command and
+    commit, so the ledger shows the earlier entry was superseded, not erased.
     """
 
     repository = _repo_root(repo)
@@ -1066,6 +1069,7 @@ def verify_record(repo: str, command: str, commit: str, result: str,
         "result": result,
         "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         **({"repo": member} if member else {}),
+        **({"rerun": True} if rerun else {}),
     }
     if execution is not None:
         if (not isinstance(execution.get("stdout"), str)

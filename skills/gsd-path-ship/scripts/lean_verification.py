@@ -231,8 +231,14 @@ def _retire_execution(repo, head, execution):
     isolation.retire(repo, worktree, execution["branch"], force=False)
 
 
-def verify_project(repo, expected_head):
-    """Execute project Verify in isolation, retaining output for retry reuse."""
+def verify_project(repo, expected_head, *, rerun: bool = False):
+    """Execute project Verify in isolation, retaining output for retry reuse.
+
+    With ``rerun`` (the owner's explicit ``prepare-final --rerun`` after a
+    host-caused failure diagnosed through the forensics contract), a recorded
+    execution at the same command and commit is retired and the command runs
+    again, appending a second ledger entry; the failed entry stays as history.
+    """
     repo = Path(repo).resolve()
     _require_ship_inputs(repo, expected_head)
     plan = contracts._read(repo, ".project/plan/PLAN.md")
@@ -247,7 +253,6 @@ def verify_project(repo, expected_head):
     destination = repo / relative
     if destination.is_symlink():
         raise contracts.HandoffError("project verification evidence must be a real file")
-    expected_destination = hashlib.sha256(destination.read_bytes()).hexdigest() if destination.exists() else None
     execution = entry.get("execution") if entry else None
     if entry and execution is None:
         raise contracts.HandoffError("recorded verification lacks output; preserve and reconcile its evidence")
@@ -263,11 +268,16 @@ def verify_project(repo, expected_head):
                     relative, relative, journal["expected_destination"],
                 )
         _retire_execution(repo, expected_head, execution)
-        view = _gap_view(command, expected_head, execution, waves)
-        if not destination.exists() or destination.read_text(encoding="utf-8") != view:
-            _common.atomic_write(destination, view)
-        return {"passed": entry["result"] == "pass", "reused": True,
-                "path": str(destination), "execution": execution}
+        if not rerun:
+            view = _gap_view(command, expected_head, execution, waves)
+            if not destination.exists() or destination.read_text(encoding="utf-8") != view:
+                _common.atomic_write(destination, view)
+            return {"passed": entry["result"] == "pass", "reused": True,
+                    "path": str(destination), "execution": execution}
+    # Hash after any prior execution's recovery: a rerun's old-collection
+    # recovery can rewrite the gap view, and the fresh collection must expect
+    # the file as it stands now, not before the recovery (#454).
+    expected_destination = hashlib.sha256(destination.read_bytes()).hexdigest() if destination.exists() else None
     sidecar = isolation.isolate_verify(repo, expected_head, "project-verify")
     worktree = Path(sidecar["worktree"])
     try:
@@ -295,18 +305,20 @@ def verify_project(repo, expected_head):
         execution["members"] = {name: record["tip"] for name, record in sidecars.items()}
     else:
         build_state.verify_record(str(repo), command, expected_head,
-                                  "pass" if passed else "fail", execution=execution)
+                                  "pass" if passed else "fail", execution=execution,
+                                  rerun=rerun)
     isolation.clean_verify(repo, worktree, expected_head, sidecar["branch"])
     _common.atomic_write(worktree / relative, _gap_view(command, expected_head, execution, waves))
     collection = isolation.collect_artifact(repo, worktree, expected_head, sidecar["branch"],
                                             relative, relative, expected_destination)
     isolation.retire(repo, worktree, sidecar["branch"], force=False)
     return {"passed": passed, "reused": False, "path": str(destination),
-            "execution": execution, "collection": collection}
+            "execution": execution, "collection": collection,
+            **({"rerun": True} if rerun else {})}
 
 
-def prepare_final(repo, expected_head):
-    verification = verify_project(repo, expected_head)
+def prepare_final(repo, expected_head, *, rerun: bool = False):
+    verification = verify_project(repo, expected_head, rerun=rerun)
     if not verification["passed"]:
         return {"status": "blocked", "verification": verification,
                 "reason": "project Verify failed; use its recorded output"}
@@ -327,9 +339,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--expected-head", required=True)
+    parser.add_argument("--rerun", action="store_true",
+                        help="re-execute project Verify at the same head after a host-caused "
+                             "failure, appending a new ledger entry")
     args = parser.parse_args(argv)
     try:
-        result = prepare_final(args.repo.resolve(), args.expected_head)
+        result = prepare_final(args.repo.resolve(), args.expected_head, rerun=args.rerun)
     except (contracts.HandoffError, isolation.IsolationError, build_state.BuildStateError,
             OSError, subprocess.CalledProcessError) as error:
         print(str(error), file=sys.stderr)

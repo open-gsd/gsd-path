@@ -134,6 +134,34 @@ class WorkflowRunTests(unittest.TestCase):
             self.assertEqual(receipt["steps"][-1]["script"], "build_state.py")
             self.assertFalse((root / ".project/build/verify-ledger.jsonl").exists())
 
+    def test_prepare_final_rerun_flag_reaches_the_verification_step(self):
+        from unittest import mock
+        from types import SimpleNamespace
+        from scripts import workflow_run
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            head = self.fixture(root)
+            commands = []
+
+            def fake_run(command, **kwargs):
+                commands.append(command)
+                stdout = '{"pending": []}' if command[2].endswith("discussion_records.py") else "{}"
+                return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+            for rerun, expected in ((True, self.assertIn), (False, self.assertNotIn)):
+                with self.subTest(rerun=rerun):
+                    commands.clear()
+                    with mock.patch.object(workflow_run.subprocess, "run", side_effect=fake_run):
+                        workflow_run.run_workflow(
+                            root, "prepare-final", ".project", head, rerun=rerun
+                        )
+                    lean = [
+                        command for command in commands
+                        if command[2].endswith("lean_verification.py")
+                    ]
+                    self.assertEqual(len(lean), 1)
+                    expected("--rerun", lean[0])
+
     def fixture(self, root):
         run_git(root, "init", "-b", "gsd-path/M001")
         run_git(root, "config", "user.name", "Test")
