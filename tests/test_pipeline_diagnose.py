@@ -229,10 +229,12 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 self.assertTrue(retries[0][1].endswith("dispatch_driver.py"))
                 return retries[0][2:]
 
+            # Diagnose emits forward slashes on Windows so Git Bash can paste them.
+            repo_arg = repo.resolve().as_posix() if os.name == "nt" else str(repo.resolve())
             # No repair task exists yet: the next step is fix-tasks, not a re-review.
             self.assertEqual(
                 retry_argv(),
-                ["fix-tasks", "--repo", str(repo.resolve()), "--wave", "1", "--cycle", "1"],
+                ["fix-tasks", "--repo", repo_arg, "--wave", "1", "--cycle", "1"],
             )
             created = harness.driver(repo, "fix-tasks", "--wave", "1", "--cycle", "1")
             self.assertEqual(created["status"], "created", created)
@@ -241,7 +243,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             # The repair landed: the source wave's next cycle judges it.
             self.assertEqual(
                 retry_argv(),
-                ["review", "--repo", str(repo.resolve()), "--wave", "1", "--cycle", "2"],
+                ["review", "--repo", repo_arg, "--wave", "1", "--cycle", "2"],
             )
 
     def test_diagnose_stays_silent_while_build_waves_are_still_running(self) -> None:
