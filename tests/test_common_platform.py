@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -254,6 +255,110 @@ class BashTests(unittest.TestCase):
         result = subprocess.run(_common.bash_argv('printf "%s" "$((1 + 2))"'),
                                 capture_output=True, encoding="utf-8", errors="replace", check=True)
         self.assertEqual(result.stdout, "3")
+
+    @staticmethod
+    def _long_mixed_quote_script() -> str:
+        filler = "\n".join(
+            f"# filler 'line' {index} \"quoted tail\" padding" for index in range(320)
+        )
+        return (
+            "echo start-mixed-quotes\n"
+            + filler
+            + "\npython3 - <<'PY'\nprint('heredoc-ran')\nPY\n"
+            + "echo trailing-end\n"
+        )
+
+    @posix_only
+    def test_windows_emulation_runs_exact_bytes_from_a_temp_file(self) -> None:
+        # #448: on Windows bash_argv writes the command to a temp .sh file,
+        # because Git for Windows' bash truncates a quoted argv near 8 KB.
+        # Emulate the nt branch on POSIX the way the module supports.
+        bash = shutil.which("bash")
+        self.assertIsNotNone(bash)
+        script = self._long_mixed_quote_script()
+        self.assertGreater(len(script), 9000)
+        with mock.patch.object(_common.os, "name", "nt"), \
+                mock.patch.dict(os.environ, {"GSD_PATH_BASH": bash}):
+            argv = _common.bash_argv(script)
+        self.assertEqual(len(argv), 2)
+        self.assertTrue(os.path.basename(argv[1]).startswith("gsd-path-command-"), argv[1])
+        self.assertTrue(argv[1].endswith(".sh"), argv[1])
+        self.assertEqual(os.path.dirname(argv[1]), os.path.realpath(tempfile.gettempdir()))
+        self.assertEqual(Path(argv[1]).read_bytes(), script.encode("utf-8"))
+        with mock.patch.object(_common.os, "name", "nt"), \
+                mock.patch.dict(os.environ, {"GSD_PATH_BASH": bash}):
+            other = _common.bash_argv(script)[1]
+        self.assertNotEqual(other, argv[1])
+        try:
+            result = subprocess.run(argv, capture_output=True, encoding="utf-8",
+                                    errors="replace", check=True)
+            self.assertIn("start-mixed-quotes", result.stdout)
+            self.assertIn("heredoc-ran", result.stdout)
+            self.assertIn("trailing-end", result.stdout)
+        finally:
+            _common._remove_quietly(argv[1])
+            _common._remove_quietly(other)
+        self.assertFalse(Path(argv[1]).exists())
+
+    @posix_only
+    def test_windows_emulation_keeps_the_script_out_of_a_hostile_tmpdir(self) -> None:
+        # A TMPDIR pointing into the tree being verified must not place the
+        # script inside it: the file would dirty the worktree (#448).
+        bash = shutil.which("bash")
+        self.assertIsNotNone(bash)
+        here = os.path.realpath(os.getcwd())
+        with mock.patch.dict(os.environ, {"TMPDIR": here, "GSD_PATH_BASH": bash}), \
+                mock.patch.object(_common.os, "name", "nt"), \
+                mock.patch.object(tempfile, "tempdir", None):
+            guarded = _common.bash_argv("true")[1]
+        try:
+            resolved = os.path.realpath(guarded)
+            self.assertNotEqual(resolved, here)
+            self.assertFalse(resolved.startswith(here + os.sep), guarded)
+        finally:
+            _common._remove_quietly(guarded)
+
+    @posix_only
+    def test_windows_emulation_removes_the_script_at_process_exit(self) -> None:
+        bash = shutil.which("bash")
+        self.assertIsNotNone(bash)
+        child = textwrap.dedent(
+            f"""
+            import os, sys
+            sys.path.insert(0, {str(ROOT / "scripts")!r})
+            from unittest import mock
+            import _common
+            with mock.patch.object(_common.os, "name", "nt"), \\
+                    mock.patch.dict(os.environ, {{"GSD_PATH_BASH": {bash!r}}}):
+                path = _common.bash_argv("true")[1]
+            print(path)
+            print(os.path.exists(path))
+            """
+        )
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", child],
+            capture_output=True, encoding="utf-8", errors="replace", check=True,
+        )
+        path, existed = result.stdout.split()
+        self.assertEqual(existed, "True")
+        self.assertFalse(Path(path).exists())
+
+    @windows_only
+    def test_windows_runs_long_mixed_quote_script_in_full(self) -> None:
+        script = self._long_mixed_quote_script()
+        self.assertGreater(len(script), 9000)
+        argv = _common.bash_argv(script)
+        self.assertEqual(len(argv), 2)  # [bash, temp .sh file]; never -c with the whole script
+        try:
+            result = subprocess.run(argv, capture_output=True, encoding="utf-8",
+                                    errors="replace")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("start-mixed-quotes", result.stdout)
+            self.assertIn("heredoc-ran", result.stdout)
+            # A truncated script used to end inside comments and pass silently.
+            self.assertIn("trailing-end", result.stdout)
+        finally:
+            _common._remove_quietly(argv[1])
 
 
 class ResolveArgvTests(unittest.TestCase):
