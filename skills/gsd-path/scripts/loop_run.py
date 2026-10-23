@@ -530,10 +530,15 @@ def run_shell(command: str, timeout: float) -> tuple[Optional[int], str]:
         except subprocess.TimeoutExpired as drained:
             stdout = drained.stdout or expired.stdout or b""
             stderr = drained.stderr or expired.stderr or b""
-            if process.stdout:
-                process.stdout.close()
-            if process.stderr:
-                process.stderr.close()
+            # Windows communicate() reads in threads that hold each pipe's lock,
+            # so close() would block until an orphaned grandchild (bash forks
+            # commands it runs from a script file) exits; leave them to the
+            # daemon reader threads there.
+            if os.name != "nt":
+                if process.stdout:
+                    process.stdout.close()
+                if process.stderr:
+                    process.stderr.close()
             process.kill()
             process.wait(timeout=5)
         output = stdout.decode("utf-8", errors="replace") + stderr.decode("utf-8", errors="replace")
