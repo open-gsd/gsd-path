@@ -417,10 +417,15 @@ Run this recovery setup from a separate checkout, outside the closed primary
 worktree's guard.
 
 1. Create separate disposable trust and validation checkouts from the same
-   published origin and `STATE.branch`. This separation is required because an
-   explicit runtime upgrade changes the trust checkout's declaration and launcher,
-   while archive validation requires a clean checkout. Never use the primary
-   worktree for either role.
+   published origin and its default branch (checking out `STATE.branch` when
+   it still exists; a rebase-merged pull request may have deleted it). This
+   separation is required because an explicit runtime upgrade changes the
+   trust checkout's declaration and launcher, while archive validation
+   requires a clean checkout. Never use the primary worktree for either role.
+   A rebase-merged milestone additionally needs the original ship commits to
+   resolve — use a checkout that fetched and retained them (the primary
+   always does; a clone that never fetched the bound branch does not), and a
+   checkout whose originals were collected cannot carry a full validation.
 2. From the trusted fixed GSD Path checkout, preview and then explicitly upgrade only the
    disposable trust checkout's managed trust anchor:
 
@@ -447,6 +452,11 @@ worktree's guard.
    python3 -B <verified-runtime>/archive_milestone.py refresh-origin --repo <validation-root>
    python3 -B <verified-runtime>/archive_milestone.py validate-integrated --repo <validation-root> --slug <STATE.milestone>
    ```
+
+   When the validation checkout is on the default branch after the milestone
+   closed (the bound branch is gone), pass `--historical`; a rebase-merged
+   landing is then accepted only through the milestone tag's Ship/Landing
+   pair plus a re-proven rebase replay.
 
 4. A pass restores the normal shipped handoff without another commit or
    publication action. Remove only the disposable checkouts. A failure is a

@@ -1998,6 +1998,62 @@ def member_ship_rows(project: Path, archive: Path, ship_commit: str) -> list:
     return rows
 
 
+def tag_metadata_fields(project: Path, tag_ref: str) -> dict[str, str]:
+    """The Key: value fields of an annotated milestone tag's message."""
+    message = require_git_success(
+        run_git(project, "for-each-ref", "--format=%(contents)", tag_ref),
+        "inspect milestone tag",
+    )
+    fields: dict[str, str] = {}
+    for line in message.splitlines():
+        match = re.fullmatch(r"(Mode|Pull-Request|Ship|Landing): (.+)", line)
+        if match:
+            if match.group(1) in fields:
+                raise ArchiveError("milestone tag repeats metadata")
+            fields[match.group(1)] = match.group(2)
+    return fields
+
+
+def accept_rebased_ship(
+    project: Path, archive: Path, ship_commit: str, reviewed_head: str
+) -> Optional[str]:
+    """Accept the rebased ship copy a rebase merge landed, keyed by the milestone tag.
+
+    Historical validation only (issue #450): after a rebase merge the landed
+    ship copy's parent is never the reviewed HEAD, so the strict check cannot
+    pass over landed history. Acceptance requires the milestone tag to name
+    exactly this commit as its Landing, the original ship commit the tag
+    names to still resolve, the strict invariant re-proven against the
+    original ship's parent, and the rebase replay to hold. Returns the tag's
+    original Ship sha, or None when the landing is not a proven rebase: a
+    landing whose originals no longer resolve anywhere is refused, because
+    the per-task landing proofs elsewhere in validation pin the original
+    commits and a tag receipt alone cannot carry a full validation.
+    """
+    tag_ref = f"refs/tags/milestone/{archive.name}"
+    if run_git(project, "rev-parse", "--verify", "--quiet", tag_ref).returncode != 0:
+        return None
+    try:
+        fields = tag_metadata_fields(project, tag_ref)
+    except ArchiveError:
+        return None
+    if fields.get("Mode") != "pull-request":
+        return None
+    original = fields.get("Ship")
+    if not original or fields.get("Landing") != ship_commit:
+        return None
+    if run_git(project, "cat-file", "-e", f"{original}^{{commit}}").returncode != 0:
+        return None
+    original_parent = require_git_success(
+        run_git(project, "rev-parse", f"{original}^"), "resolve original ship parent"
+    )
+    if not reviewed_head_covers(project, reviewed_head, original_parent):
+        return None
+    if _common.rebase_landing_problem(project, original, ship_commit) is not None:
+        return None
+    return original
+
+
 def validate(repo: Path, *, historical: bool = False) -> dict:
     project, _, state, configured, archive, archived_files, reviewed_head = prepared_transaction(
         repo,
@@ -2093,11 +2149,17 @@ def validate(repo: Path, *, historical: bool = False) -> dict:
 
     members = member_ship_rows(project, archive, ship_commit)
     ship_parent = require_git_success(run_git(project, "rev-parse", f"{ship_commit}^"), "resolve ship parent")
+    rebased_ship: Optional[str] = None
     if not reviewed_head_covers(project, reviewed_head, ship_parent):
-        raise ArchiveError(
-            f"FINAL.md Reviewed HEAD {reviewed_head} does not match ship parent {ship_parent}; "
-            f"{_common.RUNTIME_PIN_ALLOWANCE}"
+        rebased_ship = (
+            accept_rebased_ship(project, archive, ship_commit, reviewed_head)
+            if historical else None
         )
+        if rebased_ship is None:
+            raise ArchiveError(
+                f"FINAL.md Reviewed HEAD {reviewed_head} does not match ship parent {ship_parent}; "
+                f"{_common.RUNTIME_PIN_ALLOWANCE}"
+            )
     require_canonical_commit_body(
         project,
         ship_commit,
@@ -2141,6 +2203,8 @@ def validate(repo: Path, *, historical: bool = False) -> dict:
         )
 
     result = {"archive": configured, "commit": ship_commit}
+    if rebased_ship is not None:
+        result["rebased_ship"] = rebased_ship
     if members:
         result["members"] = members
     return result
@@ -2178,6 +2242,15 @@ def parser() -> argparse.ArgumentParser:
     )
     validate_integrated_parser.add_argument("--repo", required=True, type=Path)
     validate_integrated_parser.add_argument("--slug", required=True)
+    validate_integrated_parser.add_argument(
+        "--historical",
+        action="store_true",
+        help=(
+            "validate from the landed default branch after the milestone closed "
+            "(the bound branch may be gone; a rebase-merged landing is proven "
+            "through the milestone tag)"
+        ),
+    )
 
     refresh_parser = subparsers.add_parser(
         "refresh-origin",
@@ -2225,7 +2298,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         elif arguments.command == "abandon":
             result = abandon(arguments.repo, arguments.slug, arguments.reason)
         elif arguments.command == "validate-integrated":
-            result = integration.validate_integrated(arguments.repo, arguments.slug)
+            result = integration.validate_integrated(
+                arguments.repo, arguments.slug, historical=arguments.historical
+            )
         elif arguments.command == "refresh-origin":
             result = integration.refresh_origin(arguments.repo)
         elif arguments.command == "close-members":
