@@ -653,15 +653,58 @@ def _member_tips(root: Path) -> Dict[str, str]:
     lock = root / ".project/build/members.json"
     if not lock.is_file():
         return {}
-    tips: Dict[str, str] = {}
+    # A review sidecar of the coordinator (a linked worktree of the same
+    # repository) validates against the same member markers: the marker names
+    # the primary, so member resolution runs through the worktree's owning
+    # primary, derived from git metadata — never from reviewed content (#467).
+    # Pointing members.py repair at a sidecar would corrupt the marker. The
+    # lock itself is read from the INVOKING tree — the sidecar's committed
+    # lock at the reviewed head — and the primary's lock must agree, so a
+    # mutable primary cannot swap the branch under a reviewed final.
+    coordinator = _coordinator_for_member_markers(root)
+    primary_lock = coordinator / ".project/build/members.json"
     try:
-        for item in json.loads(lock.read_text(encoding="utf-8"))["members"]:
-            checkout, _, entry = isolation._member_context(root, item["name"])
+        members = json.loads(lock.read_text(encoding="utf-8"))["members"]
+        primary_members = (
+            json.loads(primary_lock.read_text(encoding="utf-8"))["members"]
+            if primary_lock.is_file() else []
+        )
+        primary_by_name = {item["name"]: item for item in primary_members}
+        tips: Dict[str, str] = {}
+        for item in members:
+            if primary_by_name.get(item["name"]) != item:
+                raise HandoffError(
+                    "member lock differs between the reviewed tree and its "
+                    f"coordinator for {item['name']}")
+            checkout, _, entry = isolation._member_context(coordinator, item["name"])
             tips[entry["name"]] = isolation.git_output(
-                checkout, "rev-parse", "--verify", f"refs/heads/{entry['branch']}^{{commit}}")
+                checkout, "rev-parse", "--verify", f"refs/heads/{item['branch']}^{{commit}}")
     except isolation.IsolationError as error:
         raise HandoffError(str(error)) from error
     return tips
+
+
+def _coordinator_for_member_markers(root: Path) -> Path:
+    """The coordinator root that member markers name: root itself for the
+    primary (including separate-git-dir layouts), else the main worktree that
+    owns root as a linked worktree (#467)."""
+    try:
+        import isolation
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import isolation
+    git_dir = Path(isolation.git_output(root, "rev-parse", "--absolute-git-dir")).resolve()
+    common = isolation.common_git_dir(root)
+    if git_dir == common:
+        return root
+    # A linked worktree: the main worktree is the first entry git lists.
+    listed = isolation.run_git(root, "worktree", "list", "--porcelain")
+    if listed.returncode != 0:
+        raise HandoffError("could not resolve the coordinator worktree")
+    for block in listed.stdout.strip().split("\n\n"):
+        fields = block.splitlines()
+        if fields and fields[0].startswith("worktree "):
+            return Path(fields[0].removeprefix("worktree ")).resolve()
+    raise HandoffError("could not resolve the coordinator worktree")
 
 
 def _strip_comments(text: str) -> str:

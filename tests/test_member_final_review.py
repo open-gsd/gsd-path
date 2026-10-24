@@ -36,6 +36,47 @@ class MemberFinalReviewTests(unittest.TestCase):
         self.write_final(f"Member reviewed HEAD: web {self.member_tip}")
         self.assertEqual(contracts.validate_final(self.root)["verdict"], "pass")
 
+    def test_final_validation_in_a_review_sidecar_resolves_members_through_the_primary(self) -> None:
+        # Issue #467: the final reviewer runs in an isolate-verify sidecar of
+        # the coordinator; member markers name the primary, so validation must
+        # resolve members through the sidecar's owning primary.
+        from scripts import isolation
+        self.write_final(f"Member reviewed HEAD: web {self.member_tip}")
+        head = git(self.root, "rev-parse", "HEAD")
+        created = isolation.isolate_verify(self.root, head, "review-final")
+        sidecar = Path(created["worktree"])
+        # The reviewer writes its artifact inside the sidecar.
+        (sidecar / ".project/review").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(
+            self.root / ".project/review/FINAL.md",
+            sidecar / ".project/review/FINAL.md",
+        )
+        shutil.copyfile(
+            self.root / ".project/review/final-gap-1.md",
+            sidecar / ".project/review/final-gap-1.md",
+        )
+
+        self.assertEqual(contracts.validate_final(sidecar)["verdict"], "pass")
+
+    def test_review_sidecar_still_refuses_a_stale_member_head(self) -> None:
+        from scripts import isolation
+        self.write_final(f"Member reviewed HEAD: web {git(self.member, 'rev-parse', 'main')}")
+        head = git(self.root, "rev-parse", "HEAD")
+        created = isolation.isolate_verify(self.root, head, "review-final")
+        sidecar = Path(created["worktree"])
+        (sidecar / ".project/review").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(
+            self.root / ".project/review/FINAL.md",
+            sidecar / ".project/review/FINAL.md",
+        )
+        shutil.copyfile(
+            self.root / ".project/review/final-gap-1.md",
+            sidecar / ".project/review/final-gap-1.md",
+        )
+
+        with self.assertRaisesRegex(contracts.HandoffError, "Member reviewed HEAD"):
+            contracts.validate_final(sidecar)
+
     def test_stale_member_head_is_refused(self) -> None:
         self.write_final(f"Member reviewed HEAD: web {git(self.member, 'rev-parse', 'main')}")
         with self.assertRaisesRegex(contracts.HandoffError, "Member reviewed HEAD"):
