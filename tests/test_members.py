@@ -183,6 +183,31 @@ class MemberTests(unittest.TestCase):
         self.assertIn("member remote default must be main, got master", self.run_members("validate").stderr)
         self.set_origin_head(web, "main")
 
+    def test_prepare_field_round_trips_and_stays_optional(self) -> None:
+        web = self.make_member("web")
+        self.assertEqual(self.add("web", web).returncode, 0)
+        path = self.coordinator / ".project" / "MEMBERS.md"
+        with_prepare = self.members_text().replace(
+            "Integration: default\n",
+            "Integration: default\nPrepare: git submodule update --init libs\n",
+        )
+        path.write_bytes(with_prepare.encode("utf-8"))
+
+        validated = self.run_members("validate")
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+        rows = json.loads(validated.stdout)["members"]
+        self.assertEqual(rows[0]["prepare"], "git submodule update --init libs")
+        # A row without Prepare stays valid and is not rewritten.
+        self.assertNotIn("Prepare", members.render([
+            {"name": "api", "checkout": "/tmp/api", "remote": "https://github.com/acme/api.git",
+             "integration": "direct"}]))
+        self.assertIn("Prepare: git submodule update --init libs\n", members.render(rows))
+
+    def test_members_of_one_project_can_have_different_default_branches(self) -> None:
+        web = self.make_member("web")
+        self.assertEqual(self.add("web", web).returncode, 0)
+        legacy = self.members_text()
+
         # Members of one project can have different default branches.
         added = self.add("sdk", self.make_member("sdk", default="master"))
         self.assertEqual(added.returncode, 0, added.stderr)

@@ -227,7 +227,9 @@ A coordinator project can change other repositories (members) in the same
 milestone; `.project/MEMBERS.md` lists them. Change members only at a
 milestone boundary, never during build or ship. Resolve the bundled
 `scripts/members.py` to an absolute path and use it; never edit MEMBERS.md
-or a member marker by hand.
+or a member marker by hand (the one exception is adding the optional
+`Prepare:` row below through a reviewed change — `members.py` has no
+subcommand for it yet).
 
 - To add an existing repository, it needs a GitHub.com `origin`, a clean
   worktree, and no active milestone of its own. Its default branch can have
@@ -240,6 +242,19 @@ or a member marker by hand.
   When `validate` or member close later reports
   `remote default must be <recorded>`, stop and report it; never edit the
   record.
+- A member whose isolates need more than tracked files — uninitialized
+  submodules, gitignored build inputs — declares a `Prepare:` command in its
+  MEMBERS.md row (added by editing the committed file through a reviewed
+  change; `members.py` validates it like any field). The runtime runs it
+  inside every fresh member isolate, task or verify, before any Verify: it
+  must provision by copying from the member's primary checkout, never by
+  linking (retirement defuses links, and a link would let the isolate mutate
+  shared inputs). For submodules, the offline recipe is
+  `git config submodule.<name>.url <primary>/.git/modules/<name> && git -c protocol.file.allow=always submodule update --init <name>`
+  — it reads the primary's object store and touches no network. A failed
+  Prepare fails the isolation loudly with its output before a Verify runs.
+  Retained isolates keep their provisioning: a re-authorized rerun does not
+  Prepare again.
 - To create a new member repository, present the exact `owner/name`,
   visibility, and checkout path as the **Review** surface and get approval
   first, as for a new GitHub repository. Then run the same command with

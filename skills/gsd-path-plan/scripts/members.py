@@ -34,9 +34,17 @@ MEMBERS_FILE = "MEMBERS.md"
 MARKER_SCHEMA = "gsd-path/member/v1"
 MARKER_KEYS = {"schema", "coordinator", "project", "name"}
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-FIELDS = ("Checkout", "Remote", "Integration")
+FIELDS = ("Checkout", "Remote", "Integration", "Prepare")
+# The first three are required; Prepare (isolate provisioning, #463) and
+# Default branch are optional.
+REQUIRED_FIELDS = ("Checkout", "Remote", "Integration")
 # Optional: `add` records it one time; a row without it means main.
 DEFAULT_BRANCH_FIELD = "Default branch"
+# Optional: a shell command run inside each fresh member isolate before any
+# Verify (#463). It provisions what a bare worktree lacks — submodules from
+# the primary checkout's object store, gitignored build inputs — and must
+# copy, never link, outside the isolate (#462).
+PREPARE_FIELD = "Prepare"
 INTEGRATIONS = ("default", "direct", "pull-request")
 GITHUB_REMOTE_RE = re.compile(
     r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/\s]+)/([^/\s]+)"
@@ -241,7 +249,7 @@ def read_members(coordinator: Path) -> list[dict[str, str]]:
     if len(set(names)) != len(names):
         raise MembersError("MEMBERS.md repeats a member name")
     for member in members:
-        missing = [field for field in FIELDS if not member.get(field.lower())]
+        missing = [field for field in REQUIRED_FIELDS if not member.get(field.lower())]
         if missing:
             raise MembersError(f"MEMBERS.md member {member['name']} lacks {', '.join(missing)}")
         if member["integration"] not in INTEGRATIONS:
@@ -510,6 +518,7 @@ def render(members: Sequence[dict[str, str]]) -> str:
         f"Checkout: {member['checkout']}\n"
         f"Remote: {member['remote']}\n"
         f"Integration: {member['integration']}\n"
+        + (f"{PREPARE_FIELD}: {member['prepare']}\n" if "prepare" in member else "")
         # A row that never had the field keeps none, so old rows are not rewritten.
         + (f"{DEFAULT_BRANCH_FIELD}: {member['default_branch']}\n" if "default_branch" in member else "")
         for member in members
