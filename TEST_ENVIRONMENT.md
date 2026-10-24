@@ -17,8 +17,13 @@ the default offline suite.
 
 The `windows` CI job runs the same gate natively on `windows-latest` with
 Python 3.9 and 3.12, and blocks like the POSIX jobs. Each Python version runs
-as four shards; `node scripts/dev/py.mjs -m tests.ci_shard INDEX TOTAL` runs
-one shard locally and prints each test module's time.
+as seven shards; `node scripts/dev/py.mjs -m tests.ci_shard INDEX TOTAL` runs
+one shard locally and prints each test module's time. Allocation uses measured
+Windows timings in `tests/windows_ci_seconds.json` from
+[CI run 40084295374](https://github.com/open-gsd/gsd-path/actions/runs/40084295374).
+Refresh those timings when the workload changes. Seven shards follow from
+135.5 minutes of Python work divided by the longest module (19.6 minutes),
+rounded up. More shards increase runner demand; queue time can offset savings.
 
 On Windows, fixture projects' Verify commands call `python3`, as POSIX projects
 do, so the test run needs a real `python3` on PATH. CI copies `python.exe` to
