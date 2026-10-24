@@ -1103,6 +1103,16 @@ def _reauthorize_member_task_locked(
     agent = fields.get("agent")
     if not agent:
         raise IsolationError(f"member task {task_id} live copy lacks its agent")
+    recorded_agent = record.get("agent")
+    if recorded_agent and agent != recorded_agent:
+        raise IsolationError(
+            f"member task {task_id} live copy activation fields differ from its "
+            "recorded activation; re-isolate instead")
+    if not recorded_agent:
+        # Activations recorded before the agent field existed name no agent;
+        # the field is informational today (no authorization decision
+        # consumes it), so a legacy record accepts the copy's non-empty one.
+        pass
     if (fields.get("base") != recorded_base
             or fields.get("member_base") != recorded_member_base):
         raise IsolationError(
