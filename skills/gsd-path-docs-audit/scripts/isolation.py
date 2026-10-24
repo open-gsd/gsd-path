@@ -27,7 +27,7 @@ import sys
 sys.dont_write_bytecode = True
 import tempfile
 from pathlib import Path, PurePosixPath
-from typing import Dict, Iterator, Optional, Sequence, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple
 
 if __package__:
     from .pipeline_git import (
