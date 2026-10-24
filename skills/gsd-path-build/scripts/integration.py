@@ -1851,6 +1851,8 @@ def integrate_member(coordinator: Path, member: str, archive_path: str, reviewed
             run_git(checkout, "rev-parse", origin_default), f"resolve member {origin_default}")
         ancestry = run_git(checkout, "merge-base", "--is-ancestor", reviewed_head, origin_main)
         if ancestry.returncode == 0:
+            if live_remote_ref(checkout, f"refs/tags/{tag_name}") is not None:
+                return validate_member_integrated(coordinator, member, archive_path, reviewed_head)
             if adopt is None:
                 raise ArchiveError(
                     f"member reviewed HEAD reached {origin_default} outside Path; user-approved recovery "
@@ -1962,14 +1964,20 @@ def validate_member_integrated(
             import members as members_module
         except ImportError:  # pragma: no cover - package import used by tests
             from scripts import members as members_module
+        common = Path(archive_milestone.require_git_success(
+            run_git(coordinator, "rev-parse", "--path-format=absolute", "--git-common-dir"),
+            "resolve Git common dir"))
         try:
-            listed_modes = {
+            closed_modes = {
+                row["name"]: row["mode"]
+                for row in members_module.read_member_close(common, PurePosixPath(archive_path).name)
+            }
+            effective_mode = closed_modes.get(member) or {
                 item["name"]: item["integration"]
                 for item in members_module.read_members(coordinator)
-            }
+            }.get(member, "default")
         except members_module.MembersError as error:
             raise ArchiveError(str(error)) from error
-        effective_mode = listed_modes.get(member, "default")
         if effective_mode == "default":
             effective_mode = archive_milestone.strict_state(coordinator)[0].integration
         if effective_mode != "direct":
@@ -2118,7 +2126,7 @@ def close_members(repo: Path, adopt: Optional[Mapping[str, str]] = None) -> dict
         run_git(project, "rev-parse", "--path-format=absolute", "--git-common-dir"), "resolve Git common dir"))
     archive_name = PurePosixPath(state.archive).name
     try:
-        modes = {item["name"]: item["integration"] for item in members.read_members(project)} if locked else []
+        modes = {item["name"]: item["integration"] for item in members.read_members(project)} if locked else {}
         rows = {row["name"]: row for row in members.read_member_close(common, archive_name)}
     except members.MembersError as error:
         raise ArchiveError(str(error)) from error
@@ -2128,12 +2136,8 @@ def close_members(repo: Path, adopt: Optional[Mapping[str, str]] = None) -> dict
         if unknown:
             raise ArchiveError(
                 f"--adopt-landed-member names member(s) not locked in this milestone: {', '.join(unknown)}")
-        try:
-            listed_modes = {item["name"]: item["integration"] for item in members.read_members(project)}
-        except members.MembersError as error:
-            raise ArchiveError(str(error)) from error
         for adopted_name in sorted(adopt):
-            mode = listed_modes.get(adopted_name, "default")
+            mode = modes.get(adopted_name, "default")
             if mode == "default":
                 mode = state.integration
             if mode != "direct":

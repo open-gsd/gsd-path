@@ -1,6 +1,8 @@
+import contextlib
 import json
 import re
 import shutil
+import sys
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -112,6 +114,50 @@ class MemberCloseTests(unittest.TestCase):
         self.assertEqual(rerun["status"], "integrated")
         self.assertIs(rerun["members"][0]["adopted"], True)
         self.assertEqual(rerun["members"][0]["merge"], self.member_tip)
+
+    def test_interrupted_adoption_resumes_after_the_default_advances(self) -> None:
+        self.blocked_landing()
+        write = members.write_member_close
+        calls = []
+
+        def fail_after_publish(*arguments):
+            calls.append(arguments)
+            if len(calls) == 2:
+                raise OSError("journal save failed")
+            return write(*arguments)
+
+        with contextlib.ExitStack() as patches:
+            for loaded in {members, sys.modules.get("members", members)}:
+                patches.enter_context(mock.patch.object(loaded, "write_member_close", side_effect=fail_after_publish))
+            with self.assertRaisesRegex(OSError, "journal save failed"):
+                integration.close_members(self.root, adopt={"web": self.member_tip})
+        self.assertEqual(json.loads(self.journal.read_text(encoding="utf-8"))["members"][0]["status"], "pending")
+        tree = git(self.member, "rev-parse", f"{self.member_tip}^{{tree}}")
+        advanced = git(self.member, "commit-tree", tree, "-p", self.member_tip, "-m", "later work")
+        git(self.remote, "fetch", "-q", str(self.member), advanced)
+        git(self.remote, "update-ref", "refs/heads/main", advanced)
+
+        result = integration.close_members(self.root, adopt={"web": advanced})
+        row = result["members"][0]
+        self.assertEqual((row["merge"], row["tag"], row["adopted"]), (self.member_tip, TAG, True))
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}^{{commit}}"), self.member_tip)
+        self.assertEqual(self.remote_ref("refs/heads/main"), advanced)
+        self.assertEqual(json.loads(self.journal.read_text(encoding="utf-8"))["members"], [row])
+        with mock.patch.object(integration, "integrate_member", side_effect=AssertionError("adopted twice")):
+            self.assertEqual(integration.close_members(self.root)["members"], [row])
+
+    def test_adopted_member_validates_by_its_mode_at_close(self) -> None:
+        self.blocked_landing()
+        integration.close_members(self.root, adopt={"web": self.member_tip})
+        self.set_integration("pull-request")
+        validated = integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip)
+        self.assertIs(validated["adopted"], True)
+
+        journal = json.loads(self.journal.read_text(encoding="utf-8"))
+        journal["members"][0]["mode"] = "pull-request"
+        self.journal.write_bytes(json.dumps(journal).encode("utf-8"))
+        with self.assertRaisesRegex(ArchiveError, "not direct-mode"):
+            integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip)
 
     def test_adoption_flag_names_only_locked_direct_members(self) -> None:
         with self.assertRaisesRegex(ArchiveError, "not locked in this milestone"):
