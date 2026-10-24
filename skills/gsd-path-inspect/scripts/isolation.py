@@ -513,6 +513,22 @@ def _is_link_like(status: os.stat_result) -> bool:
     )
 
 
+def _tracked_symlinks(tree: Path, when: str) -> Set[str]:
+    """Paths, relative to `tree`, that its index (and submodules') tracks as symlinks."""
+    tracked_links: Set[str] = set()
+    if os.path.lexists(os.path.join(tree, ".git")):
+        listed = run_git(tree, "ls-files", "-s", "-z", "--recurse-submodules")
+        if listed.returncode != 0:
+            raise IsolationError(
+                f"could not list tracked files in {tree} {when}: "
+                + (listed.stderr or listed.stdout).strip())
+        for record in listed.stdout.split("\0"):
+            info, _, path = record.partition("\t")
+            if info.startswith("120000 "):
+                tracked_links.add(path)
+    return tracked_links
+
+
 def _unlink_link_like(tree: Path) -> None:
     """Unlink every link-like entry under a disposable tree before git removes it.
 
@@ -527,17 +543,7 @@ def _unlink_link_like(tree: Path) -> None:
     dirty. A junction, or a symlink replacing a tracked non-link, is unlinked.
     """
     remaining: List[str] = []
-    tracked_links: Set[str] = set()
-    if os.path.lexists(os.path.join(tree, ".git")):
-        listed = run_git(tree, "ls-files", "-s", "-z", "--recurse-submodules")
-        if listed.returncode != 0:
-            raise IsolationError(
-                f"could not list tracked files in {tree} before removal: "
-                + (listed.stderr or listed.stdout).strip())
-        for record in listed.stdout.split("\0"):
-            info, _, path = record.partition("\t")
-            if info.startswith("120000 "):
-                tracked_links.add(path)
+    tracked_links = _tracked_symlinks(tree, "before removal")
 
     def _unlink_one(entry: str) -> bool:
         try:
@@ -859,6 +865,106 @@ def member_bound_checkout(coordinator: Path, member: str) -> Dict[str, object]:
     return {"branch": branch, "checkout": str(destination.resolve()), "member": member}
 
 
+def _member_prepare_command(coordinator: Path, member: str) -> Optional[str]:
+    """The member's declared Prepare command from MEMBERS.md, if any (#463)."""
+    try:
+        import members
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import members
+    try:
+        rows = members.read_members(coordinator)
+    except members.MembersError as error:
+        raise IsolationError(str(error)) from error
+    for row in rows:
+        if row["name"] == member:
+            return row.get("prepare") or None
+    return None
+
+
+def _refuse_link_like(tree: Path) -> None:
+    """Refuse an isolate that provisioning left link-like entries in (#463).
+
+    Prepare must copy, never link: a link into the primary checkout would let
+    the isolate read and mutate shared inputs, and retirement would silently
+    defuse it (#462). Checked at handout, after the command exits zero. A
+    symlink the member repo tracks as a symlink is checked-out content, not
+    provisioning, and is spared; a junction, or a symlink replacing a tracked
+    non-link, is refused.
+    """
+    found: List[str] = []
+    tracked_links = _tracked_symlinks(tree, "after Prepare")
+    root = Path(_long_path(os.path.abspath(tree))) if os.name == "nt" else tree
+
+    def _scan_failed(error: OSError) -> None:
+        raise IsolationError(f"could not scan {tree} after Prepare: {error}")
+
+    def _refused(entry: str, status: os.stat_result) -> bool:
+        return _is_link_like(status) and not (stat.S_ISLNK(status.st_mode) and (
+            os.path.relpath(entry, root).replace(os.sep, "/") in tracked_links))
+
+    for directory, dirnames, files in os.walk(root, topdown=True, onerror=_scan_failed):
+        for base in dirnames[:]:
+            entry = os.path.join(directory, base)
+            try:
+                status = os.lstat(entry)
+            except OSError as error:
+                _scan_failed(error)
+                return
+            if _is_link_like(status):
+                dirnames.remove(base)  # never descend a link
+                if _refused(entry, status):
+                    found.append(entry)
+        for name in files:
+            entry = os.path.join(directory, name)
+            try:
+                status = os.lstat(entry)
+            except OSError as error:
+                _scan_failed(error)
+                return
+            if _refused(entry, status):
+                found.append(entry)
+    if found:
+        raise IsolationError(
+            "member Prepare left link-like entries; provisioning must copy, "
+            "never link: " + ", ".join(found))
+
+
+def run_member_prepare(coordinator: Path, member: str, sidecar: Path) -> Optional[Dict[str, object]]:
+    """Run the member's declared Prepare command inside a fresh isolate (#463).
+
+    A bare member worktree lacks uninitialized submodules and gitignored build
+    inputs; the committed MEMBERS.md `Prepare:` command provisions them before
+    any Verify runs. The command runs with the isolate as cwd, through the
+    same bash argv Verify uses (host-neutral, and a script file on Windows);
+    a non-zero exit is a loud IsolationError carrying the output so the
+    attempt fails before a Verify burns time against a half-provisioned
+    tree. Provisioning must copy, never link, outside the isolate (#462) —
+    retirement defuses links, and a link would let the isolate mutate shared
+    inputs. Retained isolates keep their provisioning (#461): this runs only
+    where a fresh isolate is created.
+    """
+    command = _member_prepare_command(coordinator, member)
+    if command is None:
+        return None
+    completed = subprocess.run(
+        _common.bash_argv(command), cwd=sidecar,
+        capture_output=True, encoding="utf-8", errors="replace",
+    )
+    receipt = {
+        "command": command,
+        "exit_code": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+    }
+    if completed.returncode != 0:
+        raise IsolationError(
+            f"member {member} Prepare failed in {sidecar}: "
+            f"{completed.stderr.strip() or completed.stdout.strip() or completed.returncode}"
+        )
+    _refuse_link_like(sidecar)
+    return receipt
+
+
 def isolate_member_task(coordinator: Path, member: str, task_id: str) -> Dict[str, object]:
     """Member tasks always run in a sidecar at the member bound branch tip."""
     validate_task_id(task_id)
@@ -875,7 +981,22 @@ def isolate_member_task(coordinator: Path, member: str, task_id: str) -> Dict[st
     branch = f"{TASK_BRANCH_PREFIX}{name}"
     destination = sidecar_root(checkout, "task", name, pin=True)
     create_named_worktree(checkout, branch, destination, member_base, bound=str(bound["branch"]))
+    try:
+        prepared = run_member_prepare(coordinator, member, destination)
+    except BaseException as error:
+        # A fresh tree with a failed Prepare has nothing to land; retire it so
+        # the retry starts clean instead of refusing on the existing path.
+        try:
+            _remove_worktree(checkout, destination, force=True)
+            run_git(checkout, "update-ref", "-d", f"refs/heads/{branch}", member_base)
+        except IsolationError as cleanup_error:
+            raise IsolationError(
+                f"{error}; retiring the fresh isolate also failed: {cleanup_error}") from error
+        finally:
+            release_workspace_quietly(checkout)
+        raise
     return {
+        "prepare": prepared,
         "bound_branch": bound["branch"],
         "bound_checkout": bound["checkout"],
         "kind": "task",
@@ -1698,8 +1819,11 @@ def isolate_member_verify(coordinator: Path, sidecar: Path) -> Dict[str, Dict[st
             branch = f"{VERIFY_BRANCH_PREFIX}{project}-{entry['name']}"
             destination = sidecar.parent / entry["name"]
             create_named_worktree(checkout, branch, destination, tip, bound=entry["branch"])
+            # Registered before Prepare so a failed provisioning retires with
+            # the loop's existing cleanup (#463).
             created[entry["name"]] = {"checkout": str(checkout), "worktree": str(destination),
                                      "branch": branch, "tip": tip}
+            run_member_prepare(coordinator, entry["name"], destination)
     except BaseException:
         retire_member_verify(created)
         raise

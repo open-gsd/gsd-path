@@ -379,7 +379,7 @@ default branch of the coordinator and of the other members. See
 [ADR 0002](docs/adr/0002-multi-repo-coordinator.md) for the design.
 
 `MEMBERS.md` has one section per member, in ship order. `members.py` writes
-it; do not edit it by hand:
+it; do not edit it by hand (except `Prepare`, below):
 
 ```markdown
 ## web
@@ -393,6 +393,13 @@ Default branch: master
 records it one time, from the member's local `origin/HEAD`; run
 `git remote set-head origin --auto` in the member first. A section without
 the field means `main`. See [default branch](WORKFLOW.md#default-branch).
+
+`Prepare` is optional. It is a shell command that the runtime runs inside
+each fresh member isolate before any Verify, to provision what a bare
+worktree lacks (submodules, gitignored build inputs). It must copy, never
+link. `members.py` has no subcommand for it: add it to the member's section
+through a reviewed change. The `gsd-path` skill describes the rules and an
+offline submodule recipe.
 
 - Add members at a milestone boundary: ask the router to add an existing repo
   (`members.py add`) or to create a new one (`members.py add --create`, after

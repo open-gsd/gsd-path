@@ -1,5 +1,7 @@
+import re
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -11,6 +13,109 @@ from tests._platform import requires_symlink
 TASK_FILE = landing.TASK_FILE
 git = landing.git
 AUTH = "refs/gsd-path/task-authorizations/acme-T001"
+
+
+class MemberPrepareTests(unittest.TestCase):
+    setUp = landing.MemberLandingTests.setUp
+    tearDown = landing.MemberLandingTests.tearDown
+
+    def declare_prepare(self, command: str) -> None:
+        path = self.coordinator / ".project" / "MEMBERS.md"
+        text = path.read_text(encoding="utf-8")
+        if re.search(r"(?m)^Prepare: .*$", text):
+            text = re.sub(r"(?m)^Prepare: .*$", f"Prepare: {command}", text)
+        else:
+            text = text.replace("Integration: default\n", f"Integration: default\nPrepare: {command}\n")
+        path.write_bytes(text.encode("utf-8"))
+
+    def test_prepare_provisions_a_fresh_task_isolate_before_any_verify(self) -> None:
+        bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
+        (bound / ".gitignore").write_bytes(b"build/\n")
+        git(bound, "add", ".gitignore")
+        git(bound, "commit", "-q", "-m", "ignore build")
+        self.declare_prepare("mkdir -p build && printf sdk > build/sdk.h")
+        isolated = isolation.isolate_member_task(self.coordinator, "web", "T002")
+        sidecar = Path(isolated["worktree"])
+        # Provisioned before return: a Verify needing build/sdk.h would pass.
+        self.assertEqual((sidecar / "build" / "sdk.h").read_text(encoding="utf-8"), "sdk")
+        self.assertIsNotNone(isolated["prepare"])
+        self.assertEqual(isolated["prepare"]["exit_code"], 0)
+        # Activation and landing gates are unaffected by ignored provisioning.
+        self.assertEqual(sorted(isolation.uncommitted_paths(sidecar)), [])
+
+    def test_prepare_failure_fails_isolation_loudly(self) -> None:
+        self.declare_prepare("exit 3")
+        with self.assertRaisesRegex(isolation.IsolationError, "Prepare failed"):
+            isolation.isolate_member_task(self.coordinator, "web", "T002")
+
+    def test_prepare_failure_retires_the_fresh_isolate_so_retry_works(self) -> None:
+        self.declare_prepare("exit 3")
+        with self.assertRaisesRegex(isolation.IsolationError, "Prepare failed"):
+            isolation.isolate_member_task(self.coordinator, "web", "T002")
+        # A retry isolates cleanly instead of refusing on the existing path.
+        self.declare_prepare("true")
+        isolated = isolation.isolate_member_task(self.coordinator, "web", "T002")
+        self.assertIsNotNone(isolated["prepare"])
+
+    @requires_symlink
+    def test_prepare_may_not_link_out_of_the_isolate(self) -> None:
+        target = self.root / "shared-sdk"
+        target.mkdir()
+        (target / "sdk.h").write_text("shared\n", encoding="utf-8")
+        # Python makes a real symlink on every host; Git Bash `ln -s` copies.
+        linker = self.root / "link.py"
+        linker.write_text(f"import os\nos.symlink({str(target)!r}, 'build-link', target_is_directory=True)\n",
+                          encoding="utf-8")
+        self.declare_prepare(f'"{Path(sys.executable).as_posix()}" "{linker.as_posix()}"')
+        with self.assertRaisesRegex(isolation.IsolationError, "never link"):
+            isolation.isolate_member_task(self.coordinator, "web", "T002")
+        self.assertEqual((target / "sdk.h").read_text(encoding="utf-8"), "shared\n")
+
+    @requires_symlink
+    def test_prepare_spares_symlinks_the_member_repo_tracks(self) -> None:
+        bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
+        (bound / "README.md").write_bytes(b"readme\n")
+        (bound / "docs").mkdir()
+        (bound / "docs" / "README.md").symlink_to(Path("..") / "README.md")
+        git(bound, "add", "README.md", "docs/README.md")
+        git(bound, "commit", "-q", "-m", "tracked symlink")
+        self.declare_prepare("true")
+        isolated = isolation.isolate_member_task(self.coordinator, "web", "T002")
+        link = Path(isolated["worktree"]) / "docs" / "README.md"
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.read_text(encoding="utf-8"), "readme\n")
+
+    def test_failed_cleanup_after_prepare_failure_keeps_the_prepare_error(self) -> None:
+        self.declare_prepare("echo sdk missing >&2; exit 3")
+        with mock.patch.object(isolation, "_remove_worktree",
+                               side_effect=isolation.IsolationError("cannot remove")):
+            with self.assertRaisesRegex(isolation.IsolationError,
+                                        "Prepare failed.*sdk missing.*also failed: cannot remove"):
+                isolation.isolate_member_task(self.coordinator, "web", "T002")
+
+    def test_a_member_without_prepare_isolates_unchanged(self) -> None:
+        isolated = isolation.isolate_member_task(self.coordinator, "web", "T002")
+        self.assertIsNone(isolated["prepare"])
+        self.assertFalse((Path(isolated["worktree"]) / "build").exists())
+
+    def test_prepare_runs_for_fresh_member_verify_sidecars(self) -> None:
+        self.declare_prepare("printf sdk > sdk.h")
+        from scripts import members as members_module
+        # Ship-time regression verifies create fresh member sidecars beside the
+        # coordinator verify sidecar; Prepare must provision each one (#463).
+        lock = self.coordinator / members_module.LOCK_PATH
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        bound = git(self.member, "rev-parse", "gsd-path/acme-M001")
+        lock.write_bytes((__import__("json")).dumps({"schema": members_module.LOCK_SCHEMA, "members": [
+            {"name": "web", "checkout": str(self.member), "branch": "gsd-path/acme-M001",
+             "base": bound}]}, indent=2).encode("utf-8"))
+        coordinator_sidecar = self.root / "workspace" / "verify"
+        coordinator_sidecar.parent.mkdir(parents=True, exist_ok=True)
+        created = isolation.isolate_member_verify(self.coordinator, coordinator_sidecar)
+        try:
+            self.assertEqual((Path(created["web"]["worktree"]) / "sdk.h").read_text(encoding="utf-8"), "sdk")
+        finally:
+            isolation.retire_member_verify(created)
 
 
 class MemberActivationTests(unittest.TestCase):
