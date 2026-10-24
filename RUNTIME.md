@@ -33,8 +33,10 @@ never changes a recorded base, retries a failed mutation, or repairs state itsel
 Checkpoint inputs must use the top-level `.project` entries defined by
 [`isolation.PROJECT_ENTRIES`](scripts/isolation.py); ship verification uses the
 same allowlist. `isolation.py checkpoint` refuses pending paths under any other
-top-level entry and asks for their removal before checkpointing. This check does
-not inspect nested entries inside an allowed directory.
+top-level entry that still exist in the worktree and asks for their removal; a
+pending removal (`git rm`, `git mv`, or a deleted file) passes and the checkpoint
+commits it. This check does not inspect nested entries inside an allowed
+directory.
 
 For serial work, keep the returned verification sidecar until the coder finishes.
 Validate the full task diff, reproduce only that patch in the sidecar, compare the
