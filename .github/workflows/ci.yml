@@ -36,15 +36,15 @@ jobs:
         run: npm pack --dry-run --json > /dev/null
 
   windows:
-    # The serial Python suite took ~70 minutes on one Windows runner; each
-    # shard runs a quarter of the test modules (tests/ci_shard.py).
+    # Measured Windows Python work: 135.5 minutes; longest module: 19.6.
+    # ceil(135.5 / 19.6) = 7 shards, keeping each module isolated.
     name: windows (${{ matrix.python-version }}, shard ${{ matrix.shard }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.12"]
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6]
     defaults:
       run:
         shell: bash
@@ -91,7 +91,7 @@ jobs:
         run: npm test
       - name: Python tests
         if: ${{ !cancelled() }}
-        run: node scripts/dev/py.mjs -m tests.ci_shard ${{ matrix.shard }} 4
+        run: node scripts/dev/py.mjs -m tests.ci_shard ${{ matrix.shard }} 7
       - name: Skill resource sync
         if: ${{ !cancelled() && matrix.shard == 0 }}
         run: npm run test:sync

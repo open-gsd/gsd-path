@@ -1,4 +1,5 @@
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -8,6 +9,16 @@ from tests import ci_shard
 
 
 class CiShardTests(unittest.TestCase):
+    def test_windows_timings_balance_seven_shards(self):
+        measured = json.loads(Path(__file__).with_name('windows_ci_seconds.json').read_text())
+        shards = [ci_shard.modules(index, 7) for index in range(7)]
+        self.assertEqual(sorted(name for shard in shards for name in shard), ci_shard.modules())
+        loads = [sum(measured.get(name, ci_shard.DEFAULT) for name in shard) for shard in shards]
+        # The longest module is the lower bound; permit the measured Node
+        # step (263 seconds), which runs before Python on shard zero.
+        loads[0] += 263
+        self.assertLessEqual(max(loads), max(measured.values()) + 263)
+
     def test_shards_partition_every_test_module(self):
         names = ci_shard.modules()
         self.assertIn("test_ci_shard.py", names)
