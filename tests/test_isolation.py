@@ -2732,6 +2732,59 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual((target_dir / "keep.txt").read_text(), "keep\n")
             self.assertEqual(target_file.read_bytes(), b"\x00BIN")
 
+    def test_unlink_link_like_aborts_on_an_unscannable_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tree = Path(temporary) / "disposable"
+            locked = tree / "locked"
+            locked.mkdir(parents=True)
+            (locked / "hidden.txt").write_text("x\n")
+            locked.chmod(0)
+            try:
+                try:
+                    os.listdir(locked)
+                except PermissionError:
+                    pass
+                else:
+                    self.skipTest("platform grants access to a mode-000 directory")
+
+                with self.assertRaisesRegex(isolation.IsolationError, "could not scan"):
+                    isolation._unlink_link_like(tree)
+            finally:
+                locked.chmod(stat.S_IRWXU)
+
+    def test_unlink_link_like_fails_loud_when_a_link_cannot_be_unlinked(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target_dir = root / "target-dir"
+            target_dir.mkdir()
+            sentinel = target_dir / "sentinel.txt"
+            sentinel.write_text("keep\n")
+            inner = target_dir / "inner"
+            inner.symlink_to(sentinel)
+            tree = root / "disposable"
+            tree.mkdir()
+            (tree / "regular.txt").write_text("x\n")
+            stuck = tree / "stuck"
+            stuck.symlink_to(target_dir, target_is_directory=True)
+            real_unlink = os.unlink
+
+            def unlink(path, *args, **kwargs):
+                if os.path.basename(os.fspath(path)) == "stuck":
+                    raise PermissionError("read-only link")
+                return real_unlink(path, *args, **kwargs)
+
+            with mock.patch.object(isolation.os, "unlink", side_effect=unlink), \
+                    mock.patch.object(isolation.os, "rmdir", side_effect=OSError("not a dir")):
+                with self.assertRaisesRegex(
+                    isolation.IsolationError, "could not unlink link-like entries"
+                ):
+                    isolation._unlink_link_like(tree)
+
+            self.assertTrue(stuck.is_symlink())
+            self.assertTrue(inner.is_symlink())
+            self.assertEqual(sentinel.read_text(), "keep\n")
+            self.assertTrue((tree / "regular.txt").exists())
+
     # Above the process argument limit of every supported platform (#412):
     # Windows 32 KiB per command, Linux 128 KiB per argument, macOS 1 MiB in all.
     OVERSIZED_BODY = "Task: .project/tasks/T001.md\nFiles:\n" + "- src/removed.py\n" * 130000
