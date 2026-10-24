@@ -1056,18 +1056,16 @@ def reauthorize_member_task(coordinator: Path, member: str, task_id: str) -> Dic
             import dispatch_driver
     except ImportError:  # pragma: no cover - package import used by tests
         from scripts import dispatch_driver
-    with dispatch_driver.acquire_lock(coordinator):
-        return _reauthorize_member_task_locked(coordinator, member, task_id)
-
-
-def _reauthorize_member_task_locked(coordinator: Path, member: str, task_id: str) -> Dict[str, object]:
     try:
-        if __package__:
-            from . import dispatch_driver
-        else:
-            import dispatch_driver
-    except ImportError:  # pragma: no cover - package import used by tests
-        from scripts import dispatch_driver
+        lock = dispatch_driver.acquire_lock(coordinator)
+    except dispatch_driver.DriverStop as error:
+        raise IsolationError(str(error)) from error
+    with lock:
+        return _reauthorize_member_task_locked(dispatch_driver, coordinator, member, task_id)
+
+
+def _reauthorize_member_task_locked(
+        dispatch_driver, coordinator: Path, member: str, task_id: str) -> Dict[str, object]:
     checkout, project, entry = _member_context(coordinator, member)
     task_id = validate_task_id(task_id)
     # The orchestrator-recorded activation is the source of truth for every
@@ -1130,10 +1128,6 @@ def _reauthorize_member_task_locked(coordinator: Path, member: str, task_id: str
     if run_git(checkout, "merge-base", "--is-ancestor", member_base,
                f"refs/heads/{entry['branch']}").returncode != 0:
         raise IsolationError("member task member base is not on the member bound branch")
-    cherry = run_git(checkout, "cherry", f"refs/heads/{entry['branch']}", branch)
-    if cherry.returncode != 0 or any(
-            not line.startswith("- ") for line in cherry.stdout.splitlines()):
-        raise IsolationError(f"member task branch {branch} has unlanded commits")
     resolved_base = require_commit(coordinator, recorded_base)
     _member_contract(coordinator, resolved_base, task_file, member)
     contract = git_text(coordinator, "show", f"{resolved_base}:{task_file}")
@@ -5069,7 +5063,8 @@ def parser() -> argparse.ArgumentParser:
         "--reauthorize", action="store_true",
         help="re-record the authorization a failed finish cleared, for the same "
              "live copy at the same member base, without re-isolating (#461); "
-             "--agent/--task-file/--base are read from the live copy instead"
+             "--task-file/--base come from the recorded activation, which the "
+             "live copy must match"
     )
 
     retire_member_parser = subparsers.add_parser(
@@ -5174,7 +5169,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ):
             argument_parser.error(
                 "activate-member-task requires --agent, --task-file, and --base, "
-                "or --reauthorize alone (which reads them from the live copy)"
+                "or --reauthorize alone (which uses the recorded activation)"
             )
         if arguments.command == "isolate-task":
             result = isolate_task(

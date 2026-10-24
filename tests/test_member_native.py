@@ -291,6 +291,17 @@ class NativeMemberDispatchTests(unittest.TestCase):
         self.assertIn("nothing to reauthorize", refused.stdout + refused.stderr)
         self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
 
+    def test_reauthorize_refuses_while_the_driver_lock_is_held(self) -> None:
+        from scripts import dispatch_driver
+        self.attempt("wrong\n")
+        self.assertNotEqual(call(*self.finish_command()).returncode, 0)
+        with dispatch_driver.acquire_lock(self.coordinator):
+            refused = call("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                           "--member", "web", "--task-id", "T001", "--reauthorize")
+        self.assertEqual(refused.returncode, 1, refused.stderr)
+        self.assertEqual(refused.stderr.strip(), "another dispatch_driver invocation holds the lock")
+        self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
+
     def test_reauthorize_reads_only_the_live_copy(self) -> None:
         first = self.attempt("wrong\n")
         self.assertNotEqual(call(*self.finish_command()).returncode, 0)
