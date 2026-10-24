@@ -266,6 +266,11 @@ as stated in Lookahead mode.
    A landed brief is immutable history: the helper checks its `files` scope
    at the recorded historical base and does not check the paths that its
    prose and Verify name.
+   Approval also refuses unsupported `.project/` entries (anything outside
+   the fixed set of state files and milestone directories): remove or
+   relocate them first — a staged `git rm` already satisfies the gate and
+   the approval checkpoint commits the removal. Task `files` may not
+   declare anything under `.project/`.
    This applies to plan re-approval too; the dispatch CLI remains HEAD-only
    with no overrides.
 

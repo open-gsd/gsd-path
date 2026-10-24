@@ -376,6 +376,12 @@ def _lint_task(
             if ".git" in candidate.parts:
                 problems.append(f"files entry must not enter .git: {normalized}")
                 continue
+            if candidate.parts[0] == ".project":
+                # Bookkeeping territory: a landed task file under .project/ is
+                # unsupported at ship and cannot be removed during it (#466).
+                problems.append(
+                    f"files entry must stay out of .project/: {normalized}")
+                continue
             for parent in candidate.parents:
                 if str(parent) == ".":
                     break

@@ -549,6 +549,22 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("..", stderr)
 
+    def test_project_files_entry_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write_happy_tasks(root)
+            self.write_task(
+                root, "T003", files=(".project/handoff/bundle.md",), contract="- None",
+                context="The task adds a file.",
+            )
+            base = self.commit(root)
+
+            exit_code, _stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("must stay out of .project/: .project/handoff/bundle.md", stderr)
+
     def test_missing_section_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

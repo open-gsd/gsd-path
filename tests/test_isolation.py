@@ -1916,6 +1916,55 @@ class IsolationTests(unittest.TestCase):
                 )
             self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
 
+    def test_checkpoint_commits_a_staged_removal_of_an_unsupported_entry(self) -> None:
+        # Issue #466: a tracked unsupported entry (cloud-bootstrap leftover)
+        # must be removable through the checkpoint itself, not a plain commit.
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "roadmap done\n")
+            (repo / ".project" / "handoff").mkdir()
+            self.write(repo, ".project/handoff/bundle.md", "bundle\n")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "bootstrap leftover")
+            base = git(repo, "rev-parse", "HEAD")
+            self.write(repo, ".project/STATE.md", "roadmap approved\n")
+            git(repo, "rm", "-rq", ".project/handoff")
+
+            commit = isolation.checkpoint(
+                repo, base, "roadmap: program roadmap approved",
+                "Why: approved roadmap checkpoint", [".project"],
+            )
+
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), commit["commit"])
+            remaining = git(repo, "ls-tree", "--name-only", "HEAD", ".project/").split()
+            self.assertNotIn(".project/handoff", remaining)
+
+    def test_checkpoint_still_refuses_an_index_only_removal(self) -> None:
+        # rm --cached keeps the worktree file; the checkpoint would re-stage
+        # and commit it, so it still blocks (#466).
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            self.write(repo, ".project/STATE.md", "roadmap done\n")
+            (repo / ".project" / "handoff").mkdir()
+            self.write(repo, ".project/handoff/bundle.md", "bundle\n")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "bootstrap leftover")
+            base = git(repo, "rev-parse", "HEAD")
+            self.write(repo, ".project/STATE.md", "roadmap approved\n")
+            git(repo, "rm", "-rq", "--cached", ".project/handoff")
+
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "unsupported .project artifacts: handoff"
+            ):
+                isolation.checkpoint(
+                    repo, base, "roadmap: program roadmap approved",
+                    "Why: approved roadmap checkpoint", [".project"],
+                )
+
     def test_checkpoint_retry_returns_the_exact_existing_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"

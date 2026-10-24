@@ -4956,10 +4956,18 @@ def checkpoint(
     )
     if unexpected:
         raise IsolationError("unexpected paths: " + ", ".join(unexpected))
+    # An unsupported entry violates only if it will exist after this
+    # checkpoint commits: _commit_pending stages exactly the pending paths
+    # from the worktree, so a staged or completed removal (git rm / git mv)
+    # passes and the removal lands here instead of forcing a plain commit
+    # (#466). A kept worktree file (rm --cached, untracked junk) would be
+    # re-staged and still blocks.
     unsupported = sorted({
         path.split("/")[1]
         for path in pending
-        if path.startswith(".project/") and path.split("/")[1] not in PROJECT_ENTRIES
+        if path.startswith(".project/")
+        and path.split("/")[1] not in PROJECT_ENTRIES
+        and ((repo / path).exists() or (repo / path).is_symlink())
     })
     if unsupported:
         raise IsolationError(
