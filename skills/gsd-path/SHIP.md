@@ -347,7 +347,13 @@ The persisted `STATE.archive` field is the transaction identity.
      `build/rebase-adoption.json`) may advance the ref from the adopted head
      to its immediate, canonical `.project/`-only ship child under an exact-SHA
      lease after the helper proves the clean ship state, receipt, and archived
-     tasks. Every other value blocks. If origin/main advances
+     tasks, and a strict ancestor of the ship commit — a build task may have
+     legitimately pushed the bound branch as a deploy pin (#464) — is adopted
+     only after the user approves, by rerunning with
+     `integrate --adopt-published-bound <live 40-hex SHA>`; the helper requires
+     the SHA to equal the live tip exactly and fast-forwards under the same
+     exact lease, and direct integration only. Every other value blocks. If
+     origin/main advances
      after the local merge but rejects the push, a retry may discard and
      rebuild only the unpublished canonical merge and tag under the helper's
      existing recovery checks.

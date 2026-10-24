@@ -3735,17 +3735,11 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
         self.assertEqual(ship.returncode, 0, ship.stderr)
         return archive.name, self.git(repo, "rev-parse", "HEAD").stdout.strip()
 
-    def integrate(self, repo: Path) -> subprocess.CompletedProcess[str]:
-        return self.run_command(
-            sys.executable,
-            str(ARCHIVE_SCRIPT),
-            "integrate",
-            "--repo",
-            str(repo),
-            "--slug",
-            "demo",
-            cwd=PROJECT_ROOT,
-        )
+    def integrate(self, repo: Path, adopt: Optional[str] = None) -> subprocess.CompletedProcess[str]:
+        command = [sys.executable, str(ARCHIVE_SCRIPT), "integrate", "--repo", str(repo), "--slug", "demo"]
+        if adopt is not None:
+            command += ["--adopt-published-bound", adopt]
+        return self.run_command(*command, cwd=PROJECT_ROOT)
 
     def enable_pull_request_integration(self, repo: Path) -> None:
         state = repo / ".project" / "STATE.md"
@@ -5985,6 +5979,94 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
                 ancestor,
             )
+
+    def test_integrate_adopts_a_published_bound_ancestor(self) -> None:
+        # Issue #464: a build task legitimately pushed the bound branch as a
+        # deploy pin; the live remote is a strict ancestor of the ship commit.
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            ancestor = self.git(repo, "rev-parse", f"{ship_sha}^").stdout.strip()
+            self.assertEqual(
+                self.git(repo, "push", "-q", "origin", f"{ancestor}:refs/heads/gsd-path/M001").returncode,
+                0,
+            )
+
+            # A wrong SHA is refused before anything moves; both refs untouched.
+            main_before = self.git(remote, "rev-parse", "main").stdout.strip()
+            wrong = self.integrate(repo, adopt="b" * 40)
+            self.assertNotEqual(wrong.returncode, 0, wrong.stdout)
+            self.assertIn("moved or collides", wrong.stderr)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(), ancestor)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "main").stdout.strip(), main_before)
+
+            # The matching SHA adopts: exact-lease fast-forward to the ship commit.
+            adopted = self.integrate(repo, adopt=ancestor)
+            self.assertEqual(adopted.returncode, 0, adopted.stderr)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(), ship_sha)
+
+            # A rerun without the flag is idempotent: the remote now equals ship.
+            retry = self.integrate(repo)
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+
+    def test_integrate_adopt_refuses_a_diverged_remote(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            # A commit NOT under the ship commit: true divergence (a sibling of
+            # the ship commit, built without moving the bound worktree).
+            parent = self.git(repo, "rev-parse", f"{ship_sha}^").stdout.strip()
+            tree = self.git(repo, "rev-parse", f"{parent}^{{tree}}").stdout.strip()
+            diverged = self.git(
+                repo, "commit-tree", "-p", parent, "-m", "divergence", tree,
+            ).stdout.strip()
+            self.assertEqual(
+                self.git(repo, "push", "-q", "origin", f"{diverged}:refs/heads/gsd-path/M001").returncode,
+                0,
+            )
+
+            refused = self.integrate(repo, adopt=diverged)
+            self.assertNotEqual(refused.returncode, 0, refused.stdout)
+            self.assertIn("diverges from the ship commit", refused.stderr)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(), diverged)
+
+    def test_integrate_adopt_flag_refuses_non_direct_modes(self) -> None:
+        for enable in (self.enable_pull_request_integration, self.enable_external_landing_integration):
+            with self.subTest(enable=enable.__name__), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                repo = root / "primary"
+                repo.mkdir()
+                remote = root / "origin.git"
+                self.make_publishable_bound_repo(repo, remote)
+                enable(repo)
+                self.ship_canonical_bound(repo)
+                refused = self.integrate(repo, adopt="a" * 40)
+                self.assertNotEqual(refused.returncode, 0, refused.stdout)
+                self.assertIn("applies only to direct integration", refused.stderr)
+
+    def test_integrate_adopt_cli_rejects_a_malformed_sha(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory) / "primary"
+            repo.mkdir()
+            malformed = self.run_command(
+                sys.executable, str(ARCHIVE_SCRIPT), "integrate",
+                "--repo", str(repo), "--slug", "demo", "--adopt-published-bound", "abc",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(malformed.returncode, 2)
+            self.assertIn("40-hex SHA", malformed.stderr)
 
     def test_integrate_rebuilds_an_unpublished_merge_after_main_advances(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

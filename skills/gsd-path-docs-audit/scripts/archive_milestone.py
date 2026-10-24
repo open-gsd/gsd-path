@@ -2288,6 +2288,16 @@ def parser() -> argparse.ArgumentParser:
     )
     integrate_parser.add_argument("--repo", required=True, type=Path)
     integrate_parser.add_argument("--slug", required=True)
+    integrate_parser.add_argument(
+        "--adopt-published-bound",
+        metavar="SHA",
+        help=(
+            "user-approved recovery when origin's bound branch is a strict ancestor "
+            "of the ship commit (a build task pushed it as a deploy pin, #464); "
+            "the 40-hex SHA must equal the live remote tip exactly; the publish "
+            "fast-forwards under the existing exact lease. Direct integration only"
+        ),
+    )
 
     abandon_parser = subparsers.add_parser(
         "abandon",
@@ -2334,7 +2344,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 adopt[name] = sha
             result = integration.close_members(arguments.repo, adopt=adopt or None)
         elif arguments.command == "integrate":
-            result = integration.integrate(arguments.repo, arguments.slug)
+            adopt_bound = arguments.adopt_published_bound
+            if adopt_bound is not None:
+                adopt_bound = adopt_bound.lower()
+            if adopt_bound is not None and not re.fullmatch(r"[0-9a-f]{40}", adopt_bound):
+                print(
+                    f"--adopt-published-bound expects a 40-hex SHA, got {adopt_bound!r}",
+                    file=sys.stderr,
+                )
+                return 2
+            result = integration.integrate(arguments.repo, arguments.slug, adopt_bound)
         else:
             result = validate(arguments.repo)
     except (ArchiveError, OSError) as error:

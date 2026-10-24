@@ -114,11 +114,24 @@ def live_remote_ref(project: Path, ref: str) -> Optional[str]:
     return rows[0][0]
 
 
-def publishable_bound_branch(project: Path, branch: str, ship_commit: str) -> Optional[str]:
+def publishable_bound_branch(
+    project: Path, branch: str, ship_commit: str, adopt_published: Optional[str] = None
+) -> Optional[str]:
     """The live origin SHA the bound ref may move from: absent, the ship
-    commit, or an owner-adopted rebased head proven by its archived receipt."""
+    commit, an owner-adopted rebased head proven by its archived receipt, or a
+    user-attested strict ancestor adopted through --adopt-published-bound
+    (#464: a build task legitimately pushed the bound branch as a deploy pin)."""
     remote_sha = live_remote_ref(project, f"refs/heads/{branch}")
     if remote_sha is None or remote_sha == ship_commit:
+        return remote_sha
+    if adopt_published is not None:
+        if remote_sha != adopt_published:
+            raise ArchiveError(
+                f"origin/{branch} moved or collides: {remote_sha} != {adopt_published}")
+        if run_git(project, "merge-base", "--is-ancestor", remote_sha, ship_commit).returncode != 0:
+            raise ArchiveError(
+                f"origin/{branch} {remote_sha} diverges from the ship commit; "
+                "an adoption cannot rewind")
         return remote_sha
     try:
         approved_base = publication_base(project, branch, ship_commit)
@@ -129,9 +142,11 @@ def publishable_bound_branch(project: Path, branch: str, ship_commit: str) -> Op
     return remote_sha
 
 
-def publish_bound_branch(project: Path, branch: str, ship_commit: str) -> None:
+def publish_bound_branch(
+    project: Path, branch: str, ship_commit: str, adopt_published: Optional[str] = None
+) -> None:
     remote_ref = f"refs/heads/{branch}"
-    remote_sha = publishable_bound_branch(project, branch, ship_commit)
+    remote_sha = publishable_bound_branch(project, branch, ship_commit, adopt_published)
     if remote_sha != ship_commit:
         # An absent ref carries an empty lease; an adopted head leases its exact SHA.
         archive_milestone.require_git_success(
@@ -1157,7 +1172,7 @@ def integrate_external_landing(
     return validate_integrated(project, archive_milestone.milestone_slug(state))
 
 
-def integrate(repo: Path, slug: str) -> dict:
+def integrate(repo: Path, slug: str, adopt_published: Optional[str] = None) -> dict:
     project = repo.resolve()
     active_root = archive_milestone.require_project_layout(project)
     state, _, loaded_state_path = archive_milestone.strict_state(project)
@@ -1200,6 +1215,10 @@ def integrate(repo: Path, slug: str) -> dict:
     remote_default_sha = archive_milestone.require_git_success(
         run_git(project, "rev-parse", remote_default), "resolve remote default"
     )
+    if adopt_published is not None and state.integration != "direct":
+        raise ArchiveError(
+            "--adopt-published-bound applies only to direct integration, "
+            f"not {state.integration}")
     if state.integration == "pull-request":
         return integrate_pull_request(
             project,
@@ -1219,7 +1238,7 @@ def integrate(repo: Path, slug: str) -> dict:
             default_name,
             bound_branch,
         )
-    publishable_bound_branch(project, bound_branch, ship_commit)
+    publishable_bound_branch(project, bound_branch, ship_commit, adopt_published)
     integration_branch, worktree = integration_names(project, archive_name, pin=True)
     interrupted_worktree = registered_worktree(project, integration_branch)
     if (
@@ -1310,7 +1329,7 @@ def integrate(repo: Path, slug: str) -> dict:
         elif published_merge.returncode != 0:
             archive_milestone.require_git_success(published_merge, "inspect published integration merge")
 
-        publish_bound_branch(project, bound_branch, ship_commit)
+        publish_bound_branch(project, bound_branch, ship_commit, adopt_published)
         if not tag_published:
             archive_milestone.require_git_success(
                 run_git(
