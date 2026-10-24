@@ -353,14 +353,38 @@ class GitGuardEndToEndTests(unittest.TestCase):
         accepted = self.run_guard("ship: M002 — next", pin_body)
         self.assertEqual(0, accepted.returncode, accepted.stderr)
 
-        # A body naming any other covered commit does not substitute for the
-        # staged final review's head.
+        # A body naming the pin commit, which reviewed_head_covers trivially
+        # covers, does not substitute for the staged final review's head.
         substituted = self.run_guard(
             "ship: M002 — next",
-            "Archive: .project/archive/002-next\nReviewed-HEAD: " + "a" * 40,
+            f"Archive: .project/archive/002-next\nReviewed-HEAD: {self.head()}",
         )
         self.assertEqual(1, substituted.returncode)
         self.assertIn("ship commit body does not match", substituted.stderr)
+
+        # The staged FINAL.md head is read with validate's tolerance.
+        final = archived / "review" / "FINAL.md"
+        for line in (f"Reviewed HEAD: {reviewed}  ", f"Reviewed HEAD: {reviewed.upper()}",
+                     f"Reviewed HEAD: `{reviewed}`"):
+            with self.subTest(line=line):
+                final.write_bytes(f"# Final Review\n\n{line}\n".encode("utf-8"))
+                self.git("add", str(final))
+                tolerant = self.run_guard("ship: M002 — next", pin_body)
+                self.assertEqual(0, tolerant.returncode, tolerant.stderr)
+        # An absent or malformed head still falls back to raw HEAD.
+        for text in ("# Final Review\n", f"# Final Review\n\nReviewed HEAD: {reviewed[:39]}\n"):
+            with self.subTest(final=text):
+                final.write_bytes(text.encode("utf-8"))
+                self.git("add", str(final))
+                fallback = self.run_guard("ship: M002 — next", pin_body)
+                self.assertEqual(1, fallback.returncode)
+                self.assertIn("ship commit body does not match", fallback.stderr)
+                head_body = self.run_guard(
+                    "ship: M002 — next",
+                    f"Archive: .project/archive/002-next\nReviewed-HEAD: {self.head()}",
+                )
+                self.assertEqual(0, head_body.returncode, head_body.stderr)
+        final.write_bytes(f"# Final Review\n\nReviewed HEAD: {reviewed}\n".encode("utf-8"))
 
         # A product commit after the reviewed head still blocks.
         self.git("reset", "-q")

@@ -284,7 +284,7 @@ def strict_ship_state(state, archive):
     )
 
 
-REVIEWED_HEAD_LINE = re.compile(r"(?m)^Reviewed HEAD: (?P<sha>[0-9a-f]{40})$")
+REVIEWED_HEAD_LINE = re.compile(r"(?m)^Reviewed HEAD:[ \t]*(`?)(?P<sha>[0-9a-fA-F]{40})\1[ \t]*$")
 
 
 def ship_contract_violations(entries, subject, body, new_archives, state):
@@ -325,7 +325,7 @@ def ship_contract_violations(entries, subject, body, new_archives, state):
     if staged_final.returncode == 0:
         final_line = REVIEWED_HEAD_LINE.search(staged_final.stdout)
         if final_line is not None:
-            reviewed_head = final_line.group("sha")
+            reviewed_head = final_line.group("sha").lower()
     if reviewed_head != head and not reviewed_head_covers(Path.cwd(), reviewed_head, head):
         found.append(
             "ship commit Reviewed-HEAD is not covered by runtime-pin commits "
