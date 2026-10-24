@@ -4358,7 +4358,7 @@ if os.name == "nt":
             with tempfile.TemporaryDirectory() as temporary:
                 repo = Path(temporary) / "repo"
                 repo.mkdir()
-                base = IsolationTests.init_bound_repo(repo)
+                IsolationTests().init_bound_repo(repo)
                 (repo / ".gitignore").write_bytes(b"build/\n")
                 git(repo, "add", ".gitignore")
                 git(repo, "commit", "-q", "-m", "ignore build")
