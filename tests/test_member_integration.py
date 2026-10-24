@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 from subprocess import CompletedProcess
@@ -114,6 +115,30 @@ class MemberIntegrationTests(unittest.TestCase):
         self.assertEqual(self.remote_ref("refs/heads/main"), self.member_tip)
         self.assertEqual(self.remote_ref("refs/heads/gsd-path/demo-M001"), "")
         self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), "")
+
+    def test_adopted_landing_tag_validates_the_landed_member(self) -> None:
+        git(self.remote, "fetch", "-q", str(self.member), self.member_tip)
+        git(self.remote, "update-ref", "refs/heads/main", self.member_tip)
+        result = integration.integrate_member(self.root, "web", ARCHIVE, self.member_tip,
+                                              adopt=self.member_tip)
+        self.assertIs(result["adopted"], True)
+        self.assertEqual(result["merge"], self.member_tip)
+        self.assertEqual(result["tag"], TAG)
+
+        validated = integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip)
+        self.assertIs(validated["adopted"], True)
+        self.assertEqual(validated["merge"], self.member_tip)
+        self.assertEqual(self.remote_ref("refs/heads/main"), self.member_tip)
+
+        with self.assertRaisesRegex(ArchiveError, "names a different reviewed HEAD"):
+            integration.validate_member_integrated(self.root, "web", ARCHIVE, self.main)
+
+        # An adopted-landing tag never closes a pull-request member.
+        listed = self.root / ".project/MEMBERS.md"
+        listed.write_bytes(re.sub(r"(?m)^Integration: .*$", "Integration: pull-request",
+                                  listed.read_text(encoding="utf-8")).encode("utf-8"))
+        with self.assertRaisesRegex(ArchiveError, "not direct-mode"):
+            integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip)
 
     def test_merge_success_without_two_parents_cannot_publish(self) -> None:
         run_git = integration.run_git

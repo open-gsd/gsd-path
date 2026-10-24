@@ -283,7 +283,16 @@ The persisted `STATE.archive` field is the transaction identity.
    `awaiting-merge`, report the member PR
    link, stop, and rerun the same command after the user merges it; never
    merge a member PR yourself. When it returns `integrated`, keep its `body`
-   for the ship commit below.
+   for the ship commit below. When it refuses with
+   `member reviewed HEAD reached <default> outside Path`, the member's work
+   was already published past its reviewed HEAD by an earlier user-approved
+   step: present the member, its reviewed HEAD, and the live default-branch
+   tip, and ask the user whether to adopt that landing. Only on an explicit
+   user approval rerun the same command with
+   `--adopt-landed-member <member>=<live tip SHA>`; the helper then publishes
+   the bound branch and an `adopted-landing` milestone tag at that tip and
+   makes no merge. A mismatched or stale SHA is refused, and a later rerun
+   validates the adoption without the flag.
 5. Only after preflight passes, record shipment through the journaled helper;
    for a program it atomically replaces both ROADMAP.md and STATE.md, setting
    the current entry to `Status: shipped` with the exact `Archive:` pointer:

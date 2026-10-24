@@ -2263,6 +2263,17 @@ def parser() -> argparse.ArgumentParser:
         help="after preflight, integrate each locked member in lock order before the ship commit",
     )
     close_members_parser.add_argument("--repo", required=True, type=Path)
+    close_members_parser.add_argument(
+        "--adopt-landed-member",
+        action="append",
+        default=[],
+        metavar="MEMBER=SHA",
+        help=(
+            "user-approved recovery for a member whose reviewed HEAD already reached its "
+            "default branch outside Path; MEMBER=SHA names the live default-branch tip "
+            "to adopt as the landing"
+        ),
+    )
 
     integrate_parser = subparsers.add_parser(
         "integrate",
@@ -2304,7 +2315,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         elif arguments.command == "refresh-origin":
             result = integration.refresh_origin(arguments.repo)
         elif arguments.command == "close-members":
-            result = integration.close_members(arguments.repo)
+            adopt: dict[str, str] = {}
+            for item in arguments.adopt_landed_member:
+                name, separator, sha = item.partition("=")
+                if not name or not separator or not re.fullmatch(r"[0-9a-f]{40}", sha):
+                    parser_error = (
+                        f"--adopt-landed-member expects MEMBER=SHA (40-hex), got {item!r}"
+                    )
+                    print(parser_error, file=sys.stderr)
+                    return 2
+                adopt[name] = sha
+            result = integration.close_members(arguments.repo, adopt=adopt or None)
         elif arguments.command == "integrate":
             result = integration.integrate(arguments.repo, arguments.slug)
         else:
