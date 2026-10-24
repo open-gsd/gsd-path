@@ -1,6 +1,7 @@
 import re
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -56,11 +57,16 @@ class MemberPrepareTests(unittest.TestCase):
         isolated = isolation.isolate_member_task(self.coordinator, "web", "T002")
         self.assertIsNotNone(isolated["prepare"])
 
+    @requires_symlink
     def test_prepare_may_not_link_out_of_the_isolate(self) -> None:
         target = self.root / "shared-sdk"
         target.mkdir()
         (target / "sdk.h").write_text("shared\n", encoding="utf-8")
-        self.declare_prepare(f"ln -s {target} build-link")
+        # Python makes a real symlink on every host; Git Bash `ln -s` copies.
+        linker = self.root / "link.py"
+        linker.write_text(f"import os\nos.symlink({str(target)!r}, 'build-link', target_is_directory=True)\n",
+                          encoding="utf-8")
+        self.declare_prepare(f'"{Path(sys.executable).as_posix()}" "{linker.as_posix()}"')
         with self.assertRaisesRegex(isolation.IsolationError, "never link"):
             isolation.isolate_member_task(self.coordinator, "web", "T002")
         self.assertEqual((target / "sdk.h").read_text(encoding="utf-8"), "shared\n")
