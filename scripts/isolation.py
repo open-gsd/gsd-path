@@ -1032,6 +1032,133 @@ def activate_member_task(
     return result
 
 
+def reauthorize_member_task(coordinator: Path, member: str, task_id: str) -> Dict[str, object]:
+    """Re-arm the member task authorization a failed finish cleared (#461).
+
+    A failed finish clears the authorization ref so that attempt cannot land.
+    When the failure was environmental, the sidecar still stands at the same
+    member base with the same live copy, and this explicit command re-records
+    the authorization at that base so a rerunning finish can land without a
+    full re-isolate. The copy is coder-writable, so every binding comes from
+    orchestrator-owned records instead: the dispatch ledger's native member
+    activation names the agent, base, member base, task file, and branch the
+    live copy must still match, the coordinator task must still be pending,
+    the contract at the recorded base must be unchanged with an append-only
+    Log, the member base must stand unchanged and unlanded, and no member
+    landing journal may be pending. Nothing inside the failed attempt's own
+    machinery invokes this; it is an owner decision, under the driver lock.
+    """
+    coordinator = require_directory(coordinator, "coordinator")
+    try:
+        if __package__:
+            from . import dispatch_driver
+        else:
+            import dispatch_driver
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import dispatch_driver
+    with dispatch_driver.acquire_lock(coordinator):
+        return _reauthorize_member_task_locked(coordinator, member, task_id)
+
+
+def _reauthorize_member_task_locked(coordinator: Path, member: str, task_id: str) -> Dict[str, object]:
+    try:
+        if __package__:
+            from . import dispatch_driver
+        else:
+            import dispatch_driver
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import dispatch_driver
+    checkout, project, entry = _member_context(coordinator, member)
+    task_id = validate_task_id(task_id)
+    # The orchestrator-recorded activation is the source of truth for every
+    # binding; the live copy only proves continuity against it.
+    record = None
+    for state in dispatch_driver.latest_states(dispatch_driver.records_root(coordinator)):
+        if (state.get("task_id") == task_id and state.get("mode") == "member"
+                and state.get("member") == member):
+            record = state
+            break
+    if record is None:
+        raise IsolationError(f"member task {task_id} has no recorded member activation")
+    branch = f"{TASK_BRANCH_PREFIX}{project}-{task_id}"
+    if record.get("task_branch") not in (None, branch):
+        raise IsolationError(f"member task {task_id} activation names another task branch")
+    recorded_member_base = require_full_sha(str(record["member_base"]))
+    recorded_base = require_full_sha(str(record["base"]))
+    # The native record's task_file names the sidecar copy path (including
+    # the copy-directory prefix); the contract file is the coordinator path.
+    task_file = str(record.get("contract_file") or record["task_file"])
+    if task_file.startswith(MEMBER_TASK_COPY_DIR + "/"):
+        task_file = task_file[len(MEMBER_TASK_COPY_DIR) + 1:]
+    sidecar = sidecar_root(checkout, "task", f"{project}-{task_id}")
+    if require_attached(sidecar) != branch:
+        raise IsolationError(f"member task sidecar is not on its task branch: {sidecar}")
+    copy = _safe_member_task_copy(sidecar, task_file)
+    if not copy.is_file():
+        raise IsolationError(f"member task {task_id} live copy is missing: {copy}")
+    copy_text = copy.read_text(encoding="utf-8")
+    fields, error = task_frontmatter(copy_text)
+    if error or fields is None or fields.get("id") != task_id:
+        raise IsolationError(error or "unreadable member task live copy")
+    if fields.get("status") != "in-progress":
+        raise IsolationError(f"member task {task_id} live copy is not in-progress")
+    agent = fields.get("agent")
+    if not agent:
+        raise IsolationError(f"member task {task_id} live copy lacks its agent")
+    if (fields.get("base") != recorded_base
+            or fields.get("member_base") != recorded_member_base):
+        raise IsolationError(
+            f"member task {task_id} live copy activation fields differ from its "
+            "recorded activation; re-isolate instead")
+    # A settled coordinator task has nothing left to authorize.
+    coordinator_task = coordinator / task_file
+    coordinator_fields, coordinator_error = task_frontmatter(
+        coordinator_task.read_text(encoding="utf-8"))
+    if coordinator_error or coordinator_fields is None:
+        raise IsolationError(coordinator_error or f"unreadable coordinator task: {task_file}")
+    if coordinator_fields.get("status") != "pending":
+        raise IsolationError(
+            f"member task {task_id} is {coordinator_fields.get('status')} in the "
+            "coordinator; there is nothing to reauthorize")
+    member_base = recorded_member_base
+    # The coder's uncommitted work may sit in the sidecar; the task branch and
+    # the member bound branch must still stand at the recorded member base,
+    # and nothing may have landed yet.
+    tip = run_git(checkout, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").stdout.strip()
+    if tip != member_base:
+        raise IsolationError(f"member task branch {branch} moved off its member base")
+    if run_git(checkout, "merge-base", "--is-ancestor", member_base,
+               f"refs/heads/{entry['branch']}").returncode != 0:
+        raise IsolationError("member task member base is not on the member bound branch")
+    cherry = run_git(checkout, "cherry", f"refs/heads/{entry['branch']}", branch)
+    if cherry.returncode != 0 or any(
+            not line.startswith("- ") for line in cherry.stdout.splitlines()):
+        raise IsolationError(f"member task branch {branch} has unlanded commits")
+    resolved_base = require_commit(coordinator, recorded_base)
+    _member_contract(coordinator, resolved_base, task_file, member)
+    contract = git_text(coordinator, "show", f"{resolved_base}:{task_file}")
+    member_log_delta(contract, copy_text)
+    path = _member_journal_path(coordinator, task_id)
+    if os.path.lexists(path):
+        raise IsolationError(
+            f"a member landing is pending for {task_id}; run recover_member_landing first")
+    for pending in sorted(path.parent.glob("*.json")):
+        if json.loads(pending.read_text(encoding="utf-8"))["member"] == member:
+            raise IsolationError(
+                f"member {member} has pending landing {pending.stem}; run recover_member_landing first")
+    ref = member_task_authorization_ref(project, task_id)
+    recorded = run_git(checkout, "rev-parse", "--verify", "--quiet", ref).stdout.strip()
+    if recorded and recorded != member_base:
+        raise IsolationError("member task authorization names another member base")
+    if not recorded:
+        created = run_git(checkout, "update-ref", ref, member_base, "0" * 40)
+        if created.returncode != 0:
+            raise IsolationError("could not record member task authorization")
+    return {"agent": agent, "base": resolved_base, "copy": str(copy), "member": member,
+            "member_base": member_base, "status": "in-progress", "task_branch": branch,
+            "task_file": task_file, "worktree": str(sidecar), "reauthorized": not recorded}
+
+
 def retained_member_task(
     coordinator: Path, member: str, task_id: str, task_file: str, base: str
 ) -> Optional[Dict[str, object]]:
@@ -4935,9 +5062,15 @@ def parser() -> argparse.ArgumentParser:
     activate_member_parser.add_argument("--repo", type=Path, required=True, help="coordinator root")
     activate_member_parser.add_argument("--member", required=True)
     activate_member_parser.add_argument("--task-id", required=True)
-    activate_member_parser.add_argument("--agent", required=True)
-    activate_member_parser.add_argument("--task-file", required=True)
-    activate_member_parser.add_argument("--base", required=True)
+    activate_member_parser.add_argument("--agent")
+    activate_member_parser.add_argument("--task-file")
+    activate_member_parser.add_argument("--base")
+    activate_member_parser.add_argument(
+        "--reauthorize", action="store_true",
+        help="re-record the authorization a failed finish cleared, for the same "
+             "live copy at the same member base, without re-isolating (#461); "
+             "--agent/--task-file/--base are read from the live copy instead"
+    )
 
     retire_member_parser = subparsers.add_parser(
         "retire-member-task", help="remove a member task sidecar and branch before a retry"
@@ -5031,8 +5164,18 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    arguments = parser().parse_args(argv)
+    argument_parser = parser()
+    arguments = argument_parser.parse_args(argv)
     try:
+        if arguments.command == "activate-member-task" and (
+            (arguments.reauthorize and (arguments.agent or arguments.task_file or arguments.base))
+            or (not arguments.reauthorize
+                and not (arguments.agent and arguments.task_file and arguments.base))
+        ):
+            argument_parser.error(
+                "activate-member-task requires --agent, --task-file, and --base, "
+                "or --reauthorize alone (which reads them from the live copy)"
+            )
         if arguments.command == "isolate-task":
             result = isolate_task(
                 arguments.repo,
@@ -5052,8 +5195,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         elif arguments.command == "isolate-member-task":
             result = isolate_member_task(arguments.repo, arguments.member, arguments.task_id)
         elif arguments.command == "activate-member-task":
-            result = activate_member_task(arguments.repo, arguments.member, arguments.task_id,
-                                          arguments.agent, arguments.task_file, arguments.base)
+            if arguments.reauthorize:
+                result = reauthorize_member_task(arguments.repo, arguments.member, arguments.task_id)
+            else:
+                result = activate_member_task(arguments.repo, arguments.member, arguments.task_id,
+                                              arguments.agent, arguments.task_file, arguments.base)
         elif arguments.command == "retire-member-task":
             copy_rejected = retire_member_task(arguments.repo, arguments.member, arguments.task_id,
                                                arguments.force, arguments.task_file)

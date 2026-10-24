@@ -207,7 +207,16 @@ dispatch contract and perform steps 1–5 by hand.
    its exact base prove the remaining branch before deletion. Create the retry
    from the new clean primary HEAD. A member task (`repo: <member>`) stays
    `pending` in the coordinator; its rejected attempt lives in the member
-   sidecar. Copy the live copy's Log delta into the coordinator task file,
+   sidecar. When the failure was environmental — the isolate could not build
+   a Verify for reasons outside the product, and the coder fixed the
+   environment inside the retained sidecar — do not re-isolate: rerun
+   `python3 <absolute isolation.py> activate-member-task --repo <absolute
+   primary> --member <member> --task-id <id> --reauthorize` after checking
+   that the live copy's Log stayed append-only and the member base is
+   unchanged; it re-arms the authorization the failed finish cleared, and the
+   next `finish` runs the full Verify set once and lands (#461). A
+   product-failure rejection instead follows the full retry: copy the live
+   copy's Log delta into the coordinator task file,
    checkpoint it, then retire the sidecar with `python3 <absolute isolation.py>
    retire-member-task --repo <absolute primary> --member <member> --task-id
    <id> --task-file <task path> --force`. It refuses until the committed task
