@@ -2126,6 +2126,25 @@ class PipelineStateTests(unittest.TestCase):
             ).stdout.split()
             self.assertNotIn(".project/handoff", remaining)
 
+    def test_plan_approval_accepts_unstaged_removal_of_tracked_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+            handoff = repo / ".project" / "handoff"
+            handoff.mkdir()
+            (handoff / "bundle.md").write_bytes("bundle\n".encode("utf-8"))
+            run_git(repo, "add", ".project/handoff")
+            run_git(repo, "commit", "-q", "-m", "cloud bootstrap leftover")
+            expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            shutil.rmtree(handoff)
+            result = state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
+
+            self.assertEqual(result["status"], "approved")
+            remaining = run_git(
+                repo, "ls-tree", "-r", "--name-only", "HEAD", ".project/"
+            ).stdout.split()
+            self.assertNotIn(".project/handoff/bundle.md", remaining)
+
     def test_plan_approval_allows_runtime_model_policy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")

@@ -460,11 +460,13 @@ def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
         return
     if project_dir == ".project":
         # Unsupported .project entries must surface at approval, before build,
-        # where removing them is cheapest (#466). The entry set is what git
-        # tracks or would add, so a staged removal already satisfies the gate.
+        # where removing them is cheapest (#466). Like the checkpoint, judge
+        # each git-visible entry by whether it still exists in the worktree.
+        project = repo / ".project"
         unsupported = sorted(
-            pipeline_state._common.git_visible_entries(repo / ".project")
-            - PROJECT_ENTRIES
+            name
+            for name in pipeline_state._common.git_visible_entries(project) - PROJECT_ENTRIES
+            if (project / name).exists() or (project / name).is_symlink()
         )
         if unsupported:
             raise PipelineStateError(
