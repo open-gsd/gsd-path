@@ -1010,6 +1010,8 @@ class GitGuardEndToEndTests(unittest.TestCase):
         ).strip())
         # Fixture history includes deliberate out-of-band STATE rewrites.
         self.git("config", "core.hooksPath", "/dev/null")
+        # The fetch survivor requires a configured remote (#468).
+        self.git("remote", "add", "origin", str(self.repo))
         self.enter_build()
         self.write_state("shipped", "done", archive=".project/archive/002-next",
                          subject="ship: M002 — next")
