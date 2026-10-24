@@ -25,7 +25,7 @@ if __package__:
         ship_subject,
     )
     from .pipeline_state import PipelineState
-    from .isolation import publication_base
+    from .isolation import publication_base, _unlink_link_like
     from . import _common
     from . import worktree_paths
 else:
@@ -41,7 +41,7 @@ else:
             ship_subject,
         )
         from pipeline_state import PipelineState
-        from isolation import publication_base
+        from isolation import publication_base, _unlink_link_like
         import _common
         import worktree_paths
     except ImportError:  # pragma: no cover - package import used by tests
@@ -56,7 +56,7 @@ else:
             ship_subject,
         )
         from scripts.pipeline_state import PipelineState
-        from scripts.isolation import publication_base
+        from scripts.isolation import publication_base, _unlink_link_like
         from scripts import _common
         from scripts import worktree_paths
 
@@ -232,6 +232,8 @@ def remove_registered_worktree(project: Path, branch: str, expected_path: Path) 
     )
     if status:
         raise ArchiveError("integration worktree is dirty; refusing cleanup")
+    if registered.is_dir():
+        _unlink_link_like(registered)  # never traverse links (#462)
     archive_milestone.require_git_success(
         run_git(project, "worktree", "remove", str(registered)),
         "remove integration worktree",
@@ -2077,6 +2079,8 @@ def retire_member(coordinator: Path, member: str, archive_path: str, reviewed_he
             run_git(checkout, "push", f"--force-with-lease={bound_ref}:{reviewed_head}", "origin", "--delete", bound),
             f"delete member origin/{bound}")
     if holder is not None:
+        if holder.is_dir():
+            _unlink_link_like(holder)  # never traverse links (#462)
         archive_milestone.require_git_success(run_git(checkout, "worktree", "remove", str(holder)),
                                               "remove member bound checkout")
     if local is not None:

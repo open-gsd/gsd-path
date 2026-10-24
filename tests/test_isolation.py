@@ -2677,6 +2677,61 @@ class IsolationTests(unittest.TestCase):
                 git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/"),
             )
 
+    def test_retire_unlinks_a_directory_link_in_the_sidecar_without_touching_its_target(self) -> None:
+        # git worktree remove on Git for Windows older than 2.54 recurses
+        # through junctions; a gitignored link passes the cleanliness check
+        # (#462). Removal must unlink the link and never touch the target.
+        for ignored in (True, False):
+            with self.subTest(ignored=ignored), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary) / "repo"
+                repo.mkdir()
+                base = self.init_bound_repo(repo)
+                if ignored:
+                    (repo / ".gitignore").write_bytes(b"build/\n")
+                    git(repo, "add", ".gitignore")
+                    git(repo, "commit", "-q", "-m", "ignore build")
+                    base = git(repo, "rev-parse", "HEAD")
+                precious = Path(temporary) / "outside"
+                precious.mkdir()
+                (precious / "sdk.dll").write_bytes(b"\x00SDK")
+                created = isolation.isolate_verify(repo, base, "task-t001-verify")
+                sidecar = Path(created["worktree"])
+                (sidecar / "build").symlink_to(precious, target_is_directory=True)
+
+                result = isolation.retire(repo, sidecar, str(created["branch"]), True)
+
+                self.assertEqual(result["reason"], "removed")
+                self.assertFalse(sidecar.exists())
+                self.assertFalse((precious / "sdk.dll").is_symlink())
+                self.assertEqual((precious / "sdk.dll").read_bytes(), b"\x00SDK")
+                self.assertEqual(list(precious.iterdir()), [precious / "sdk.dll"])
+
+    def test_unlink_link_like_removes_links_and_spares_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target_dir = root / "target-dir"
+            target_dir.mkdir()
+            (target_dir / "keep.txt").write_text("keep\n")
+            target_file = root / "target.bin"
+            target_file.write_bytes(b"\x00BIN")
+            tree = root / "disposable"
+            tree.mkdir()
+            (tree / "regular.txt").write_text("x\n")
+            (tree / "build").symlink_to(target_dir, target_is_directory=True)
+            (tree / "tool.cfg").symlink_to(target_file)
+            nested = tree / "sub"
+            nested.mkdir()
+            (nested / "link").symlink_to(target_dir, target_is_directory=True)
+
+            isolation._unlink_link_like(tree)
+
+            for gone in (tree / "build", tree / "tool.cfg", nested / "link"):
+                self.assertFalse(gone.exists(), gone)
+            self.assertTrue((tree / "regular.txt").exists())
+            self.assertTrue(nested.is_dir())
+            self.assertEqual((target_dir / "keep.txt").read_text(), "keep\n")
+            self.assertEqual(target_file.read_bytes(), b"\x00BIN")
+
     # Above the process argument limit of every supported platform (#412):
     # Windows 32 KiB per command, Linux 128 KiB per argument, macOS 1 MiB in all.
     OVERSIZED_BODY = "Task: .project/tasks/T001.md\nFiles:\n" + "- src/removed.py\n" * 130000
@@ -4166,6 +4221,72 @@ class RecoverTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 payload = json.loads(result.stdout)
                 self.assertEqual(payload["tasks"][0]["verdict"], "none")
+
+
+if os.name == "nt":
+
+    def make_junction(target: Path, link: Path) -> None:
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+
+    class JunctionSafeRemovalTests(unittest.TestCase):
+        """NTFS junctions must never be traversed on isolate removal (#462)."""
+
+        def test_unlink_link_like_removes_junctions_and_spares_targets(self) -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                precious = root / "outside"
+                precious.mkdir()
+                (precious / "sdk.dll").write_bytes(b"\x00SDK")
+                tree = root / "disposable"
+                tree.mkdir()
+                (tree / "regular.txt").write_text("x\n")
+                make_junction(precious, tree / "build")
+
+                isolation._unlink_link_like(tree)
+
+                self.assertFalse((tree / "build").exists())
+                self.assertTrue((tree / "regular.txt").exists())
+                self.assertEqual((precious / "sdk.dll").read_bytes(), b"\x00SDK")
+                self.assertEqual(list(precious.iterdir()), [precious / "sdk.dll"])
+
+        def test_retire_unlinks_an_ntfs_junction_without_touching_its_target(self) -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary) / "repo"
+                repo.mkdir()
+                base = IsolationTests.init_bound_repo(repo)
+                (repo / ".gitignore").write_bytes(b"build/\n")
+                git(repo, "add", ".gitignore")
+                git(repo, "commit", "-q", "-m", "ignore build")
+                base = git(repo, "rev-parse", "HEAD")
+                precious = Path(temporary) / "outside"
+                precious.mkdir()
+                (precious / "sdk.dll").write_bytes(b"\x00SDK")
+                created = isolation.isolate_verify(repo, base, "task-t001-verify")
+                sidecar = Path(created["worktree"])
+                make_junction(precious, sidecar / "build")
+
+                # The defuse must be provable independent of the installed
+                # git: when git removes the worktree, the junction is
+                # already gone (newer Git for Windows is itself safe).
+                run_git = isolation.run_git
+
+                def guard(repo_arg, *arguments, **kwargs):
+                    if arguments[:3] == ("worktree", "remove", str(sidecar)):
+                        self.assertFalse(
+                            (sidecar / "build").exists(),
+                            "junction still present when git removed the worktree",
+                        )
+                    return run_git(repo_arg, *arguments, **kwargs)
+
+                with mock.patch.object(isolation, "run_git", side_effect=guard):
+                    result = isolation.retire(repo, sidecar, str(created["branch"]), True)
+
+                self.assertEqual(result["reason"], "removed")
+                self.assertFalse(sidecar.exists())
+                self.assertEqual((precious / "sdk.dll").read_bytes(), b"\x00SDK")
+                self.assertEqual(list(precious.iterdir()), [precious / "sdk.dll"])
 
 
 if __name__ == "__main__":
