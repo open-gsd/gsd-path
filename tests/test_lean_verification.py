@@ -92,6 +92,127 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
             self.assertEqual(ledger.read_bytes(), before)
             self.assertEqual(git_output(root, "worktree", "list", "--porcelain").count("worktree "), 1)
 
+    HOST_ENV_COMMAND = (
+        "python3 -c \"import os, sys; sys.exit(1 if os.environ.get('VERIFY_HOST_BROKEN') else 0)\""
+    )
+
+    def failing_host_fixture(self, root):
+        head, _ = self.fixture(root)
+        plan = root / ".project/plan/PLAN.md"
+        plan.write_bytes(
+            plan.read_text(encoding="utf-8").replace(
+                "python3 -m unittest discover", self.HOST_ENV_COMMAND
+            ).encode("utf-8")
+        )
+        git(root, "add", ".")
+        git(root, "commit", "-qm", "host-sensitive verify")
+        return git_output(root, "rev-parse", "HEAD")
+
+    def test_rerun_reexecutes_a_failed_entry_and_appends_a_second_ledger_line(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            head = self.failing_host_fixture(root)
+            with patch.dict(os.environ, {"VERIFY_HOST_BROKEN": "1"}):
+                failed = lean_verification.verify_project(root, head)
+            self.assertFalse(failed["passed"])
+            self.assertFalse(failed["reused"])
+
+            passed = lean_verification.verify_project(root, head, rerun=True)
+            self.assertTrue(passed["passed"])
+            self.assertFalse(passed["reused"])
+            self.assertTrue(passed["rerun"])
+
+            ledger = root / ".project/build/verify-ledger.jsonl"
+            lines = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(len(lines), 2)
+            self.assertEqual(lines[0]["result"], "fail")
+            self.assertNotIn("rerun", lines[0])
+            self.assertEqual(lines[1]["result"], "pass")
+            self.assertIs(lines[1]["rerun"], True)
+            self.assertEqual(lines[1]["command"], lines[0]["command"])
+            self.assertEqual(lines[1]["commit"], lines[0]["commit"])
+
+            # Plain re-entry still reuses the latest entry (the pass), even with
+            # the host still broken: reuse never re-executes.
+            with patch.dict(os.environ, {"VERIFY_HOST_BROKEN": "1"}):
+                replayed = lean_verification.verify_project(root, head)
+            self.assertTrue(replayed["reused"])
+            self.assertTrue(replayed["passed"])
+            self.assertEqual(
+                len(ledger.read_text(encoding="utf-8").splitlines()), 2
+            )
+
+            # The CLI flag reaches the same path and the receipt marks the rerun.
+            receipt = lean_verification.main(
+                ["--repo", str(root), "--expected-head", head, "--rerun"]
+            )
+            self.assertIsInstance(receipt, int)
+            lines = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([line["result"] for line in lines], ["fail", "pass", "pass"])
+            self.assertIs(lines[-1]["rerun"], True)
+
+    def test_rerun_refuses_a_prior_entry_without_recorded_output(self):
+        from scripts import build_state
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            head, _ = self.fixture(root)
+            build_state.verify_record(str(root), "python3 -m unittest discover", head, "fail")
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "recorded verification lacks output"
+            ):
+                lean_verification.verify_project(root, head, rerun=True)
+
+    def test_rerun_retires_a_lingering_prior_execution_worktree(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            head = self.failing_host_fixture(root)
+            with patch.dict(os.environ, {"VERIFY_HOST_BROKEN": "1"}), \
+                    patch.object(isolation, "clean_verify", side_effect=OSError("interrupted")):
+                with self.assertRaisesRegex(OSError, "interrupted"):
+                    lean_verification.verify_project(root, head)
+            self.assertEqual(
+                git_output(root, "worktree", "list", "--porcelain").count("worktree "), 2
+            )
+
+            result = lean_verification.verify_project(root, head, rerun=True)
+            self.assertTrue(result["passed"])
+            self.assertEqual(
+                git_output(root, "worktree", "list", "--porcelain").count("worktree "), 1
+            )
+            ledger = root / ".project/build/verify-ledger.jsonl"
+            lines = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([line["result"] for line in lines], ["fail", "pass"])
+
+    def test_rerun_after_an_interrupted_collection_writes_the_new_pass_gap(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            head = self.failing_host_fixture(root)
+            write = isolation._write_collect_journal
+
+            def interrupt(path, payload):
+                write(path, payload)
+                if payload["stage"] == "prepared":
+                    raise OSError("interrupted after prepare")
+
+            with patch.dict(os.environ, {"VERIFY_HOST_BROKEN": "1"}), \
+                    patch.object(isolation, "_write_collect_journal", side_effect=interrupt):
+                with self.assertRaisesRegex(OSError, "interrupted"):
+                    lean_verification.verify_project(root, head)
+            self.assertEqual(len(isolation.collect_artifact_recoveries(root)), 1)
+
+            result = lean_verification.verify_project(root, head, rerun=True)
+            self.assertTrue(result["passed"])
+            self.assertEqual(isolation.collect_artifact_recoveries(root), [])
+            gap = (root / ".project/review/final-gap-1.md").read_text(encoding="utf-8")
+            self.assertIn("Gap verdict: pass", gap)
+            self.assertIn("Project Verify passed at the reviewed commit", gap)
+            ledger = root / ".project/build/verify-ledger.jsonl"
+            lines = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([line["result"] for line in lines], ["fail", "pass"])
+
     def test_prepared_collection_recovers_before_retirement(self):
         for stage in ("prepared", "collected"):
             with self.subTest(stage=stage):

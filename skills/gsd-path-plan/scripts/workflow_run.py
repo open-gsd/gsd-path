@@ -43,7 +43,8 @@ def _task_member(repo: Path, project_dir: str, task_id: str):
 
 def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str = None,
                  task_id: str = None, round_size: int = None, inspection: Path = None,
-                 mapper_reviewed: bool = False, kind: str = None) -> dict:
+                 mapper_reviewed: bool = False, kind: str = None,
+                 rerun: bool = False) -> dict:
     steps = []
     outputs = {}
     scripts = Path(__file__).resolve().parent
@@ -231,7 +232,8 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             if pending["pending"]:
                 raise StepFailed("pending discussion requires its owner disposition")
             step("build_state.py", "verify-landed", *common, "--head", expected_head)
-            step("lean_verification.py", "--repo", str(repo), "--expected-head", expected_head)
+            rerun_flag = ("--rerun",) if rerun else ()
+            step("lean_verification.py", "--repo", str(repo), "--expected-head", expected_head, *rerun_flag)
         elif action == "preauthorize":
             # A block here is not a failure: the gate asks its owner as usual.
             next_step = "ask the owner at this gate"
@@ -302,6 +304,9 @@ def main(argv=None):
     parser.add_argument("--inspection", type=Path)
     parser.add_argument("--mapper-reviewed", action="store_true")
     parser.add_argument("--kind", choices=("intent", "plan"))
+    parser.add_argument("--rerun", action="store_true",
+                        help="prepare-final: re-execute project Verify at the same head after a "
+                             "host-caused failure, appending a new ledger entry")
     arguments = parser.parse_args(argv)
     if arguments.action in {"approve-plan", "build-evidence", "prepare-task", "prepare-final", "prepare-inspect", "finish-inspect"} and not arguments.expected_head:
         parser.error(f"{arguments.action} requires --expected-head")
@@ -309,10 +314,12 @@ def main(argv=None):
         parser.error("prepare-task requires --task-id and --round-size")
     if arguments.action == "preauthorize" and not arguments.kind:
         parser.error("preauthorize requires --kind")
+    if arguments.rerun and arguments.action != "prepare-final":
+        parser.error(f"--rerun applies only to prepare-final, not {arguments.action}")
     result = run_workflow(arguments.repo.resolve(), arguments.action,
                           arguments.project_dir, arguments.expected_head,
                           arguments.task_id, arguments.round_size, arguments.inspection,
-                          arguments.mapper_reviewed, arguments.kind)
+                          arguments.mapper_reviewed, arguments.kind, arguments.rerun)
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "complete" else 1
 
