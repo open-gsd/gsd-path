@@ -458,6 +458,19 @@ def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
     if head.returncode != 0:
         # Pre-Git approval defers base-dependent checks to build.
         return
+    if project_dir == ".project":
+        # Unsupported .project entries must surface at approval, before build,
+        # where removing them is cheapest (#466). The entry set is what git
+        # tracks or would add, so a staged removal already satisfies the gate.
+        unsupported = sorted(
+            pipeline_state._common.git_visible_entries(repo / ".project")
+            - PROJECT_ENTRIES
+        )
+        if unsupported:
+            raise PipelineStateError(
+                "unsupported .project artifacts: " + ", ".join(unsupported)
+                + "; remove or relocate them before approving the plan"
+            )
     if __package__:
         from .check_task_briefs import BriefError, _member_bases, plan_validation_bases, validate_task_briefs
     else:
