@@ -214,10 +214,15 @@ def read_members(coordinator: Path) -> list[dict[str, str]]:
         return []
     if path.is_symlink() or not path.is_file():
         raise MembersError("MEMBERS.md must be a regular file")
+    return parse_members(path.read_text(encoding="utf-8"))
+
+
+def parse_members(text: str) -> list[dict[str, str]]:
+    """Parse MEMBERS.md text."""
     members: list[dict[str, str]] = []
     current: Optional[dict[str, str]] = None
     preamble: list[str] = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for number, line in enumerate(text.splitlines(), 1):
         if line.startswith("## "):
             name = line[3:].strip()
             if not NAME_RE.fullmatch(name):

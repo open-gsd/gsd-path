@@ -650,18 +650,59 @@ def _member_tips(root: Path) -> Dict[str, str]:
         import isolation
     except ImportError:  # pragma: no cover - package import used by tests
         from scripts import isolation
-    lock = root / ".project/build/members.json"
-    if not lock.is_file():
+    shown = isolation.run_git(root, "show", "HEAD:.project/build/members.json")
+    if shown.returncode != 0:
         return {}
-    tips: Dict[str, str] = {}
+    # A review sidecar of the coordinator validates against the same member
+    # markers (#467): the coordinator is the one the member marker names, so
+    # repair advice never points at a disposable sidecar. Both locks are read
+    # from committed state, and the coordinator's must agree with the reviewed
+    # tree's, so a mutable primary cannot swap the branch under a reviewed final.
     try:
-        for item in json.loads(lock.read_text(encoding="utf-8"))["members"]:
-            checkout, _, entry = isolation._member_context(root, item["name"])
-            tips[entry["name"]] = isolation.git_output(
-                checkout, "rev-parse", "--verify", f"refs/heads/{entry['branch']}^{{commit}}")
+        members = json.loads(shown.stdout)["members"]
+        if not members:
+            return {}
+        coordinator = _coordinator_for_member_markers(root, members[0]["name"])
+        tips: Dict[str, str] = {}
+        for item in members:
+            checkout, _, entry = isolation._member_context(coordinator, item["name"], lock_at="HEAD")
+            if entry != item:
+                raise HandoffError(
+                    "member lock differs between the reviewed tree and its "
+                    f"coordinator for {item['name']}")
+            tips[item["name"]] = isolation.git_output(
+                checkout, "rev-parse", "--verify", f"refs/heads/{item['branch']}^{{commit}}")
     except isolation.IsolationError as error:
         raise HandoffError(str(error)) from error
     return tips
+
+
+def _coordinator_for_member_markers(root: Path, name: str) -> Path:
+    """The coordinator that the marker of member `name`, as listed in root's
+    committed MEMBERS.md, names and verifies; it must share root's repository."""
+    try:
+        import isolation
+        import members
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import isolation, members
+    stale = f"member marker for {name} is missing or stale; run members.py repair --repo <coordinator>"
+    shown = isolation.run_git(root, "show", "HEAD:.project/MEMBERS.md")
+    if shown.returncode != 0:
+        raise HandoffError(f"member {name} is not in MEMBERS.md")
+    try:
+        listed = {item["name"]: item for item in members.parse_members(shown.stdout)}
+        if name not in listed:
+            raise HandoffError(f"member {name} is not in MEMBERS.md")
+        role = members.member_role(Path(listed[name]["checkout"]).resolve())
+    except members.MembersError as error:
+        raise HandoffError(str(error)) from error
+    if role is None or role["name"] != name:
+        raise HandoffError(stale)
+    coordinator = Path(role["coordinator"])
+    if isolation.common_git_dir(coordinator) != isolation.common_git_dir(root):
+        raise HandoffError(
+            f"member marker for {name} names a coordinator outside this repository: {coordinator}")
+    return coordinator
 
 
 def _strip_comments(text: str) -> str:
