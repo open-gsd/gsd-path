@@ -267,6 +267,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             0,
             self.run_guard("ship: M002 — next", body).returncode,
         )
+
         # The stored body keeps inner blank lines, and archive_milestone.py
         # validate rejects them, so the guard must reject them before the commit.
         split = self.run_guard("ship: M002 — next", body.replace("\nReviewed-HEAD", "\n\nReviewed-HEAD"))
@@ -318,6 +319,82 @@ class GitGuardEndToEndTests(unittest.TestCase):
             cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace", check=True,
         ).stdout
         self.assertEqual(body + "\n\n", stored)
+
+    def test_ship_body_after_a_runtime_pin_commit_matches(self) -> None:
+        # Issue #465: the commit-msg guard compared Reviewed-HEAD with raw HEAD,
+        # rejecting a valid ship body after a runtime-pin-only commit that
+        # validate accepts via reviewed_head_covers.
+        self.git("branch", "-m", "gsd-path/M002")
+        archived = self.repo / ".project" / "archive" / "002-next"
+        (archived / "review").mkdir(parents=True)
+        (archived / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
+        (self.repo / ".project" / "STATE.md").write_bytes(
+            "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
+            "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
+            "archive: .project/archive/002-next\n---\n".encode("utf-8"),
+        )
+        reviewed = self.head()
+        (archived / "review" / "FINAL.md").write_bytes(
+            f"# Final Review\n\nReviewed HEAD: {reviewed}\n".encode("utf-8"))
+        # A runtime-pin-only commit after the reviewed head (isolation.checkpoint
+        # refuses non-.project paths, so pins are plain commits); the ship
+        # contents stay unstaged until the ship commit itself.
+        pin = self.repo / ".gsd-path" / "runtime.json"
+        pin.parent.mkdir()
+        pin.write_bytes(b'{"runtime": "pinned"}\n')
+        self.git("add", ".gsd-path/runtime.json")
+        self.commit("chore: pin fixed runtime")
+        self.git("add", "-A")
+
+        pin_body = (
+            "Archive: .project/archive/002-next\n"
+            f"Reviewed-HEAD: {reviewed}"
+        )
+        accepted = self.run_guard("ship: M002 — next", pin_body)
+        self.assertEqual(0, accepted.returncode, accepted.stderr)
+
+        # A body naming the pin commit, which reviewed_head_covers trivially
+        # covers, does not substitute for the staged final review's head.
+        substituted = self.run_guard(
+            "ship: M002 — next",
+            f"Archive: .project/archive/002-next\nReviewed-HEAD: {self.head()}",
+        )
+        self.assertEqual(1, substituted.returncode)
+        self.assertIn("ship commit body does not match", substituted.stderr)
+
+        # The staged FINAL.md head is read with validate's tolerance.
+        final = archived / "review" / "FINAL.md"
+        for line in (f"Reviewed HEAD: {reviewed}  ", f"Reviewed HEAD: {reviewed.upper()}",
+                     f"Reviewed HEAD: `{reviewed}`"):
+            with self.subTest(line=line):
+                final.write_bytes(f"# Final Review\n\n{line}\n".encode("utf-8"))
+                self.git("add", str(final))
+                tolerant = self.run_guard("ship: M002 — next", pin_body)
+                self.assertEqual(0, tolerant.returncode, tolerant.stderr)
+        # An absent or malformed head still falls back to raw HEAD.
+        for text in ("# Final Review\n", f"# Final Review\n\nReviewed HEAD: {reviewed[:39]}\n"):
+            with self.subTest(final=text):
+                final.write_bytes(text.encode("utf-8"))
+                self.git("add", str(final))
+                fallback = self.run_guard("ship: M002 — next", pin_body)
+                self.assertEqual(1, fallback.returncode)
+                self.assertIn("ship commit body does not match", fallback.stderr)
+                head_body = self.run_guard(
+                    "ship: M002 — next",
+                    f"Archive: .project/archive/002-next\nReviewed-HEAD: {self.head()}",
+                )
+                self.assertEqual(0, head_body.returncode, head_body.stderr)
+        final.write_bytes(f"# Final Review\n\nReviewed HEAD: {reviewed}\n".encode("utf-8"))
+
+        # A product commit after the reviewed head still blocks.
+        self.git("reset", "-q")
+        (self.repo / "app.py").write_bytes("print('changed')\n".encode("utf-8"))
+        self.git("add", "app.py")
+        self.commit("feat: product change after review")
+        self.git("add", "-A")
+        refused = self.run_guard("ship: M002 — next", pin_body)
+        self.assertEqual(1, refused.returncode)
+        self.assertIn("not covered by runtime-pin commits", refused.stderr)
 
     def test_ship_accepts_complete_integration_state(self) -> None:
         self.git("branch", "-m", "gsd-path/M002")

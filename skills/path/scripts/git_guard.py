@@ -22,7 +22,7 @@ try:
     from isolation import BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, task_frontmatter, undeclared_paths
     from pipeline_git import is_ship_subject, ship_body_matches, ship_commit_body, task_commit_body
     from pipeline_state import _completion_status
-    from _common import valid_default_branch
+    from _common import reviewed_head_covers, valid_default_branch
     import members
 except ImportError as error:  # pragma: no cover - broken install
     print(
@@ -284,6 +284,9 @@ def strict_ship_state(state, archive):
     )
 
 
+REVIEWED_HEAD_LINE = re.compile(r"(?m)^Reviewed HEAD:[ \t]*(`?)(?P<sha>[0-9a-fA-F]{40})\1[ \t]*$")
+
+
 def ship_contract_violations(entries, subject, body, new_archives, state):
     if not is_ship_commit(subject):
         return []
@@ -300,12 +303,35 @@ def ship_contract_violations(entries, subject, body, new_archives, state):
         found.append(f"ship commit subject must be {expected_subject!r}")
     if current_branch() != state["branch"]:
         found.append("ship commit must run on staged STATE.branch")
-    reviewed_head = subprocess.run(
+    head = subprocess.run(
         ["git", "rev-parse", "--verify", "HEAD"],
         capture_output=True,
         encoding="utf-8", errors="replace",
         check=True,
     ).stdout.strip()
+    # Validate and the commit-msg guard must agree on the reviewed head: the
+    # staged FINAL.md names it, runtime-pin-only commits after it are legal
+    # (reviewed_head_covers), and the ship body must name exactly it. A
+    # product commit in between still blocks (#465, regression of #283); a
+    # body naming any other covered commit does not substitute for the final
+    # review's head.
+    reviewed_head = head
+    staged_final = subprocess.run(
+        ["git", "show", f":{archive}/review/FINAL.md"],
+        capture_output=True,
+        encoding="utf-8", errors="replace",
+        check=False,
+    )
+    if staged_final.returncode == 0:
+        final_line = REVIEWED_HEAD_LINE.search(staged_final.stdout)
+        if final_line is not None:
+            reviewed_head = final_line.group("sha").lower()
+    if reviewed_head != head and not reviewed_head_covers(Path.cwd(), reviewed_head, head):
+        found.append(
+            "ship commit Reviewed-HEAD is not covered by runtime-pin commits "
+            "after the reviewed head"
+        )
+        return found
     lock = f"{archive}/build/members.json"
     staged_lock = subprocess.run(
         ["git", "ls-files", "--cached", "--", lock],
