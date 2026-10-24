@@ -27,7 +27,7 @@ import sys
 sys.dont_write_bytecode = True
 import tempfile
 from pathlib import Path, PurePosixPath
-from typing import Dict, Iterator, Optional, Sequence, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple
 
 if __package__:
     from .pipeline_git import (
@@ -500,6 +500,99 @@ def _long_path(absolute: str) -> str:
     return "\\\\?\\" + absolute
 
 
+def _is_link_like(status: os.stat_result) -> bool:
+    """A symlink, or on Windows any name-surrogate reparse point such as a junction.
+
+    Path.is_symlink() is false for a junction, which still redirects the
+    path; the reparse name-surrogate bit covers junctions and symlinks on
+    every supported Python (3.9+) without os.path.isjunction (3.12+). The
+    same classification is used by guard_hook and detect_project.
+    """
+    return stat.S_ISLNK(status.st_mode) or bool(
+        getattr(status, "st_reparse_tag", 0) & 0x20000000  # IO_REPARSE_TAG name surrogate
+    )
+
+
+def _unlink_link_like(tree: Path) -> None:
+    """Unlink every link-like entry under a disposable tree before git removes it.
+
+    `git worktree remove` on Git for Windows older than 2.54 recurses through
+    NTFS junctions and deletes the target's contents (#462); untracked or
+    gitignored junctions pass the cleanliness checks that guard removal.
+    Unlinking each link — never traversing it — leaves git nothing to follow
+    and keeps POSIX symlinks on the same single code path. A link that cannot
+    be removed is a hard error: removal never proceeds with links present.
+    A symlink git tracks as a symlink is left for git, which removes it as an
+    index entry without traversing it; unlinking it would make a clean tree
+    dirty. A junction, or a symlink replacing a tracked non-link, is unlinked.
+    """
+    remaining: List[str] = []
+    tracked_links: Set[str] = set()
+    if os.path.lexists(os.path.join(tree, ".git")):
+        listed = run_git(tree, "ls-files", "-s", "-z", "--recurse-submodules")
+        if listed.returncode != 0:
+            raise IsolationError(
+                f"could not list tracked files in {tree} before removal: "
+                + (listed.stderr or listed.stdout).strip())
+        for record in listed.stdout.split("\0"):
+            info, _, path = record.partition("\t")
+            if info.startswith("120000 "):
+                tracked_links.add(path)
+
+    def _unlink_one(entry: str) -> bool:
+        try:
+            os.unlink(entry)
+            return True
+        except OSError:
+            try:
+                os.rmdir(entry)  # an empty link-like dir on some platforms
+                return True
+            except OSError:
+                remaining.append(entry)
+                return False
+
+    def _scan_failed(error: OSError) -> None:
+        # A directory that cannot be scanned leaves an unaudited subtree, and
+        # an incomplete sweep must never hand git a tree that may still hold
+        # a junction (#462).
+        raise IsolationError(f"could not scan {tree} before removal: {error}")
+
+    root = Path(_long_path(os.path.abspath(tree))) if os.name == "nt" else tree
+
+    def _spared(entry: str, status: os.stat_result) -> bool:
+        return stat.S_ISLNK(status.st_mode) and (
+            os.path.relpath(entry, root).replace(os.sep, "/") in tracked_links)
+    for directory, dirnames, _files in os.walk(root, topdown=True, onerror=_scan_failed):
+        for base in dirnames[:]:
+            entry = os.path.join(directory, base)
+            try:
+                status = os.lstat(entry)
+            except OSError as error:
+                _scan_failed(error)
+                return  # unreachable; _scan_failed raises
+            if not _is_link_like(status):
+                continue
+            # Prune BEFORE unlinking: os.walk(followlinks=False) still
+            # descends Windows junctions — they are directories, not
+            # symlinks, at the stat level (CPython issue 88174) — so a
+            # link whose unlink fails must already be out of the walk.
+            dirnames.remove(base)
+            if not _spared(entry, status):
+                _unlink_one(entry)
+        for name in _files:
+            entry = os.path.join(directory, name)
+            try:
+                status = os.lstat(entry)
+            except OSError as error:
+                _scan_failed(error)
+                return  # unreachable; _scan_failed raises
+            if _is_link_like(status) and not _spared(entry, status):
+                _unlink_one(entry)
+    if remaining:
+        raise IsolationError(
+            "could not unlink link-like entries before removal: " + ", ".join(remaining))
+
+
 def _force_rmtree(path: Path) -> None:
     """Delete a sidecar tree directly, tolerating read-only files and long paths."""
     def _writable(function, target, _error):
@@ -525,6 +618,10 @@ def _remove_worktree(primary: Path, destination: Path, force: bool) -> None:
     sidecar intact for diagnosis.
     """
     tree_delete_failure = ("failed to delete", "directory not empty", "permission denied")
+
+    if destination.is_dir():
+        # Defuse first: never let git traverse a junction or symlink (#462).
+        _unlink_link_like(destination)
 
     def failure(*flags: str) -> str:
         result = run_git(primary, "worktree", "remove", *flags, str(destination))
@@ -567,6 +664,8 @@ def _cleanup_reserved_worktree(
     records = _registered_worktrees(primary)
     registered = records.get(destination.resolve())
     if registered == ref and _same_directory(destination, reserved_directory):
+        if destination.is_dir():
+            _unlink_link_like(destination)
         run_git(primary, "worktree", "remove", "--force", str(destination))
         records = _registered_worktrees(primary)
     elif registered is None and _same_directory(destination, reserved_directory):
@@ -1709,6 +1808,8 @@ def ensure_verify_sidecar(primary: Path, base: str, branch: str) -> Dict[str, ob
                 "worktree": str(destination),
             }
     if destination.resolve() in registered:
+        if destination.is_dir():
+            _unlink_link_like(destination)
         cleared = run_git(primary, "worktree", "remove", str(destination))
         if cleared.returncode != 0:
             run_git(primary, "worktree", "prune")
