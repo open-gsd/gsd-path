@@ -781,7 +781,14 @@ def validate_panel_skip_receipt(path: Path, expected_mode: str) -> None:
         not isinstance(item, dict)
         or set(item) != {"family", "reason"}
         or item["family"] not in KNOWN_FAMILIES
-        or item["reason"] not in {"parent family", "not advertised", "cap"}
+        # review_panel resolve writes every one of these reasons (#460);
+        # the receipt must validate whatever the helper can produce.
+        or item["reason"] not in {
+            "parent family",
+            "not advertised",
+            "cap",
+            "excluded reviewer family",
+        }
         for item in skipped
     ):
         raise ArchiveError(f"{path.name} has invalid skipped families")

@@ -139,6 +139,32 @@ class ReviewPanelResolveTests(unittest.TestCase):
             any(item["family"] == "grok" and item["reason"] == "parent family" for item in resolved["skipped"])
         )
 
+    def test_excluded_family_skipped_receipt_validates(self) -> None:
+        # The completion and archive validators must accept every receipt the
+        # helper can write, including the --exclude-family skip reason (#460).
+        import json
+
+        import archive_milestone
+
+        resolved = review_panel.resolve_panel(
+            {"mode": "detected", "families": ()},
+            ("cursor-grok-4.6-high-fast", "claude-opus-5-thinking-high"),
+            parent_slug="cursor-grok-4.6-high-fast",
+            excluded_families=("claude",),
+        )
+        self.assertEqual(resolved["status"], "skipped")
+        self.assertTrue(
+            any(item["reason"] == "excluded reviewer family" for item in resolved["skipped"])
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = Path(temporary) / "wave-1.cycle1.panel.skipped.json"
+            receipt.write_text(json.dumps(resolved), encoding="utf-8")
+            archive_milestone.validate_panel_skip_receipt(receipt, "detected")
+            tampered = dict(resolved, skipped=[{"family": "claude", "reason": "made up"}])
+            receipt.write_text(json.dumps(tampered), encoding="utf-8")
+            with self.assertRaises(archive_milestone.ArchiveError):
+                archive_milestone.validate_panel_skip_receipt(receipt, "detected")
+
     def test_named_missing_family_errors(self) -> None:
         with self.assertRaises(review_panel.ReviewPanelError):
             review_panel.resolve_panel(
