@@ -1,5 +1,7 @@
 import json
 import shutil
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -77,13 +79,48 @@ class MemberFinalReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(contracts.HandoffError, "Member reviewed HEAD"):
             contracts.validate_final(sidecar)
 
+    def test_final_validates_in_a_coordinator_that_is_a_linked_worktree(self) -> None:
+        # The bootstrap layout: the default checkout is the main worktree and
+        # the coordinator is a linked worktree of the same repository.
+        branch = git(self.root, "symbolic-ref", "--short", "HEAD")
+        git(self.root, "checkout", "-q", "-b", "default")
+        git(self.root, "rm", "-q", ".project/build/members.json")
+        git(self.root, "commit", "-q", "-m", "default checkout")
+        primary = self.root.parent / "primary"
+        git(self.root, "worktree", "add", "-q", str(primary), branch)
+        (Path(git(self.member, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+         / "gsd-path/member.json").unlink()
+        repaired = subprocess.run([sys.executable, str(member_verify.MEMBERS), "repair", "--repo", str(primary)],
+                                  encoding="utf-8", errors="replace", capture_output=True)
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        self.root = primary
+        self.write_final(f"Member reviewed HEAD: web {self.member_tip}")
+        self.assertEqual(contracts.validate_final(primary)["verdict"], "pass")
+
+    def test_uncommitted_lock_edit_cannot_rebind_the_member_branch(self) -> None:
+        git(self.member, "checkout", "-q", "-b", "gsd-path/other")
+        (self.member / "other.py").write_bytes("other = True\n".encode("utf-8"))
+        git(self.member, "add", "-A")
+        git(self.member, "commit", "-q", "-m", "other branch")
+        other_tip = git(self.member, "rev-parse", "HEAD")
+        git(self.member, "checkout", "-q", "main")
+        lock = self.root / ".project/build/members.json"
+        lock.write_bytes(lock.read_text(encoding="utf-8").replace(
+            "gsd-path/demo-M001", "gsd-path/other").encode("utf-8"))
+        self.write_final(f"Member reviewed HEAD: web {other_tip}")
+        with self.assertRaisesRegex(contracts.HandoffError, "Member reviewed HEAD"):
+            contracts.validate_final(self.root)
+        self.write_final(f"Member reviewed HEAD: web {self.member_tip}")
+        self.assertEqual(contracts.validate_final(self.root)["verdict"], "pass")
+
     def test_stale_member_head_is_refused(self) -> None:
         self.write_final(f"Member reviewed HEAD: web {git(self.member, 'rev-parse', 'main')}")
         with self.assertRaisesRegex(contracts.HandoffError, "Member reviewed HEAD"):
             contracts.validate_final(self.root)
 
     def test_member_head_without_a_lock_is_refused(self) -> None:
-        (self.root / ".project/build/members.json").unlink()
+        git(self.root, "rm", "-q", ".project/build/members.json")
+        git(self.root, "commit", "-q", "-m", "drop the member lock")
         self.write_final(f"Member reviewed HEAD: web {self.member_tip}")
         with self.assertRaisesRegex(contracts.HandoffError, "Member reviewed HEAD"):
             contracts.validate_final(self.root)
