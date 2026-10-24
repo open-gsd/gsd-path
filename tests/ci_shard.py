@@ -4,7 +4,8 @@
 
 Every test module runs in exactly one shard. Slowest modules go first, each to
 the lightest shard. Each module is discovered as `unittest discover -s tests`
-would, and its time is printed so SECONDS can be updated when shards drift.
+would, and its time is printed so tests/windows_ci_seconds.json can be updated
+when shards drift.
 """
 import json
 import sys
