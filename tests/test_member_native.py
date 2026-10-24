@@ -203,6 +203,119 @@ class NativeMemberDispatchTests(unittest.TestCase):
         self.assertIn("coder: wrote wrong", record)
         self.assertIn("orchestrator Verify (isolate gsd-path-task/acme-T001): fail", record)
 
+    AUTH_REF = "refs/gsd-path/task-authorizations/acme-T001"
+
+    def finish_command(self) -> tuple:
+        return ("dispatch_driver.py", "finish", "--repo", str(self.coordinator), "--task-id", "T001")
+
+    def test_reauthorized_member_task_finish_lands_after_a_failed_verify(self) -> None:
+        first = self.attempt("wrong\n")
+        finish = self.finish_command()
+        failed = call(*finish)
+        self.assertNotEqual(failed.returncode, 0, failed.stdout)
+        self.assertIn("Verify failed in the isolate", failed.stdout + failed.stderr)
+        self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
+
+        # The environment fixed inside the retained isolate: every Verify now
+        # passes, but the rerun still cannot land (#461).
+        (Path(first["worktree"]) / "app.py").write_text("v2\n", encoding="utf-8")
+        with Path(first["copy"]).open("a", encoding="utf-8") as copy:
+            copy.write("- coder: fixed the environment\n")
+        blocked = call(*finish)
+        self.assertNotEqual(blocked.returncode, 0, blocked.stdout)
+        self.assertIn("is not authorized at its member base", blocked.stdout + blocked.stderr)
+        self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
+
+        reauthorized = run("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                           "--member", "web", "--task-id", "T001", "--reauthorize")
+        self.assertIs(reauthorized["reauthorized"], True)
+        self.assertEqual(git(self.member, "rev-parse", self.AUTH_REF),
+                         reauthorized["member_base"])
+
+        finished = run(*finish)
+        self.assertEqual(finished["status"], "landed", finished)
+        bound = git(self.member, "rev-parse", "gsd-path/acme-M001")
+        self.assertEqual(git(self.member, "show", f"{bound}:app.py"), "v2")
+
+    def test_reauthorize_refuses_a_changed_activation(self) -> None:
+        first = self.attempt("wrong\n")
+        self.assertNotEqual(call(*self.finish_command()).returncode, 0)
+        copy = Path(first["copy"])
+        fields = copy.read_text(encoding="utf-8")
+        fields = fields.replace("title: Change app", "title: changed contract")
+        copy.write_text(fields, encoding="utf-8")
+        refused = call("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                       "--member", "web", "--task-id", "T001", "--reauthorize")
+        self.assertNotEqual(refused.returncode, 0, refused.stdout)
+        self.assertIn("changes contract fields", refused.stdout + refused.stderr)
+        self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
+
+    def test_reauthorize_refuses_a_moved_task_branch(self) -> None:
+        first = self.attempt("wrong\n")
+        self.assertNotEqual(call(*self.finish_command()).returncode, 0)
+        sidecar = Path(first["worktree"])
+        (sidecar / "extra.txt").write_text("drift\n", encoding="utf-8")
+        git(sidecar, "add", "extra.txt")
+        git(sidecar, "commit", "-q", "-m", "drift off the member base")
+        refused = call("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                       "--member", "web", "--task-id", "T001", "--reauthorize")
+        self.assertNotEqual(refused.returncode, 0, refused.stdout)
+        self.assertIn("moved off its member base", refused.stdout + refused.stderr)
+
+    def test_reauthorize_refuses_a_forged_activation_base(self) -> None:
+        # The live copy is coder-writable; a rewritten base must not select a
+        # weaker contract than the orchestrator-recorded activation (#461).
+        first = self.attempt("wrong\n")
+        self.assertNotEqual(call(*self.finish_command()).returncode, 0)
+        older = git(self.coordinator, "rev-parse", "HEAD~1")
+        copy = Path(first["copy"])
+        copy.write_text(copy.read_text(encoding="utf-8").replace(
+            f"base: {self.base}", f"base: {older}"), encoding="utf-8")
+        refused = call("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                       "--member", "web", "--task-id", "T001", "--reauthorize")
+        self.assertNotEqual(refused.returncode, 0, refused.stdout)
+        self.assertIn("differ from its recorded activation", refused.stdout + refused.stderr)
+        self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
+
+    def test_reauthorize_refuses_a_settled_coordinator_task(self) -> None:
+        first = self.attempt("wrong\n")
+        self.assertNotEqual(call(*self.finish_command()).returncode, 0)
+        task = self.coordinator / landing.TASK_FILE
+        task.write_text(task.read_text(encoding="utf-8").replace(
+            "status: pending", "status: done"), encoding="utf-8")
+        git(self.coordinator, "add", "-A")
+        git(self.coordinator, "commit", "-q", "-m", "task settled")
+        refused = call("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                       "--member", "web", "--task-id", "T001", "--reauthorize")
+        self.assertNotEqual(refused.returncode, 0, refused.stdout)
+        self.assertIn("nothing to reauthorize", refused.stdout + refused.stderr)
+        self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
+
+    def test_reauthorize_refuses_while_the_driver_lock_is_held(self) -> None:
+        from scripts import dispatch_driver
+        self.attempt("wrong\n")
+        self.assertNotEqual(call(*self.finish_command()).returncode, 0)
+        with dispatch_driver.acquire_lock(self.coordinator):
+            refused = call("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                           "--member", "web", "--task-id", "T001", "--reauthorize")
+        self.assertEqual(refused.returncode, 1, refused.stderr)
+        self.assertEqual(refused.stderr.strip(), "another dispatch_driver invocation holds the lock")
+        self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
+
+    def test_reauthorize_reads_only_the_live_copy(self) -> None:
+        first = self.attempt("wrong\n")
+        self.assertNotEqual(call(*self.finish_command()).returncode, 0)
+        mixed = call("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                     "--member", "web", "--task-id", "T001", "--reauthorize",
+                     "--agent", "build_t001")
+        self.assertEqual(mixed.returncode, 2)
+        # A second reauthorize over an armed authorization is a no-op.
+        run("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+            "--member", "web", "--task-id", "T001", "--reauthorize")
+        again = run("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                    "--member", "web", "--task-id", "T001", "--reauthorize")
+        self.assertIs(again["reauthorized"], False)
+
     def test_forced_retire_reports_a_copy_rewritten_in_place_and_retry_lands(self) -> None:
         active = self.attempt("wrong\n")
         copy = Path(active["copy"])
