@@ -2761,6 +2761,27 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual((precious / "sdk.dll").read_bytes(), b"\x00SDK")
             self.assertEqual((repo / "src" / "app.py").read_text(), "print('base')\n")
 
+    def test_unlink_link_like_unlinks_a_symlink_replacing_a_tracked_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            precious = Path(temporary) / "outside"
+            precious.mkdir()
+            (precious / "sdk.dll").write_bytes(b"\x00SDK")
+            created = isolation.isolate_verify(repo, base, "task-t001-verify")
+            sidecar = Path(created["worktree"])
+            (sidecar / "src" / "app.py").unlink()
+            (sidecar / "src" / "app.py").symlink_to(precious, target_is_directory=True)
+
+            isolation._unlink_link_like(sidecar)
+
+            self.assertFalse(os.path.lexists(sidecar / "src" / "app.py"))
+            self.assertEqual(list(precious.iterdir()), [precious / "sdk.dll"])
+            self.assertEqual((precious / "sdk.dll").read_bytes(), b"\x00SDK")
+            self.assertEqual(
+                git(sidecar, "status", "--porcelain", "--untracked-files=all"), "D src/app.py")
+
     def test_unlink_link_like_aborts_on_an_unscannable_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             tree = Path(temporary) / "disposable"

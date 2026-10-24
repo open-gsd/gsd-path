@@ -522,18 +522,22 @@ def _unlink_link_like(tree: Path) -> None:
     Unlinking each link — never traversing it — leaves git nothing to follow
     and keeps POSIX symlinks on the same single code path. A link that cannot
     be removed is a hard error: removal never proceeds with links present.
-    Links git tracks are left for git, which removes them as index entries
-    without traversing them; unlinking them would make a clean tree dirty.
+    A symlink git tracks as a symlink is left for git, which removes it as an
+    index entry without traversing it; unlinking it would make a clean tree
+    dirty. A junction, or a symlink replacing a tracked non-link, is unlinked.
     """
     remaining: List[str] = []
-    tracked: Set[str] = set()
+    tracked_links: Set[str] = set()
     if os.path.lexists(os.path.join(tree, ".git")):
-        listed = run_git(tree, "ls-files", "-z", "--recurse-submodules")
+        listed = run_git(tree, "ls-files", "-s", "-z", "--recurse-submodules")
         if listed.returncode != 0:
             raise IsolationError(
                 f"could not list tracked files in {tree} before removal: "
                 + (listed.stderr or listed.stdout).strip())
-        tracked = set(listed.stdout.split("\0")) - {""}
+        for record in listed.stdout.split("\0"):
+            info, _, path = record.partition("\t")
+            if info.startswith("120000 "):
+                tracked_links.add(path)
 
     def _unlink_one(entry: str) -> bool:
         try:
@@ -555,8 +559,9 @@ def _unlink_link_like(tree: Path) -> None:
 
     root = Path(_long_path(os.path.abspath(tree))) if os.name == "nt" else tree
 
-    def _is_tracked(entry: str) -> bool:
-        return os.path.relpath(entry, root).replace(os.sep, "/") in tracked
+    def _spared(entry: str, status: os.stat_result) -> bool:
+        return stat.S_ISLNK(status.st_mode) and (
+            os.path.relpath(entry, root).replace(os.sep, "/") in tracked_links)
     for directory, dirnames, _files in os.walk(root, topdown=True, onerror=_scan_failed):
         for base in dirnames[:]:
             entry = os.path.join(directory, base)
@@ -572,7 +577,7 @@ def _unlink_link_like(tree: Path) -> None:
             # symlinks, at the stat level (CPython issue 88174) — so a
             # link whose unlink fails must already be out of the walk.
             dirnames.remove(base)
-            if not _is_tracked(entry):
+            if not _spared(entry, status):
                 _unlink_one(entry)
         for name in _files:
             entry = os.path.join(directory, name)
@@ -581,7 +586,7 @@ def _unlink_link_like(tree: Path) -> None:
             except OSError as error:
                 _scan_failed(error)
                 return  # unreachable; _scan_failed raises
-            if _is_link_like(status) and not _is_tracked(entry):
+            if _is_link_like(status) and not _spared(entry, status):
                 _unlink_one(entry)
     if remaining:
         raise IsolationError(
