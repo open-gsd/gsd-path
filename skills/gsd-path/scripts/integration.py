@@ -11,7 +11,7 @@ import json
 import re
 import contextlib
 from pathlib import Path, PurePosixPath
-from typing import Optional
+from typing import Mapping, Optional
 
 if __package__:
     from .pipeline_git import (
@@ -1700,6 +1700,28 @@ def member_pull_request_tag_message(tag_name: str, pull_request: str, reviewed_h
             f"Pull-Request: {pull_request}\nReviewed-HEAD: {reviewed_head}\nLanding: {landing}")
 
 
+def member_adopted_tag_message(tag_name: str, reviewed_head: str, landing: str) -> str:
+    return (f"milestone {tag_name.removeprefix('milestone/')}\n\nMode: adopted-landing\n"
+            f"Reviewed-HEAD: {reviewed_head}\nLanding: {landing}\n\n"
+            "The reviewed HEAD reached the member default branch through earlier user-approved "
+            "publications; Path made no merge.")
+
+
+def member_adopted_tag_metadata(contents: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in contents.splitlines():
+        match = re.fullmatch(r"(Mode|Reviewed-HEAD|Landing): (.+)", line)
+        if match:
+            if match.group(1) in fields:
+                raise ArchiveError("adopted-landing member tag repeats metadata")
+            fields[match.group(1)] = match.group(2)
+    if set(fields) != {"Mode", "Reviewed-HEAD", "Landing"}:
+        raise ArchiveError("adopted-landing member tag is missing metadata")
+    if fields["Mode"] != "adopted-landing":
+        raise ArchiveError("adopted-landing member tag has the wrong mode")
+    return fields
+
+
 def member_pull_request_tag_metadata(contents: str) -> dict[str, str]:
     fields: dict[str, str] = {}
     for line in contents.splitlines():
@@ -1814,7 +1836,8 @@ def _require_member_close(checkout: Path, member: str, bound: str, reviewed_head
         raise ArchiveError(f"member {member} remote default must be {default}, got {live!r}")
 
 
-def integrate_member(coordinator: Path, member: str, archive_path: str, reviewed_head: str) -> dict:
+def integrate_member(coordinator: Path, member: str, archive_path: str, reviewed_head: str,
+                     adopt: Optional[str] = None) -> dict:
     """Direct-mode member close: publish the bound branch, merge it into the member
     default branch, then tag."""
     checkout, project, bound, subject, tag_name, default = _member_names(coordinator, member, archive_path)
@@ -1822,16 +1845,32 @@ def integrate_member(coordinator: Path, member: str, archive_path: str, reviewed
     body = _member_merge_body(archive_path, member, reviewed_head)
     _require_member_close(checkout, member, bound, reviewed_head, default)
     merge = _find_member_merge(checkout, subject, body, reviewed_head, default)
+    adopted = False
     if merge is None:
         origin_main = archive_milestone.require_git_success(
             run_git(checkout, "rev-parse", origin_default), f"resolve member {origin_default}")
         ancestry = run_git(checkout, "merge-base", "--is-ancestor", reviewed_head, origin_main)
         if ancestry.returncode == 0:
-            raise ArchiveError(
-                f"member reviewed HEAD reached {origin_default} outside Path; user-approved recovery required")
-        if ancestry.returncode != 1:
+            if live_remote_ref(checkout, f"refs/tags/{tag_name}") is not None:
+                return validate_member_integrated(coordinator, member, archive_path, reviewed_head)
+            if adopt is None:
+                raise ArchiveError(
+                    f"member reviewed HEAD reached {origin_default} outside Path; user-approved recovery "
+                    f"required: rerun close-members with --adopt-landed-member {member}={origin_main}")
+            if adopt != origin_main:
+                raise ArchiveError(
+                    f"member {member} --adopt-landed-member names {adopt}, "
+                    f"but {origin_default} is {origin_main}")
+            merge = origin_main
+            adopted = True
+        elif ancestry.returncode != 1:
             archive_milestone.require_git_success(ancestry, "inspect member reviewed HEAD ancestry")
-        merge = _create_member_merge(checkout, project, archive_path, subject, body, reviewed_head, origin_main)
+        elif adopt is not None:
+            raise ArchiveError(
+                f"member {member} --adopt-landed-member was given, but its reviewed HEAD "
+                f"has not reached {origin_default}")
+        if merge is None:
+            merge = _create_member_merge(checkout, project, archive_path, subject, body, reviewed_head, origin_main)
     # Publish in order: bound branch, default branch, tag; a rerun publishes only what is missing.
     _publish_member_bound(checkout, project, member, bound, reviewed_head)
     if run_git(checkout, "merge-base", "--is-ancestor", merge, origin_default).returncode != 0:
@@ -1839,7 +1878,10 @@ def integrate_member(coordinator: Path, member: str, archive_path: str, reviewed
         archive_milestone.require_git_success(
             run_git(checkout, "update-ref", f"refs/remotes/{origin_default}", merge),
             f"refresh member {origin_default}")
-    tag_object, tag_published = ensure_integration_tag(checkout, tag_name, merge)
+    tag_message = (
+        member_adopted_tag_message(tag_name, reviewed_head, merge) if adopted else None
+    )
+    tag_object, tag_published = ensure_integration_tag(checkout, tag_name, merge, tag_message)
     if not tag_published:
         _push_member_ref(checkout, project, f"refs/tags/{tag_name}", f"refs/tags/{tag_name}", tag_object, None)
         archive_milestone.require_git_success(
@@ -1912,6 +1954,54 @@ def validate_member_integrated(
             run_git(checkout, "update-ref", tracking, published), "refresh member milestone-tag ref")
     if published is not None:
         contents = run_git(checkout, "for-each-ref", "--format=%(contents)", tracking).stdout
+    if "Mode: adopted-landing" in contents.splitlines():
+        # A user-approved adoption: the reviewed HEAD reached the member default
+        # branch through earlier publications, so the tag proves the landing in
+        # place of the canonical merge Path never made (#458). Only a
+        # direct-mode member may carry one; a pull-request member validates
+        # through its merged PR instead.
+        try:
+            import members as members_module
+        except ImportError:  # pragma: no cover - package import used by tests
+            from scripts import members as members_module
+        common = Path(archive_milestone.require_git_success(
+            run_git(coordinator, "rev-parse", "--path-format=absolute", "--git-common-dir"),
+            "resolve Git common dir"))
+        try:
+            closed_modes = {
+                row["name"]: row["mode"]
+                for row in members_module.read_member_close(common, PurePosixPath(archive_path).name)
+            }
+            effective_mode = closed_modes.get(member) or {
+                item["name"]: item["integration"]
+                for item in members_module.read_members(coordinator)
+            }.get(member, "default")
+        except members_module.MembersError as error:
+            raise ArchiveError(str(error)) from error
+        if effective_mode == "default":
+            effective_mode = archive_milestone.strict_state(coordinator)[0].integration
+        if effective_mode != "direct":
+            raise ArchiveError(
+                f"member {member} is not direct-mode; an adopted-landing tag cannot close it")
+        metadata = member_adopted_tag_metadata(contents)
+        if metadata["Reviewed-HEAD"] != reviewed_head:
+            raise ArchiveError(f"member {member} tag {tag_name} names a different reviewed HEAD")
+        merge = archive_milestone.require_git_success(
+            run_git(checkout, "rev-parse", f"{tracking}^{{commit}}"), "resolve member tag target")
+        if metadata["Landing"] != merge:
+            raise ArchiveError(f"member {member} tag {tag_name} names a different landing")
+        require_annotated_tag(
+            checkout, tracking, merge, f"member tag {tag_name}",
+            member_adopted_tag_message(tag_name, reviewed_head, merge),
+        )
+        origin_default_ref = f"origin/{default}"
+        for earlier, later in ((reviewed_head, merge), (merge, origin_default_ref)):
+            if run_git(checkout, "merge-base", "--is-ancestor", earlier, later).returncode != 0:
+                raise ArchiveError(
+                    f"member {member} adopted landing {merge} does not follow the reviewed HEAD "
+                    f"on {origin_default_ref}")
+        return {"member": member, "merge": merge, "tag": tag_name, "tag_object": published,
+                "adopted": True}
     if "Mode: pull-request" in contents.splitlines():
         metadata = member_pull_request_tag_metadata(contents)
         if metadata["Reviewed-HEAD"] != reviewed_head:
@@ -2003,8 +2093,13 @@ def retire_member(coordinator: Path, member: str, archive_path: str, reviewed_he
     return {"member": member, "retired": bound}
 
 
-def close_members(repo: Path) -> dict:
-    """Close each locked member in lock order before the coordinator ship commit; resumable."""
+def close_members(repo: Path, adopt: Optional[Mapping[str, str]] = None) -> dict:
+    """Close each locked member in lock order before the coordinator ship commit; resumable.
+
+    ``adopt`` carries user-approved ``--adopt-landed-member`` recoveries: the
+    member name maps to the exact live default-branch tip whose history
+    already contains the reviewed HEAD (#458).
+    """
     try:
         import check_handoffs
         import members
@@ -2035,6 +2130,19 @@ def close_members(repo: Path) -> dict:
         rows = {row["name"]: row for row in members.read_member_close(common, archive_name)}
     except members.MembersError as error:
         raise ArchiveError(str(error)) from error
+    if adopt:
+        locked_names = {entry["name"] for entry in locked}
+        unknown = sorted(set(adopt) - locked_names)
+        if unknown:
+            raise ArchiveError(
+                f"--adopt-landed-member names member(s) not locked in this milestone: {', '.join(unknown)}")
+        for adopted_name in sorted(adopt):
+            mode = modes.get(adopted_name, "default")
+            if mode == "default":
+                mode = state.integration
+            if mode != "direct":
+                raise ArchiveError(
+                    f"--adopt-landed-member names {adopted_name}, which is not a direct-mode member")
     def save() -> None:
         members.write_member_close(common, archive_name, [rows[item["name"]] for item in locked if item["name"] in rows])
 
@@ -2057,14 +2165,16 @@ def close_members(repo: Path) -> dict:
         rows[name] = row
         save()
         if mode == "direct":
-            result = integrate_member(project, name, state.archive, heads[name])
+            result = integrate_member(project, name, state.archive, heads[name],
+                                      adopt=(adopt or {}).get(name))
         else:
             result = integrate_member_pull_request(project, name, state.archive, heads[name])
         if result.get("status") == "awaiting-merge":
             row["pull_request"] = result["pull_request"]
             save()
             return {"status": "awaiting-merge", "member": name, "pull_request": result["pull_request"]}
-        row.update(status="integrated", merge=result["merge"], tag=result["tag"])
+        row.update(status="integrated", merge=result["merge"], tag=result["tag"],
+                   **({"adopted": True} if result.get("adopted") else {}))
         save()
         closed.append(row)
     return {"status": "integrated", "members": closed, "body": ship_commit_body(state.archive, reviewed, closed)}

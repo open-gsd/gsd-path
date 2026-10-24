@@ -1,6 +1,8 @@
+import contextlib
 import json
 import re
 import shutil
+import sys
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -55,6 +57,126 @@ class MemberCloseTests(unittest.TestCase):
         with mock.patch.object(integration, "integrate_member", side_effect=AssertionError("integrated twice")):
             second = integration.close_members(self.root)
         self.assertEqual(second["members"], first["members"])
+
+    def blocked_landing(self) -> None:
+        """Fast-forward the member default onto the reviewed HEAD (#458).
+
+        This is the state an earlier, user-approved publication leaves: the
+        reviewed HEAD is on the member default branch with no Path merge.
+        """
+        git(self.remote, "fetch", "-q", str(self.member), self.member_tip)
+        git(self.remote, "update-ref", "refs/heads/main", self.member_tip)
+
+    def test_adopt_landed_member_closes_only_when_asked(self) -> None:
+        self.blocked_landing()
+        with self.assertRaisesRegex(ArchiveError, "--adopt-landed-member web="):
+            integration.close_members(self.root)
+        self.assertEqual(self.remote_ref("refs/heads/main"), self.member_tip)
+        self.assertEqual(self.remote_ref("refs/heads/gsd-path/demo-M001"), "")
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), "")
+
+        result = integration.close_members(self.root, adopt={"web": self.member_tip})
+        self.assertEqual(result["status"], "integrated")
+        row = result["members"][0]
+        self.assertIs(row["adopted"], True)
+        self.assertEqual(row["merge"], self.member_tip)
+        self.assertEqual(row["tag"], TAG)
+        # The adoption publishes the bound branch and tag; the default branch is untouched.
+        self.assertEqual(self.remote_ref("refs/heads/main"), self.member_tip)
+        self.assertEqual(self.remote_ref("refs/heads/gsd-path/demo-M001"), self.member_tip)
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}^{{commit}}"), self.member_tip)
+        message = git(self.remote, "for-each-ref", "--format=%(contents)", f"refs/tags/{TAG}")
+        self.assertIn("Mode: adopted-landing", message)
+        self.assertIn(f"Reviewed-HEAD: {self.member_tip}", message)
+        self.assertIn(f"Landing: {self.member_tip}", message)
+        self.assertIn("Path made no merge", message)
+        self.assertTrue(result["body"].endswith(
+            f"Member-Reviewed-HEAD: web@{self.member_tip}\nMember: web {self.member_tip} {TAG}\n"))
+        self.assertEqual(json.loads(self.journal.read_text(encoding="utf-8"))["members"], [row])
+
+    def test_adoption_refuses_a_mismatched_sha_and_an_unlanded_head(self) -> None:
+        # A fresh reviewed HEAD (never landed) with an adoption flag is refused.
+        with self.assertRaisesRegex(ArchiveError, "has not reached"):
+            integration.close_members(self.root, adopt={"web": self.member_tip})
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), "")
+
+        self.blocked_landing()
+        stale = git(self.member, "rev-parse", f"{self.member_tip}~1")
+        with self.assertRaisesRegex(ArchiveError, "--adopt-landed-member names"):
+            integration.close_members(self.root, adopt={"web": stale})
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), "")
+
+    def test_adoption_rerun_validates_without_the_flag(self) -> None:
+        self.blocked_landing()
+        integration.close_members(self.root, adopt={"web": self.member_tip})
+        with mock.patch.object(integration, "integrate_member", side_effect=AssertionError("adopted twice")):
+            rerun = integration.close_members(self.root)
+        self.assertEqual(rerun["status"], "integrated")
+        self.assertIs(rerun["members"][0]["adopted"], True)
+        self.assertEqual(rerun["members"][0]["merge"], self.member_tip)
+
+    def test_interrupted_adoption_resumes_after_the_default_advances(self) -> None:
+        self.blocked_landing()
+        write = members.write_member_close
+        calls = []
+
+        def fail_after_publish(*arguments):
+            calls.append(arguments)
+            if len(calls) == 2:
+                raise OSError("journal save failed")
+            return write(*arguments)
+
+        with contextlib.ExitStack() as patches:
+            for loaded in {members, sys.modules.get("members", members)}:
+                patches.enter_context(mock.patch.object(loaded, "write_member_close", side_effect=fail_after_publish))
+            with self.assertRaisesRegex(OSError, "journal save failed"):
+                integration.close_members(self.root, adopt={"web": self.member_tip})
+        self.assertEqual(json.loads(self.journal.read_text(encoding="utf-8"))["members"][0]["status"], "pending")
+        tree = git(self.member, "rev-parse", f"{self.member_tip}^{{tree}}")
+        advanced = git(self.member, "commit-tree", tree, "-p", self.member_tip, "-m", "later work")
+        git(self.remote, "fetch", "-q", str(self.member), advanced)
+        git(self.remote, "update-ref", "refs/heads/main", advanced)
+
+        result = integration.close_members(self.root, adopt={"web": advanced})
+        row = result["members"][0]
+        self.assertEqual((row["merge"], row["tag"], row["adopted"]), (self.member_tip, TAG, True))
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}^{{commit}}"), self.member_tip)
+        self.assertEqual(self.remote_ref("refs/heads/main"), advanced)
+        self.assertEqual(json.loads(self.journal.read_text(encoding="utf-8"))["members"], [row])
+        with mock.patch.object(integration, "integrate_member", side_effect=AssertionError("adopted twice")):
+            self.assertEqual(integration.close_members(self.root)["members"], [row])
+
+    def test_adopted_member_validates_by_its_mode_at_close(self) -> None:
+        self.blocked_landing()
+        integration.close_members(self.root, adopt={"web": self.member_tip})
+        self.set_integration("pull-request")
+        validated = integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip)
+        self.assertIs(validated["adopted"], True)
+
+        journal = json.loads(self.journal.read_text(encoding="utf-8"))
+        journal["members"][0]["mode"] = "pull-request"
+        self.journal.write_bytes(json.dumps(journal).encode("utf-8"))
+        with self.assertRaisesRegex(ArchiveError, "not direct-mode"):
+            integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip)
+
+    def test_adoption_flag_names_only_locked_direct_members(self) -> None:
+        with self.assertRaisesRegex(ArchiveError, "not locked in this milestone"):
+            integration.close_members(self.root, adopt={"other": "a" * 40})
+        self.set_integration("pull-request")
+        # Refused up front, before any member ref has moved.
+        with self.assertRaisesRegex(ArchiveError, "not a direct-mode member"):
+            integration.close_members(self.root, adopt={"web": self.member_tip})
+        self.assertEqual(self.remote_ref("refs/heads/gsd-path/demo-M001"), "")
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), "")
+
+    def test_adoption_cli_rejects_a_malformed_member_sha_pair(self) -> None:
+        from scripts import archive_milestone
+        for malformed in (f"={'a' * 40}", "web=abc", "web"):
+            with self.subTest(item=malformed):
+                code = archive_milestone.main(
+                    ["close-members", "--repo", str(self.root), "--adopt-landed-member", malformed]
+                )
+                self.assertEqual(code, 2)
 
     def test_journal_that_disagrees_with_the_member_origin_blocks(self) -> None:
         integration.close_members(self.root)
