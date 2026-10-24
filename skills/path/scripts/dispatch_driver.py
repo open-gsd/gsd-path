@@ -247,7 +247,8 @@ def open_native_shell(primary: Path, *, task_id: str, base: str, worktree: str, 
                       task_branch: Optional[str], mode: str, wave: Optional[int] = None,
                       title: Optional[str] = None, files: Optional[List[str]] = None,
                       sidecar: Optional[object] = None, member: Optional[str] = None,
-                      member_base: Optional[str] = None, contract_file: Optional[str] = None) -> None:
+                      member_base: Optional[str] = None, contract_file: Optional[str] = None,
+                      agent: Optional[str] = None) -> None:
     """Open a dispatch attempt record for a host-spawned coder before it runs."""
     root = records_root(primary)
     root.mkdir(parents=True, exist_ok=True)
@@ -277,6 +278,8 @@ def open_native_shell(primary: Path, *, task_id: str, base: str, worktree: str, 
         record["member_base"] = member_base
     if contract_file is not None:
         record["contract_file"] = contract_file
+    if agent is not None:
+        record["agent"] = agent
     task_dir = root / task_id
     if not should_open_native_shell(root, task_id, base):
         attempts = sorted(task_dir.glob("attempt-*/state.json"),
@@ -355,6 +358,7 @@ def record_native_member_activation(coordinator: Path, activation: Dict[str, obj
         member=str(activation["member"]),
         member_base=str(activation["member_base"]),
         contract_file=task_file,
+        agent=str(activation["agent"]),
     )
 
 

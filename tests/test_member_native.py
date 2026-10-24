@@ -277,6 +277,18 @@ class NativeMemberDispatchTests(unittest.TestCase):
         self.assertIn("differ from its recorded activation", refused.stdout + refused.stderr)
         self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
 
+    def test_reauthorize_refuses_a_swapped_agent(self) -> None:
+        first = self.attempt("wrong\n")
+        self.assertNotEqual(call(*self.finish_command()).returncode, 0)
+        copy = Path(first["copy"])
+        copy.write_text(copy.read_text(encoding="utf-8").replace(
+            "agent: build_t001", "agent: someone_else"), encoding="utf-8")
+        refused = call("isolation.py", "activate-member-task", "--repo", str(self.coordinator),
+                       "--member", "web", "--task-id", "T001", "--reauthorize")
+        self.assertNotEqual(refused.returncode, 0, refused.stdout)
+        self.assertIn("differ from its recorded activation", refused.stdout + refused.stderr)
+        self.assertEqual(git(self.member, "for-each-ref", self.AUTH_REF), "")
+
     def test_reauthorize_refuses_a_settled_coordinator_task(self) -> None:
         first = self.attempt("wrong\n")
         self.assertNotEqual(call(*self.finish_command()).returncode, 0)
