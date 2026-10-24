@@ -65,6 +65,28 @@ class MemberPrepareTests(unittest.TestCase):
             isolation.isolate_member_task(self.coordinator, "web", "T002")
         self.assertEqual((target / "sdk.h").read_text(encoding="utf-8"), "shared\n")
 
+    @requires_symlink
+    def test_prepare_spares_symlinks_the_member_repo_tracks(self) -> None:
+        bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
+        (bound / "README.md").write_bytes(b"readme\n")
+        (bound / "docs").mkdir()
+        (bound / "docs" / "README.md").symlink_to(Path("..") / "README.md")
+        git(bound, "add", "README.md", "docs/README.md")
+        git(bound, "commit", "-q", "-m", "tracked symlink")
+        self.declare_prepare("true")
+        isolated = isolation.isolate_member_task(self.coordinator, "web", "T002")
+        link = Path(isolated["worktree"]) / "docs" / "README.md"
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.read_text(encoding="utf-8"), "readme\n")
+
+    def test_failed_cleanup_after_prepare_failure_keeps_the_prepare_error(self) -> None:
+        self.declare_prepare("echo sdk missing >&2; exit 3")
+        with mock.patch.object(isolation, "_remove_worktree",
+                               side_effect=isolation.IsolationError("cannot remove")):
+            with self.assertRaisesRegex(isolation.IsolationError,
+                                        "Prepare failed.*sdk missing.*also failed: cannot remove"):
+                isolation.isolate_member_task(self.coordinator, "web", "T002")
+
     def test_a_member_without_prepare_isolates_unchanged(self) -> None:
         isolated = isolation.isolate_member_task(self.coordinator, "web", "T002")
         self.assertIsNone(isolated["prepare"])

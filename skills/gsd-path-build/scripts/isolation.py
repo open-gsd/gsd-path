@@ -513,6 +513,22 @@ def _is_link_like(status: os.stat_result) -> bool:
     )
 
 
+def _tracked_symlinks(tree: Path, when: str) -> Set[str]:
+    """Paths, relative to `tree`, that its index (and submodules') tracks as symlinks."""
+    tracked_links: Set[str] = set()
+    if os.path.lexists(os.path.join(tree, ".git")):
+        listed = run_git(tree, "ls-files", "-s", "-z", "--recurse-submodules")
+        if listed.returncode != 0:
+            raise IsolationError(
+                f"could not list tracked files in {tree} {when}: "
+                + (listed.stderr or listed.stdout).strip())
+        for record in listed.stdout.split("\0"):
+            info, _, path = record.partition("\t")
+            if info.startswith("120000 "):
+                tracked_links.add(path)
+    return tracked_links
+
+
 def _unlink_link_like(tree: Path) -> None:
     """Unlink every link-like entry under a disposable tree before git removes it.
 
@@ -527,17 +543,7 @@ def _unlink_link_like(tree: Path) -> None:
     dirty. A junction, or a symlink replacing a tracked non-link, is unlinked.
     """
     remaining: List[str] = []
-    tracked_links: Set[str] = set()
-    if os.path.lexists(os.path.join(tree, ".git")):
-        listed = run_git(tree, "ls-files", "-s", "-z", "--recurse-submodules")
-        if listed.returncode != 0:
-            raise IsolationError(
-                f"could not list tracked files in {tree} before removal: "
-                + (listed.stderr or listed.stdout).strip())
-        for record in listed.stdout.split("\0"):
-            info, _, path = record.partition("\t")
-            if info.startswith("120000 "):
-                tracked_links.add(path)
+    tracked_links = _tracked_symlinks(tree, "before removal")
 
     def _unlink_one(entry: str) -> bool:
         try:
@@ -880,13 +886,21 @@ def _refuse_link_like(tree: Path) -> None:
 
     Prepare must copy, never link: a link into the primary checkout would let
     the isolate read and mutate shared inputs, and retirement would silently
-    defuse it (#462). Checked at handout, after the command exits zero.
+    defuse it (#462). Checked at handout, after the command exits zero. A
+    symlink the member repo tracks as a symlink is checked-out content, not
+    provisioning, and is spared; a junction, or a symlink replacing a tracked
+    non-link, is refused.
     """
     found: List[str] = []
+    tracked_links = _tracked_symlinks(tree, "after Prepare")
     root = Path(_long_path(os.path.abspath(tree))) if os.name == "nt" else tree
 
     def _scan_failed(error: OSError) -> None:
         raise IsolationError(f"could not scan {tree} after Prepare: {error}")
+
+    def _refused(entry: str, status: os.stat_result) -> bool:
+        return _is_link_like(status) and not (stat.S_ISLNK(status.st_mode) and (
+            os.path.relpath(entry, root).replace(os.sep, "/") in tracked_links))
 
     for directory, dirnames, files in os.walk(root, topdown=True, onerror=_scan_failed):
         for base in dirnames[:]:
@@ -897,8 +911,9 @@ def _refuse_link_like(tree: Path) -> None:
                 _scan_failed(error)
                 return
             if _is_link_like(status):
-                found.append(entry)
                 dirnames.remove(base)  # never descend a link
+                if _refused(entry, status):
+                    found.append(entry)
         for name in files:
             entry = os.path.join(directory, name)
             try:
@@ -906,7 +921,7 @@ def _refuse_link_like(tree: Path) -> None:
             except OSError as error:
                 _scan_failed(error)
                 return
-            if _is_link_like(status):
+            if _refused(entry, status):
                 found.append(entry)
     if found:
         raise IsolationError(
@@ -968,11 +983,17 @@ def isolate_member_task(coordinator: Path, member: str, task_id: str) -> Dict[st
     create_named_worktree(checkout, branch, destination, member_base, bound=str(bound["branch"]))
     try:
         prepared = run_member_prepare(coordinator, member, destination)
-    except BaseException:
+    except BaseException as error:
         # A fresh tree with a failed Prepare has nothing to land; retire it so
         # the retry starts clean instead of refusing on the existing path.
-        _remove_worktree(checkout, destination, force=True)
-        run_git(checkout, "update-ref", "-d", f"refs/heads/{branch}", member_base)
+        try:
+            _remove_worktree(checkout, destination, force=True)
+            run_git(checkout, "update-ref", "-d", f"refs/heads/{branch}", member_base)
+        except IsolationError as cleanup_error:
+            raise IsolationError(
+                f"{error}; retiring the fresh isolate also failed: {cleanup_error}") from error
+        finally:
+            release_workspace_quietly(checkout)
         raise
     return {
         "prepare": prepared,
