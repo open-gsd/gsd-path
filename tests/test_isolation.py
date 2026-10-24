@@ -2732,6 +2732,35 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual((target_dir / "keep.txt").read_text(), "keep\n")
             self.assertEqual(target_file.read_bytes(), b"\x00BIN")
 
+    def test_unlink_link_like_spares_tracked_symlinks_so_a_clean_retire_succeeds(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            (repo / "src-link").symlink_to("src", target_is_directory=True)
+            git(repo, "add", "src-link")
+            git(repo, "commit", "-q", "-m", "track a symlink")
+            base = git(repo, "rev-parse", "HEAD")
+            precious = Path(temporary) / "outside"
+            precious.mkdir()
+            (precious / "sdk.dll").write_bytes(b"\x00SDK")
+            created = isolation.isolate_verify(repo, base, "task-t001-verify")
+            sidecar = Path(created["worktree"])
+            (sidecar / "build").symlink_to(precious, target_is_directory=True)
+
+            isolation._unlink_link_like(sidecar)
+
+            self.assertTrue((sidecar / "src-link").is_symlink())
+            self.assertFalse((sidecar / "build").is_symlink())
+            self.assertEqual(git(sidecar, "status", "--porcelain", "--untracked-files=all"), "")
+
+            result = isolation.retire(repo, sidecar, str(created["branch"]), False)
+
+            self.assertEqual(result["reason"], "removed")
+            self.assertFalse(sidecar.exists())
+            self.assertEqual((precious / "sdk.dll").read_bytes(), b"\x00SDK")
+            self.assertEqual((repo / "src" / "app.py").read_text(), "print('base')\n")
+
     def test_unlink_link_like_aborts_on_an_unscannable_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             tree = Path(temporary) / "disposable"

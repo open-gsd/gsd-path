@@ -522,8 +522,18 @@ def _unlink_link_like(tree: Path) -> None:
     Unlinking each link — never traversing it — leaves git nothing to follow
     and keeps POSIX symlinks on the same single code path. A link that cannot
     be removed is a hard error: removal never proceeds with links present.
+    Links git tracks are left for git, which removes them as index entries
+    without traversing them; unlinking them would make a clean tree dirty.
     """
     remaining: List[str] = []
+    tracked: Set[str] = set()
+    if os.path.lexists(os.path.join(tree, ".git")):
+        listed = run_git(tree, "ls-files", "-z", "--recurse-submodules")
+        if listed.returncode != 0:
+            raise IsolationError(
+                f"could not list tracked files in {tree} before removal: "
+                + (listed.stderr or listed.stdout).strip())
+        tracked = set(listed.stdout.split("\0")) - {""}
 
     def _unlink_one(entry: str) -> bool:
         try:
@@ -544,6 +554,9 @@ def _unlink_link_like(tree: Path) -> None:
         raise IsolationError(f"could not scan {tree} before removal: {error}")
 
     root = Path(_long_path(os.path.abspath(tree))) if os.name == "nt" else tree
+
+    def _is_tracked(entry: str) -> bool:
+        return os.path.relpath(entry, root).replace(os.sep, "/") in tracked
     for directory, dirnames, _files in os.walk(root, topdown=True, onerror=_scan_failed):
         for base in dirnames[:]:
             entry = os.path.join(directory, base)
@@ -559,7 +572,8 @@ def _unlink_link_like(tree: Path) -> None:
             # symlinks, at the stat level (CPython issue 88174) — so a
             # link whose unlink fails must already be out of the walk.
             dirnames.remove(base)
-            _unlink_one(entry)
+            if not _is_tracked(entry):
+                _unlink_one(entry)
         for name in _files:
             entry = os.path.join(directory, name)
             try:
@@ -567,7 +581,7 @@ def _unlink_link_like(tree: Path) -> None:
             except OSError as error:
                 _scan_failed(error)
                 return  # unreachable; _scan_failed raises
-            if _is_link_like(status):
+            if _is_link_like(status) and not _is_tracked(entry):
                 _unlink_one(entry)
     if remaining:
         raise IsolationError(
