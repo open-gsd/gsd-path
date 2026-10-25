@@ -3506,6 +3506,140 @@ class GuardHookTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_allowed(self.bash(command))
 
+    def make_closed_milestone_repo(self) -> Path:
+        """A shipped milestone repo on its bound branch: the shell rule that
+        reports "accepts no new work" engages for tool cwd inside it."""
+        import tempfile
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name) / "repo"
+        root.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "gsd-path/M001", str(root)], check=True)
+        subprocess.run(["git", "config", "user.name", "Guard test"], cwd=root, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=root, check=True)
+        state = root / ".project/STATE.md"
+        state.parent.mkdir()
+        state.write_text(
+            "---\n"
+            "pipeline: gsd-path/v2\n"
+            "project: demo\n"
+            "milestone: demo\n"
+            "phase: shipped\n"
+            "status: done\n"
+            "branch: gsd-path/M001\n"
+            "archive: .project/archive/001-demo\n"
+            "---\n\n# Project State\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "add", ".project/STATE.md"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "ship: M001 — demo"],
+            cwd=root, check=True,
+        )
+        return root
+
+    def test_fetch_family_survives_a_closed_milestone(self):
+        repo = self.make_closed_milestone_repo()
+
+        def inside(command):
+            return {
+                "tool_name": "Bash",
+                "tool_input": {"command": command, "cwd": str(repo)},
+            }
+
+        # The fetch family needs configured remotes (an unconfigured name
+        # makes git fetch from a local directory of that name).
+        subprocess.run(
+            ["git", "remote", "add", "origin", str(repo)], cwd=repo, check=True
+        )
+        subprocess.run(["git", "remote", "add", "upstream", str(repo)], cwd=repo, check=True)
+        for command in ("git fetch", "git fetch origin", "git fetch upstream"):
+            with self.subTest(command=command):
+                self.assert_allowed(inside(command))
+
+        # A configured refspec that would move a local branch is refused.
+        subprocess.run(["git", "remote", "add", "peer", str(repo)], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "config", "remote.peer.fetch",
+             "+refs/heads/main:refs/heads/retired"],
+            cwd=repo, check=True,
+        )
+        self.assert_denied(inside("git fetch peer"))
+        # Restoring remote-tracking-only refspecs re-allows the fetch.
+        subprocess.run(
+            ["git", "config", "remote.peer.fetch",
+             "+refs/heads/*:refs/remotes/peer/*"],
+            cwd=repo, check=True,
+        )
+        self.assert_allowed(inside("git fetch peer"))
+
+        # An unconfigured remote name is refused (git would fetch from a
+        # local directory of that name).
+        self.assert_denied(inside("git fetch neighbor"))
+
+        # Configured fetch behavior that runs a program, deletes refs,
+        # rewrites every ref or forces tags is refused; unsetting it
+        # restores the allowance.
+        for key, value in (
+            ("remote.origin.uploadpack", "touch pwned; git-upload-pack"),
+            ("remote.origin.prune", "true"),
+            ("remote.origin.pruneTags", "true"),
+            ("fetch.prune", "true"),
+            ("fetch.pruneTags", "true"),
+            ("remote.origin.mirror", "true"),
+            ("remote.origin.tagopt", "--tags"),
+        ):
+            with self.subTest(key=key):
+                subprocess.run(["git", "config", key, value], cwd=repo, check=True)
+                self.assert_denied(inside("git fetch origin"))
+                subprocess.run(["git", "config", "--unset", key], cwd=repo, check=True)
+                self.assert_allowed(inside("git fetch origin"))
+
+        # A -C value that is literally named fetch must not let a later
+        # global flag ride in before the real subcommand.
+        (repo / "fetch").mkdir()
+        self.assert_allowed(inside("git -C fetch fetch origin"))
+        for command in (
+            "git -C fetch -p fetch origin",
+            "git -C fetch --no-pager fetch origin",
+            "git -C fetch --bare fetch origin",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(inside(command))
+
+        denied = (
+            "git fetch origin main",
+            "git fetch origin +refs/heads/*:refs/heads/*",
+            "git fetch --prune origin",
+            "git fetch --write-commit-graph origin",
+            "git fetch --update-head-ok origin main",
+            "git fetch --upload-pack='rm -rf /' origin",
+            "git -c diff.context=5 fetch origin",
+            "git --git-dir=/tmp/other fetch origin",
+            "git fetch http://evil/",
+            "git fetch ../neighbor",
+            "git pull",
+            "git push",
+            "git -p fetch origin",
+            "git --no-pager fetch origin",
+        )
+        for command in denied:
+            with self.subTest(command=command):
+                self.assert_denied(inside(command))
+
+    def test_git_global_execution_options_deny_everywhere(self):
+        # The pre-#468 hole: global options before the subcommand were
+        # stripped before the read-only checks, so --upload-pack/--exec
+        # slipped past a nominally read-only fetch.
+        for command in (
+            "git --upload-pack='touch /tmp/x' fetch origin",
+            "git --exec='rm' fetch origin",
+            "git --upload-pack='rm -rf /' status",
+            "git --receive-pack='sh' push origin main",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash(command))
+
     def test_allows_issue_327_read_only_shell_cases(self):
         repository = shlex.quote(str(Path.cwd()))
         for command in (
