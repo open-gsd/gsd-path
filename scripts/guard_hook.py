@@ -1452,6 +1452,16 @@ def _deletion_overlaps(candidate, root):
     return _within_existing_root(candidate, root) or _within_existing_root(root, candidate)
 
 
+def _strictly_inside(candidate, root):
+    if candidate == root:
+        return False
+    try:
+        candidate.relative_to(root)
+        return True
+    except ValueError:
+        return any(_same_existing_path(ancestor, root) for ancestor in candidate.parents)
+
+
 def destructive_state_root_reason(operands, working_directories):
     """Why a destructive operand is pipeline state, or None when outside it.
 
@@ -1463,14 +1473,17 @@ def destructive_state_root_reason(operands, working_directories):
     """
     directories = working_directories or [os.getcwd()]
     commons = set()
+    checkouts = set()
     for directory in directories:
         result = subprocess.run(
-            ["git", "-C", str(directory), "rev-parse", "--git-common-dir"],
+            ["git", "-C", str(directory), "rev-parse", "--show-toplevel", "--git-common-dir"],
             capture_output=True, encoding="utf-8", errors="replace", check=False,
             env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
         )
-        if result.returncode == 0 and result.stdout.strip():
-            common = Path(result.stdout.strip())
+        lines = result.stdout.splitlines()
+        if result.returncode == 0 and len(lines) == 2:
+            checkouts.add(Path(lines[0]).resolve(strict=False))
+            common = Path(lines[1])
             if not common.is_absolute():
                 common = Path(directory) / common
             commons.add(common.resolve(strict=False))
@@ -1481,7 +1494,12 @@ def destructive_state_root_reason(operands, working_directories):
     for operand in operands:
         for candidate in target_paths(operand, directories, Path(os.getcwd())):
             for root in roots:
-                if _deletion_overlaps(candidate, root):
+                # A managed worktree under a state root is the agent's own
+                # checkout; deletes inside it are ordinary product work.
+                if _deletion_overlaps(candidate, root) and not any(
+                    _strictly_inside(candidate, checkout) and _strictly_inside(checkout, root)
+                    for checkout in checkouts
+                ):
                     return f"destructive target is pipeline state: {operand}"
     return None
 
@@ -1511,22 +1529,21 @@ def closed_destructive_scope_reason(arguments, working_directories):
     member checkouts — and the state-root check covers the directories that
     live outside the repository.
     """
+    end = arguments.index("--") if "--" in arguments else len(arguments)
     operands = [
-        argument for argument in arguments if argument and not argument.startswith("-")
-    ]
+        argument for argument in arguments[:end] if argument and not argument.startswith("-")
+    ] + [argument for argument in arguments[end + 1:] if argument]
     if not operands:
         return "destructive command names no target"
     repo = _closed_repo_root(working_directories)
     if repo is None:
         return "pipeline scope cannot be classified"
     control_roots = repository_control_roots(repo)
-    member_roots = []
-    if os.path.lexists(repo / "MEMBERS.md"):
-        try:
-            import members  # the guard's runtime directory
-            member_roots = [Path(member["checkout"]) for member in members.read_members(repo)]
-        except Exception as error:
-            return f"member scope cannot be resolved: {error}"
+    try:
+        import members  # the guard's runtime directory
+        member_roots = [Path(member["checkout"]) for member in members.read_members(repo)]
+    except Exception as error:
+        return f"member scope cannot be resolved: {error}"
     for operand in operands:
         if target_kind(operand, working_directories, repo, control_roots) != "external":
             return f"destructive target stays inside the repository: {operand}"

@@ -4462,6 +4462,48 @@ class DestructiveScopeTests(unittest.TestCase):
         # A scratch file outside the state root still passes in an active phase.
         self.assert_allowed(self.bash_in(repo, f"rm {self.scratch / 'file.txt'}"))
 
+    def test_managed_worktree_under_a_state_root_allows_its_own_deletes(self) -> None:
+        repo = self.scratch / "primary"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.com",
+             "commit", "-q", "--allow-empty", "-m", "init"], check=True,
+        )
+        worktree = self.home / ".gsd-path" / "projects" / "A" / "B" / "task" / "t1"
+        subprocess.run(
+            ["git", "-C", str(repo), "worktree", "add", "-q", "-b", "t1", str(worktree)],
+            check=True,
+        )
+        (worktree / "build").mkdir()
+        for command in ("rm -rf build", f"rm -rf {worktree / 'build'}", "mv a.py b.py"):
+            with self.subTest(command=command):
+                self.assert_allowed(self.bash_in(worktree, command))
+        # The checkout itself and state beside it stay protected.
+        state = self.home / ".gsd-path" / "runtimes" / "abc123"
+        state.mkdir(parents=True)
+        for command in (f"rm -r {worktree}", f"rm -r {state}", f"rm -r {worktree.parent}"):
+            with self.subTest(command=command):
+                self.assert_denied(self.bash_in(worktree, command))
+
+    def test_closed_milestone_checks_operands_after_double_dash(self) -> None:
+        repo = self.make_closed_milestone_repo()
+        target = self.scratch / "file.txt"
+        self.assert_allowed(self.inside_closed(repo, f"rm -- {target}"))
+        self.assert_denied(self.inside_closed(repo, f"rm -- {target} -foo"))
+
+    def test_closed_milestone_protects_member_checkout_ancestors(self) -> None:
+        repo = self.make_closed_milestone_repo()
+        member = self.scratch / "members" / "app"
+        member.mkdir(parents=True)
+        (repo / ".project" / "MEMBERS.md").write_text(
+            "# Members\n\n## app\n"
+            f"Checkout: {member}\nRemote: https://github.com/example/app.git\n"
+            "Integration: default\n",
+            encoding="utf-8",
+        )
+        self.assert_denied(self.inside_closed(repo, f"rm -r {member.parent}"))
+        self.assert_allowed(self.inside_closed(repo, f"rm {self.scratch / 'file.txt'}"))
+
 
 if __name__ == "__main__":
     unittest.main()
