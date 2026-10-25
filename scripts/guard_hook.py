@@ -1431,6 +1431,133 @@ def command_can_destroy_files(invocation):
     )
 
 
+def _deletion_overlaps(candidate, root):
+    """Whether a recursive delete of `candidate` could remove `root`.
+
+    A candidate inside the root deletes its contents, and a candidate that
+    CONTAINS the root deletes it wholesale (`rm -r` of a parent directory), so
+    both directions deny. Existing-path identity covers case variants that a
+    lexical comparison misses on case-insensitive filesystems.
+    """
+    try:
+        candidate.relative_to(root)
+        return True
+    except ValueError:
+        pass
+    try:
+        root.relative_to(candidate)
+        return True
+    except ValueError:
+        pass
+    return _within_existing_root(candidate, root) or _within_existing_root(root, candidate)
+
+
+def _strictly_inside(candidate, root):
+    if candidate == root:
+        return False
+    try:
+        candidate.relative_to(root)
+        return True
+    except ValueError:
+        return any(_same_existing_path(ancestor, root) for ancestor in candidate.parents)
+
+
+def destructive_state_root_reason(operands, working_directories):
+    """Why a destructive operand is pipeline state, or None when outside it.
+
+    Delete restrictions cover the pipeline's state directories, not only the
+    repository (#468): the guard's home tree, the configured worktree root,
+    and every pinned workspace root sit outside any repository, so the path
+    kinds alone would call them external. Unresolvable workspace state denies
+    rather than guesses.
+    """
+    directories = working_directories or [os.getcwd()]
+    commons = set()
+    checkouts = set()
+    for directory in directories:
+        result = subprocess.run(
+            ["git", "-C", str(directory), "rev-parse", "--show-toplevel", "--git-common-dir"],
+            capture_output=True, encoding="utf-8", errors="replace", check=False,
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+        )
+        lines = result.stdout.splitlines()
+        if result.returncode == 0 and len(lines) == 2:
+            checkouts.add(Path(lines[0]).resolve(strict=False))
+            common = Path(lines[1])
+            if not common.is_absolute():
+                common = Path(directory) / common
+            commons.add(common.resolve(strict=False))
+    try:
+        roots = _workspace_roots_for_commons(commons)
+    except ValueError as error:
+        return f"pipeline workspace state cannot be resolved: {error}"
+    for operand in operands:
+        for candidate in target_paths(operand, directories, Path(os.getcwd())):
+            for root in roots:
+                # A managed worktree under a state root is the agent's own
+                # checkout; deletes inside it are ordinary product work.
+                if _deletion_overlaps(candidate, root) and not any(
+                    _strictly_inside(candidate, checkout) and _strictly_inside(checkout, root)
+                    for checkout in checkouts
+                ):
+                    return f"destructive target is pipeline state: {operand}"
+    return None
+
+
+def _closed_repo_root(working_directories):
+    """The closed-milestone repository for these working directories, if any."""
+    for directory in working_directories or [os.getcwd()]:
+        root = subprocess.run(
+            ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
+            capture_output=True, encoding="utf-8", errors="replace", check=False,
+        )
+        if root.returncode != 0:
+            continue
+        repo = Path(root.stdout.strip())
+        if closed_milestone_reason(repo):
+            return repo
+    return None
+
+
+def closed_destructive_scope_reason(arguments, working_directories):
+    """Why a destructive command stays inside pipeline scope, or None outside it.
+
+    A closed milestone accepts no new work, but a scratch file entirely outside
+    the repository and every state root is no work (#468). The allowance needs
+    every operand provably external to the closed repository — the path kinds
+    check the lexical path, the symlink-resolved path, control aliases, and
+    member checkouts — and the state-root check covers the directories that
+    live outside the repository.
+    """
+    end = arguments.index("--") if "--" in arguments else len(arguments)
+    operands = [
+        argument for argument in arguments[:end] if argument and not argument.startswith("-")
+    ] + [argument for argument in arguments[end + 1:] if argument]
+    if not operands:
+        return "destructive command names no target"
+    repo = _closed_repo_root(working_directories)
+    if repo is None:
+        return "pipeline scope cannot be classified"
+    control_roots = repository_control_roots(repo)
+    try:
+        import members  # the guard's runtime directory
+        member_roots = [Path(member["checkout"]) for member in members.read_members(repo)]
+    except Exception as error:
+        return f"member scope cannot be resolved: {error}"
+    for operand in operands:
+        if target_kind(operand, working_directories, repo, control_roots) != "external":
+            return f"destructive target stays inside the repository: {operand}"
+        # A recursive delete of an ancestor removes the repository (and any
+        # member checkout) even though the operand itself classifies external.
+        for candidate in target_paths(operand, working_directories, repo):
+            if _deletion_overlaps(candidate, repo.resolve()):
+                return f"destructive target contains the repository: {operand}"
+            for member_root in member_roots:
+                if _deletion_overlaps(candidate, member_root.resolve(strict=False)):
+                    return f"destructive target contains a member checkout: {operand}"
+    return destructive_state_root_reason(operands, working_directories)
+
+
 def literal_path(operand):
     if len(operand) >= 2 and operand[0] in "\"'" and operand[-1] == operand[0]:
         operand = operand[1:-1]
@@ -3599,6 +3726,10 @@ def _update_ref_names(target, refs, context, no_deref):
 
 
 def _workspace_roots(contexts):
+    return _workspace_roots_for_commons({context["common"] for context in contexts})
+
+
+def _workspace_roots_for_commons(commons):
     roots = [(Path.home() / ".gsd-path").resolve()]
     configured = os.environ.get("GSD_PATH_WORKTREE_ROOT")
     if configured:
@@ -3606,7 +3737,7 @@ def _workspace_roots(contexts):
         if not configured_root.is_absolute():
             raise ValueError("GSD_PATH_WORKTREE_ROOT must be absolute")
         roots.append(configured_root.resolve())
-    for common in {context["common"] for context in contexts}:
+    for common in commons:
         receipts = common / "gsd-path" / "workspaces"
         if not os.path.lexists(receipts):
             continue
@@ -4687,6 +4818,12 @@ def closed_shell_execution_reason(
             shlex.join(plain), plain, True, CLOSED_READ_GIT_COMMANDS
         ):
             continue
+        if command_can_destroy_files(invocation) and closed_destructive_scope_reason(
+            list(invocation[1]), directories
+        ) is None:
+            # A literal delete entirely outside the repository and every state
+            # root is scratch cleanup, not new work on the closed milestone (#468).
+            continue
         return closed
     return None
 
@@ -4717,6 +4854,13 @@ def command_denial(command, working_directories, allow_destructive=True):
             )
         ):
             return DESTRUCTIVE_SHAPE_REASON
+        if destructive:
+            state_reason = destructive_state_root_reason(
+                [operand for _, operands in destructive for operand in operands],
+                working_directories,
+            )
+            if state_reason:
+                return state_reason
         reason = closed_shell_execution_reason(command, tokens, working_directories)
         if reason:
             return reason
