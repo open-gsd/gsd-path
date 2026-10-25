@@ -1077,6 +1077,18 @@ def verify_record(repo: str, command: str, commit: str, result: str,
                 or type(execution.get("exit_code")) is not int
                 or (execution["exit_code"] == 0) != (result == "pass")):
             raise BuildStateError("invalid-execution", "verification output and result disagree")
+        if "cwd" in execution and not isinstance(execution["cwd"], str):
+            raise BuildStateError("invalid-execution", "execution cwd must be a path string")
+        if "base" in execution and not re.fullmatch(r"[0-9a-f]{40}", str(execution["base"])):
+            raise BuildStateError("invalid-execution", "execution base must be a commit sha")
+        location = execution.get("location")
+        if isinstance(location, str) and "cwd" in execution and "worktree" in execution:
+            if location.startswith("sidecar") and execution["cwd"] == execution["worktree"]:
+                raise BuildStateError("invalid-execution",
+                                      "a sidecar Verify cannot name the task checkout as its directory")
+            if location.startswith("isolate") and execution["cwd"] != execution["worktree"]:
+                raise BuildStateError("invalid-execution",
+                                      "an isolate Verify must name its task worktree as its directory")
         entry["execution"] = execution
     path.parent.mkdir(parents=True, exist_ok=True)
     previous = path.read_text(encoding="utf-8") if path.exists() else ""
