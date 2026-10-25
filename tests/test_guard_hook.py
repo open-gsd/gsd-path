@@ -4385,5 +4385,83 @@ class GuardHookTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["permissionDecision"], "deny")
 
 
+class DestructiveScopeTests(unittest.TestCase):
+    """Out-of-repo scratch deletes pass; pipeline state stays protected (#468)."""
+
+    status = GuardHookTests.status
+    make_closed_milestone_repo = GuardHookTests.make_closed_milestone_repo
+    bash_in = GuardHookTests.bash_in
+    assert_denied = GuardHookTests.assert_denied
+    assert_allowed = GuardHookTests.assert_allowed
+
+    def setUp(self) -> None:
+        import tempfile
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.scratch = Path(temporary.name).resolve() / "scratch"
+        self.scratch.mkdir()
+        (self.scratch / "file.txt").write_bytes(b"scratch\n")
+        # A controlled home keeps the state-root check away from this machine's
+        # real ~/.gsd-path tree.
+        self.home = Path(temporary.name).resolve() / "home"
+        self.home.mkdir()
+        patcher = mock.patch.dict(
+            os.environ, {"HOME": str(self.home), "USERPROFILE": str(self.home)}
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def inside_closed(self, repo, command):
+        return {"tool_name": "Bash", "tool_input": {"command": command, "cwd": str(repo)}}
+
+    def test_closed_milestone_allows_out_of_repo_scratch_deletes(self) -> None:
+        repo = self.make_closed_milestone_repo()
+        target = self.scratch / "file.txt"
+        for command in (f"rm {target}", f"rm -f {target}",
+                        f"Remove-Item '{target.as_posix()}'"):
+            with self.subTest(command=command):
+                self.assert_allowed(self.inside_closed(repo, command))
+        # The scratch directory itself is also outside every scope root.
+        self.assert_allowed(self.inside_closed(repo, f"rm -r {self.scratch}"))
+
+    def test_closed_milestone_keeps_denying_in_scope_deletes(self) -> None:
+        repo = self.make_closed_milestone_repo()
+        product = repo / "app.py"
+        product.write_bytes(b"x\n")
+        for command in (
+            f"rm {product}",
+            f"rm {repo / '.project' / 'STATE.md'}",
+            f"rm {repo / '.gsd-path' / 'runtime.json'}",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.inside_closed(repo, command))
+        # Wildcards and variables never reach the scope check: the shape gate
+        # refuses them first.
+        self.assert_denied(self.inside_closed(repo, f"rm {self.scratch}/*.txt"))
+        # A symlink into the repository resolves inside it.
+        link = self.scratch / "link-to-repo"
+        self.addCleanup(lambda: link.unlink() if link.is_symlink() else None)
+        link.symlink_to(repo)
+        self.assert_denied(self.inside_closed(repo, f"rm {link / 'app.py'}"))
+        # A recursive delete of an ANCESTOR removes the repository (and any
+        # state root) even though the operand itself classifies external.
+        self.assert_denied(self.inside_closed(repo, f"rm -r {repo.parent}"))
+        self.assert_denied(self.inside_closed(repo, f"rm -r {self.home}"))
+
+    def test_state_roots_stay_protected_in_every_phase(self) -> None:
+        state = self.home / ".gsd-path" / "runtimes" / "abc123"
+        state.mkdir(parents=True)
+        marker = state / "manifest.json"
+        marker.write_bytes(b"{}\n")
+        repo = self.make_closed_milestone_repo()
+        # Closed milestone: the state root is inside pipeline scope.
+        self.assert_denied(self.inside_closed(repo, f"rm {marker}"))
+        self.assert_denied(self.inside_closed(repo, f"rm -r {state}"))
+        # The same rule denies in an active phase, before the closed check runs.
+        self.assert_denied(self.bash_in(repo, f"rm {marker}"))
+        # A scratch file outside the state root still passes in an active phase.
+        self.assert_allowed(self.bash_in(repo, f"rm {self.scratch / 'file.txt'}"))
+
+
 if __name__ == "__main__":
     unittest.main()
