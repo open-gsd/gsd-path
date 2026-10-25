@@ -1290,13 +1290,16 @@ def evidence_manifest(
             entry["receipt"] = {"source": "task-log", "path": task.task_file}
             entry["reason"] = _ledger_absence_reason(
                 repository, task, landing, member_landing, member_base)
-        elif entry["superseded_by"]:
+        elif entry["superseded_by"] in proven:
             entry["state"] = "superseded"
             entry["reason"] = (f"verify retired by {entry['superseded_by']}; "
                                "the superseding task carries the evidence")
         else:
             entry["state"] = "missing"
             entry["reason"] = "proven landing without a recorded Verify result"
+        if entry["superseded_by"] and entry["superseded_by"] not in proven:
+            note = f"superseding task {entry['superseded_by']} is not landed at this head"
+            entry["reason"] = f"{entry['reason']}; {note}" if entry.get("reason") else note
     gap_members: List[Dict[str, object]] = []
     gap_accepted = False
     gap_reasons: List[str] = []

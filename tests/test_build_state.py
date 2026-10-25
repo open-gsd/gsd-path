@@ -739,6 +739,20 @@ archive: null
         self.assertEqual(t003["state"], "superseded")
         self.assertEqual(t003["superseded_by"], "T005")
 
+    def test_evidence_manifest_needs_the_superseder_landed_at_this_head(self) -> None:
+        head = self.manifest_fixture()
+        landed_three = run_git(self.repo, "rev-parse", f"{head}^")  # T005 lands after T003
+
+        result, payload = self.cli("evidence-manifest", "--project-dir", ".project",
+                                   "--head", landed_three)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        t003 = next(item for item in payload["tasks"] if item["task"] == "T003")
+        self.assertEqual(t003["landing"], landed_three)
+        self.assertEqual(t003["state"], "missing")
+        self.assertEqual(t003["superseded_by"], "T005")
+        self.assertIn("T005 is not landed at this head", t003["reason"])
+
     def test_evidence_manifest_reports_member_project_results_from_final_gaps(self) -> None:
         _, task_file = self.prepare_in_progress_task()
         landed = self.land_task(task_file, 1)
