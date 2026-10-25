@@ -12,6 +12,7 @@ integrated previous branch, locally and on origin.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -1022,9 +1023,111 @@ def bind_next_milestone_branch(
     }
 
 
+def closeout_main(repo: Path, ship: str, base: str, *, apply: bool = False,
+                  runtime_pin_sha: Optional[str] = None) -> dict:
+    """Return a verified closed checkout to the published default without retiring evidence."""
+    if __package__:
+        from . import integration
+    else:
+        import integration
+    repo = _require_worktree_root(repo)
+    state = _validated_shipped_state(repo)
+    if state.get("phase") != "shipped" or state.get("status") != "done":
+        raise PipelineGitError("closeout requires shipped/done state")
+    bound, default = state["branch"], state.get("default_branch", "main")
+    if not isinstance(bound, str) or not is_bound_branch(bound) or not all(re.fullmatch(r"[0-9a-f]{40}", sha) for sha in (ship, base)):
+        raise PipelineGitError("closeout requires an exact bound ship and remote-default SHA")
+    if _run_git(repo, "rev-parse", f"refs/heads/{bound}").stdout.strip() != ship:
+        raise PipelineGitError("closed milestone branch differs from the approved ship")
+    branch = _symbolic_branch(repo)
+    if branch not in (bound, default) or _run_git(repo, "rev-parse", "HEAD").stdout.strip() != (ship if branch == bound else base):
+        raise PipelineGitError("closeout requires the exact ship or its approved default landing")
+    if _run_git(repo, "diff", "--cached", "--quiet", check=False).returncode:
+        raise PipelineGitError("closeout refuses staged changes")
+    changed = _run_git(repo, "status", "--porcelain", "-z", "--untracked-files=all").stdout
+    if any(row[3:] != ".gsd-path/runtime.json" for row in changed.split("\0") if row):
+        raise PipelineGitError("closeout refuses changes outside the runtime pin")
+    pin = repo / ".gsd-path/runtime.json"
+    if pin.parent.is_symlink() or pin.is_symlink() or not pin.is_file():
+        raise PipelineGitError("runtime pin must be a real file")
+    pin_bytes = pin.read_bytes()
+    pin_sha = hashlib.sha256(pin_bytes).hexdigest()
+    head_pin = _run_git(repo, "show", "HEAD:.gsd-path/runtime.json").stdout.encode("utf-8")
+    target_pin = _run_git(repo, "show", f"{base}:.gsd-path/runtime.json").stdout.encode("utf-8")
+    try:
+        for content in (pin_bytes, target_pin):
+            declaration = json.loads(content)
+            if (declaration.get("schema") != "gsd-path/runtime/v1"
+                    or not re.fullmatch(r"[0-9a-f]{64}", declaration.get("digest", ""))):
+                raise ValueError("invalid runtime declaration")
+    except (ValueError, TypeError, AttributeError) as error:
+        raise PipelineGitError("closeout requires valid current and target runtime pins") from error
+    if apply and (runtime_pin_sha is None or (pin_sha != runtime_pin_sha and pin_bytes not in (head_pin, target_pin))):
+        raise PipelineGitError("runtime pin changed since preview")
+    if _run_git(repo, "diff", "--quiet", ship, base, "--", ".project", check=False).returncode:
+        raise PipelineGitError("default branch changes the closed milestone artifacts")
+    owner = _branch_worktrees(repo).get(default)
+    if owner is not None and owner != repo:
+        raise PipelineGitError("default branch is checked out in another worktree")
+    local_main = integration.optional_ref(repo, f"refs/heads/{default}")
+    if local_main and _run_git(repo, "merge-base", "--is-ancestor", local_main, base, check=False).returncode:
+        raise PipelineGitError("local default branch cannot be fast-forwarded")
+    try:
+        proof = integration.validate_integrated(repo, state["milestone"], historical=True)
+    except (integration.ArchiveError, OSError) as error:
+        raise PipelineGitError(str(error)) from error
+    if proof["base"] != base or _remote_ref_sha(repo, f"refs/heads/{default}") != base:
+        raise PipelineGitError("remote default changed since approval")
+    tag_ref = f"refs/tags/{proof['tag']}"
+    published = integration.live_remote_ref(repo, tag_ref)
+    local_tag = integration.optional_ref(repo, tag_ref)
+    if published is None:
+        raise PipelineGitError("published milestone tag is missing")
+    backup = None
+    if local_tag and local_tag != published:
+        try:
+            integration.require_generated_integration_commit(repo,
+                _run_git(repo, "rev-parse", f"{tag_ref}^{{commit}}").stdout.strip(),
+                state["archive"], Path(state["archive"]).name, ship, default, bound)
+        except integration.ArchiveError as error:
+            raise PipelineGitError("local milestone tag is not an abandoned direct integration") from error
+        backup = f"refs/gsd-path/closeout/{Path(state['archive']).name}/local-tag/{local_tag}"
+    result = {"status": "preview", "ship": ship, "base": base, "branch": default,
+              "runtime_pin_sha": pin_sha, "preserved_local_tag": backup, "proof": proof,
+              "runtime_pin": {"from": json.loads(pin_bytes)["digest"], "to": json.loads(target_pin)["digest"]}}
+    if not apply:
+        return result
+    if pin.read_bytes() != pin_bytes or integration.live_remote_ref(repo, tag_ref) != published:
+        raise PipelineGitError("runtime pin or published tag changed during closeout")
+    if backup:
+        existing = integration.optional_ref(repo, backup)
+        if existing not in (None, local_tag):
+            raise PipelineGitError("local tag backup conflicts")
+        _run_git(repo, "update-ref", backup, local_tag, existing or "0" * 40)
+    if local_tag != published:
+        _run_git(repo, "update-ref", tag_ref, published, local_tag or "0" * 40)
+    _run_git(repo, "update-ref", f"refs/heads/{default}", base, local_main or "0" * 40)
+    if pin_bytes != head_pin:
+        _common.atomic_write(pin, head_pin.decode("utf-8"))
+    _run_git(repo, "switch", default)
+    if _run_git(repo, "status", "--porcelain").stdout:
+        raise PipelineGitError("closeout did not produce a clean checkout")
+    try:
+        result["proof"] = integration.validate_integrated(repo, state["milestone"], refresh=False, historical=True)
+    except integration.ArchiveError as error:
+        raise PipelineGitError(str(error)) from error
+    return dict(result, status="complete")
+
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+    closeout = subparsers.add_parser("closeout-main", help="return a verified closed checkout to its published default")
+    closeout.add_argument("--repo", required=True, type=Path)
+    closeout.add_argument("--ship", required=True)
+    closeout.add_argument("--base", required=True)
+    closeout.add_argument("--runtime-pin-sha")
+    closeout.add_argument("--apply", action="store_true")
     bind_next = subparsers.add_parser(
         "bind-next",
         help=(
@@ -1054,7 +1157,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     try:
-        if args.command == "bind-next":
+        if args.command == "closeout-main":
+            result = closeout_main(args.repo, args.ship, args.base,
+                                   apply=args.apply, runtime_pin_sha=args.runtime_pin_sha)
+        elif args.command == "bind-next":
             result = bind_next_milestone_branch(
                 args.repo,
                 args.branch,
