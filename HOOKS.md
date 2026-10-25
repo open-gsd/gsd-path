@@ -11,13 +11,16 @@ Optional enforcement for pipeline invariants prompt contracts cannot guarantee:
 
 Closed branches still allow read-only Git inspection (`status`, `log`, `diff`, plain
 `cat-file` reads of one object, branch and worktree listing) and the router handoff helpers, including
-`git fetch origin`, SHA resolution, and next-base selection. Branch switching remains
+`git fetch [REMOTE]`, SHA resolution, and next-base selection. Branch switching remains
 router-owned. The [ship contract](skills/gsd-path-ship/SKILL.md) owns integration
 conflict handling and published-validation recovery.
 
 `cat-file` options are restricted by `CLOSED_LISTING_GIT_OPTIONS` in
 [`scripts/guard_hook.py`](scripts/guard_hook.py); filter and text-conversion forms
-are blocked because they can execute external commands.
+are blocked because they can execute external commands. A closed-branch fetch takes
+no global option but `-C`, no command-line refspec or option, and a configured remote
+whose repo config fetches read-only; `_closed_fetch_allowed` in the same file owns the
+exact proof.
 
 **Docs:** [DOCS.md](DOCS.md) (hub) · [UPDATE.md](UPDATE.md) (refresh hooks) · [QUICK.md](QUICK.md) (first install with `--hooks`)
 
