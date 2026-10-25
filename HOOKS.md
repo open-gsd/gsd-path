@@ -11,8 +11,10 @@ Optional enforcement for pipeline invariants prompt contracts cannot guarantee:
 
 Closed branches still allow read-only Git inspection (`status`, `log`, `diff`, plain
 `cat-file` reads of one object, branch and worktree listing) and the router handoff helpers, including
-`git fetch [REMOTE]`, SHA resolution, and next-base selection. Branch switching remains
-router-owned. The [ship contract](skills/gsd-path-ship/SKILL.md) owns integration
+`git fetch [REMOTE]`, SHA resolution, and next-base selection. They also allow a
+simple literal delete or move whose every operand is outside the closed repository,
+its member checkouts, and the pipeline state roots, and is no ancestor of them.
+Branch switching remains router-owned. The [ship contract](skills/gsd-path-ship/SKILL.md) owns integration
 conflict handling and published-validation recovery.
 
 `cat-file` options are restricted by `CLOSED_LISTING_GIT_OPTIONS` in
@@ -223,6 +225,10 @@ See [UPDATE.md](UPDATE.md).
   backticks, glob characters (`*`, `?`, `[`, `]`), braces, or `..` path components,
   and must not start with `~`. Quoted spaces in paths and quoted punctuation
   within arguments, such as the shipment event's semicolon, are allowed
+- deletion or move commands, in every phase, that target or contain a
+  pipeline state root (`~/.gsd-path`, `GSD_PATH_WORKTREE_ROOT`, or a pinned
+  workspace root). Deletes inside the agent's own managed worktree under such
+  a root stay allowed. Workspace receipts that cannot be read deny the command
 - deletion or move commands outside a single simple segment, including command
   chains, pipes, newlines, grouping, directory changes, and command substitution
 - deletion or move commands with any argument outside the literal-path character
