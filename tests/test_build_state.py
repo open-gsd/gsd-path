@@ -726,6 +726,19 @@ archive: null
         self.assertEqual(payload["project"]["state"], "missing")
         self.assertIsNone(payload["project"]["members"])
 
+    def test_evidence_manifest_ignores_supersedes_from_a_task_that_never_landed(self) -> None:
+        head = self.manifest_fixture()
+        blocked = self.repo / ".project/tasks/T004-task.md"
+        self.write_task("T004", blocked.read_text(encoding="utf-8")
+                        .replace("files: [", "supersedes: [T003]\nfiles: [", 1))
+
+        result, payload = self.cli("evidence-manifest", "--project-dir", ".project", "--head", head)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        t003 = next(item for item in payload["tasks"] if item["task"] == "T003")
+        self.assertEqual(t003["state"], "superseded")
+        self.assertEqual(t003["superseded_by"], "T005")
+
     def test_evidence_manifest_reports_member_project_results_from_final_gaps(self) -> None:
         _, task_file = self.prepare_in_progress_task()
         landed = self.land_task(task_file, 1)
@@ -760,6 +773,22 @@ archive: null
         result, payload = self.cli("evidence-manifest", "--project-dir", ".project", "--head", landed)
         self.assertEqual(payload["project"]["state"], "missing")
         self.assertIn("reviewed HEAD " + "b" * 40, payload["project"]["reason"])
+
+        # Only the project Verify gap (final-gap-1.md) carries the member project
+        # result; a passing reviewer gap never overrides a blocked project gap.
+        write_gap("blocked", landed)
+        (review / "final-gap-2.md").write_text(
+            "# Gap Review — 2: other risk\n\n"
+            f"Reviewed HEAD: {landed}\n"
+            "Member reviewed HEAD: web " + "a" * 40 + "\n"
+            "Gap verdict: pass\n",
+            encoding="utf-8",
+        )
+        result, payload = self.cli("evidence-manifest", "--project-dir", ".project", "--head", landed)
+        self.assertEqual(payload["project"]["state"], "missing")
+        self.assertIn("verdict blocked", payload["project"]["reason"])
+        self.assertEqual([row["source"] for row in payload["project"]["members"]],
+                         [".project/review/final-gap-1.md"])
 
         tasks = {item["task"]: item for item in payload["tasks"]}
         self.assertEqual(tasks["T001"]["state"], "missing")

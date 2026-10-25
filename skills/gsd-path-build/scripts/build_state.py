@@ -1197,8 +1197,8 @@ def evidence_manifest(
     durable evidence exists at this head). A pass is never inferred from a Log label
     alone: done tasks require a proven first-parent landing, and member rows must
     match the recorded member landing. The project section reports the member
-    milestone project Verify only when a final-gap artifact records a passing verdict
-    at exactly this head (`gap-embedded`), or a reusable ledger row matches PLAN's
+    milestone project Verify only when the project Verify gap (final-gap-1.md)
+    records a passing verdict at exactly this head (`gap-embedded`), or a reusable ledger row matches PLAN's
     project Verify command at this head (`ledger`); a blocked gap verdict or a
     different reviewed HEAD is listed but never accepted. Limits: failed-attempt
     executions kept only in uncommitted dispatch records are not consulted, and a
@@ -1218,6 +1218,8 @@ def evidence_manifest(
     )
     superseded_by: Dict[str, str] = {}
     for task in tasks:
+        if task.status != "done":
+            continue
         for earlier in task.supersedes:
             superseded_by.setdefault(earlier, task.task_id)
     done_paths = {
@@ -1298,30 +1300,24 @@ def evidence_manifest(
     gap_members: List[Dict[str, object]] = []
     gap_accepted = False
     gap_reasons: List[str] = []
-    review_dir = repository.joinpath(*PurePosixPath(canonical_dir).parts) / "review"
-    if review_dir.is_dir() and not review_dir.is_symlink():
-        for path in sorted(review_dir.iterdir()):
-            if _common.is_ignored_junk(path) or not path.is_file():
-                continue
-            if not re.fullmatch(r"final-gap-\d+\.md", path.name):
-                continue
-            text = path.read_text(encoding="utf-8")
-            verdict = GAP_VERDICT_RE.findall(text)
-            reviewed = GAP_HEAD_RE.findall(text)
-            for name, sha in GAP_MEMBER_RE.findall(text):
-                gap_members.append({
-                    "member": name,
-                    "head": sha,
-                    "verdict": verdict[-1] if verdict else None,
-                    "source": f"{canonical_dir}/review/{path.name}",
-                })
-            if not any(name for name, _ in GAP_MEMBER_RE.findall(text)):
-                continue
+    gap_path = repository.joinpath(*PurePosixPath(canonical_dir).parts) / "review" / "final-gap-1.md"
+    if gap_path.is_file() and not gap_path.is_symlink():
+        text = gap_path.read_text(encoding="utf-8")
+        verdict = GAP_VERDICT_RE.findall(text)
+        reviewed = GAP_HEAD_RE.findall(text)
+        for name, sha in GAP_MEMBER_RE.findall(text):
+            gap_members.append({
+                "member": name,
+                "head": sha,
+                "verdict": verdict[-1] if verdict else None,
+                "source": f"{canonical_dir}/review/{gap_path.name}",
+            })
+        if gap_members:
             if verdict and verdict[-1] == "pass" and reviewed and reviewed[-1] == head:
                 gap_accepted = True
             else:
                 gap_reasons.append(
-                    f"{path.name}: verdict {verdict[-1] if verdict else 'unreadable'}"
+                    f"{gap_path.name}: verdict {verdict[-1] if verdict else 'unreadable'}"
                     f" at reviewed HEAD {reviewed[-1] if reviewed else 'unreadable'}")
     plan = _read_file(artifact_path / "plan" / "PLAN.md", f"{artifact_dir}/plan/PLAN.md")
     try:
@@ -1340,8 +1336,6 @@ def evidence_manifest(
             project_state = "ledger"
         elif project_lookup["hit"]:
             project_reason = "the recorded project Verify row at this head failed"
-    elif gap_members:
-        project_reason = "final-gap member results exist but none prove this head"
     return {
         "command": "evidence-manifest",
         "project_dir": artifact_dir,
