@@ -41,8 +41,12 @@ fails the SC.
 
 Allow changed paths only in the task's `files` plus its assigned task file.
 Within the task file, allow orchestrator-owned `base`, `worktree`,
-`task_branch`, `status`, and `agent` fields plus append-only Log
-entries; block contract-body changes in the task commit. Warn on disabled tests
+`task_branch`, `status`, and `agent` fields — and, on a member task,
+`member_base` — plus append-only Log entries; block contract-body changes
+in the task commit. `base` names the task's starting commit in the
+coordinator repository; `member_base` names the starting commit in the
+member repository from which the member task branch and isolate were
+created. Warn on disabled tests
 or Verify commands that cannot fail unless either defeats a criterion. Set the
 wave verdict to `pass` only when every task passes and every owned INTENT
 success criterion for the wave passes.
