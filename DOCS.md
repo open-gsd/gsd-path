@@ -415,6 +415,16 @@ files. The supplied package must match both the version and digest; custom sourc
 builds may share a release version while having different digests. No command
 silently substitutes a newer runtime, and status/guards never install or download.
 
+To publish a runtime to the shared store without selecting it for any project,
+run `python3 -B <absolute runtime_store.py> publish --source /path/to/package`
+(and optionally `--provenance "hotfix for <issue>"`). It prints the runtime's
+version, digest, and verified store path as JSON. Publication alone neither
+authorizes execution nor changes a project's trusted runtime — a project runs
+the new bytes only after its own pin selects that digest. `--expected-version`
+with `--expected-digest` refuses a source that does not match, `--dry-run`
+computes the identity without writing, and `--repair` replaces an entry that
+fails verification.
+
 For an old `.gsd-path/runtime/`, run `gsd-path --runtime-migrate --project
 /absolute/project --dry-run`, then the same command without `--dry-run` and review
 the Git diff. Migration removes the generated files from the checkout and writes
