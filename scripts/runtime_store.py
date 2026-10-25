@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import shlex
+import sys
 import tempfile
 import time
 from contextlib import contextmanager
@@ -336,3 +337,51 @@ def operate(source, project, action, *, dry_run=False, provenance=None):
         raise
     journal.unlink()
     return {**pin, "backup": str(backup)} if backup else pin
+
+
+def main(argv=None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Content-addressed runtime store operations. Publication only adds a "
+                    "store entry: it never selects a runtime for, or writes to, any project.")
+    subcommands = parser.add_subparsers(dest="command", required=True)
+    publish_parser = subcommands.add_parser(
+        "publish", help="publish and verify a runtime without touching any project pin")
+    publish_parser.add_argument("--source", required=True,
+                                help="runtime source root (holds package.json and scripts/)")
+    publish_parser.add_argument("--expected-version",
+                                help="with --expected-digest: refuse a source that differs")
+    publish_parser.add_argument("--expected-digest",
+                                help="with --expected-version: refuse a source that differs")
+    publish_parser.add_argument("--provenance", default=None,
+                                help="provenance note echoed in the output; the store never keeps it")
+    publish_parser.add_argument("--dry-run", action="store_true",
+                                help="compute the identity without writing to the store")
+    publish_parser.add_argument("--repair", action="store_true",
+                                help="replace a store entry that fails verification")
+    arguments = parser.parse_args(argv)
+    source = Path(arguments.source).resolve()
+    if (arguments.expected_version is None) != (arguments.expected_digest is None):
+        parser.error("--expected-version and --expected-digest are given together or not at all")
+    expected = None
+    if arguments.expected_version is not None:
+        if not arguments.expected_version or not arguments.expected_digest:
+            parser.error("--expected-version and --expected-digest must be non-empty")
+        expected = {"schema": status_runtime.RUNTIME_SCHEMA,
+                    "version": arguments.expected_version,
+                    "digest": arguments.expected_digest}
+    try:
+        pin = publish(source, expected=expected,
+                      dry_run=arguments.dry_run, repair=arguments.repair)
+        path = None if arguments.dry_run else str(status_runtime.validate_runtime(pin))
+    except (ValueError, OSError) as error:
+        print(f"publish failed: {error}", file=sys.stderr)
+        return 1
+    result = {**pin, "path": path, "provenance": arguments.provenance}
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

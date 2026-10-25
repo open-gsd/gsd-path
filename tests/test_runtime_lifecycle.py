@@ -790,6 +790,45 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.pin()["provenance"], {"source": "npm @opengsd/gsd-path@1.4.1"})
 
+    def publish_command(self, *extra):
+        return subprocess.run(
+            [sys.executable, "-B", str(SOURCE / "scripts/runtime_store.py"),
+             "publish", "--source", str(SOURCE), *extra],
+            capture_output=True, encoding="utf-8", errors="replace",
+        )
+
+    def test_publish_cli_needs_no_project_and_keeps_pins_untouched(self) -> None:
+        self.provision()
+        pin_before = (self.repo / ".gsd-path/runtime.json").read_bytes()
+
+        result = self.publish_command("--provenance", "hotfix for #482")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["version"], json.loads(
+            (SOURCE / "package.json").read_text(encoding="utf-8"))["version"])
+        self.assertTrue(payload["digest"])
+        store = self.home / ".gsd-path" / "runtimes" / payload["digest"]
+        self.assertEqual(payload["path"], str(store))
+        self.assertTrue((store / "manifest.json").is_file())
+        self.assertEqual(payload["provenance"], "hotfix for #482")
+        # Publication writes no project state: the pin is byte-identical.
+        self.assertEqual((self.repo / ".gsd-path/runtime.json").read_bytes(), pin_before)
+
+    def test_publish_cli_expected_mismatch_and_dry_run(self) -> None:
+        result = self.publish_command(
+            "--expected-version", "0.0.0", "--expected-digest", "0" * 64)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match declared runtime", result.stderr)
+        self.assertFalse((self.home / ".gsd-path" / "runtimes").exists())
+
+        result = self.publish_command("--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertIsNone(payload["path"])
+        self.assertIsNone(payload["provenance"])
+        self.assertFalse((self.home / ".gsd-path" / "runtimes").exists())
+
     def test_reupgrade_without_provenance_flags_preserves_provenance(self):
         self.provision()
         result = self.runtime_command("--runtime-upgrade", extra=[
