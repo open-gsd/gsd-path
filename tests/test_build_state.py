@@ -1173,6 +1173,36 @@ archive: null
         self.assertIn(".gitignore:1:build/ excludes .project/build/verify-ledger.jsonl", result.stdout + result.stderr)
         self.assertFalse((self.repo / ".project" / "build" / "verify-ledger.jsonl").exists())
 
+    def test_verify_record_validates_execution_provenance_fields(self) -> None:
+        commit = self.commit_all("seed")
+        good = {"stdout": "", "stderr": "", "exit_code": 0, "location": "sidecar gsd-path-verify/task-t001-verify",
+                "worktree": str(self.repo), "cwd": "/tmp/verify-sidecar", "base": "0" * 40}
+        recorded = build_state.verify_record(str(self.repo), "true", commit, "pass", execution=dict(good))
+        self.assertEqual(recorded["entry"]["execution"]["cwd"], "/tmp/verify-sidecar")
+        for field, bad in (("cwd", None), ("base", "not-a-sha")):
+            with self.subTest(field=field):
+                execution = dict(good)
+                execution[field] = bad
+                with self.assertRaises(build_state.BuildStateError) as failure:
+                    build_state.verify_record(str(self.repo), "true", commit, "pass", execution=execution)
+                self.assertEqual(failure.exception.code, "invalid-execution")
+        # Location and directory must agree: a sidecar Verify never shares the task
+        # checkout path, an isolate Verify never leaves its task worktree.
+        with self.subTest(coherence="sidecar shares the checkout"):
+            execution = dict(good, cwd=str(self.repo))
+            with self.assertRaises(build_state.BuildStateError) as failure:
+                build_state.verify_record(str(self.repo), "true", commit, "pass", execution=execution)
+            self.assertIn("sidecar", str(failure.exception))
+        with self.subTest(coherence="isolate leaves its worktree"):
+            execution = dict(good, location="isolate gsd-path-task/T001", cwd="/tmp/elsewhere")
+            with self.assertRaises(build_state.BuildStateError) as failure:
+                build_state.verify_record(str(self.repo), "true", commit, "pass", execution=execution)
+            self.assertIn("isolate", str(failure.exception))
+        with self.subTest(coherence="isolate inside its worktree is accepted"):
+            execution = dict(good, location="isolate gsd-path-task/T001", cwd=str(self.repo))
+            recorded = build_state.verify_record(str(self.repo), "true", commit, "pass", execution=execution)
+            self.assertEqual(recorded["entry"]["execution"]["cwd"], str(self.repo))
+
     def test_verify_ledger_preserves_shell_semantics_and_ignores_legacy(self) -> None:
         commit = self.commit_all("seed")
         passed = "test 'a b' = 'a b'"

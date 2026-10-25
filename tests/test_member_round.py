@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -255,6 +256,14 @@ class MemberRoundTests(unittest.TestCase):
         self.assertEqual(set(landed), {"T001", "T002"})
         self.assertEqual(landed["T002"]["mode"], "member")
         self.assertTrue(landed["T002"]["ledger"])
+        # A member Verify runs inside its own task worktree: cwd and worktree agree, and
+        # its base names the member repository's starting commit, not the coordinator's.
+        self.assertEqual(landed["T002"]["verify"]["cwd"], landed["T002"]["verify"]["worktree"])
+        task_text = (self.root / self.task_file).read_text(encoding="utf-8")
+        member_base = re.search(r"^member_base: ([0-9a-f]{40})$", task_text, re.M).group(1)
+        self.assertEqual(landed["T002"]["verify"]["base"], member_base)
+        coordinator_base = re.search(r"^base: ([0-9a-f]{40})$", task_text, re.M).group(1)
+        self.assertNotEqual(member_base, coordinator_base)
         rows = [json.loads(line) for line in
                 (self.root / ".project" / "build" / "verify-ledger.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertIn(("web", landed["T002"]["landing"]), [(row.get("repo"), row["commit"]) for row in rows])

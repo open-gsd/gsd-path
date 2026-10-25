@@ -534,6 +534,10 @@ class DispatchDriverTests(unittest.TestCase):
         ledger = (root / ".project/build/verify-ledger.jsonl").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(ledger), 1)
         self.assertEqual([item["ledger"] for item in receipt["landed"]], [True, False])
+        # A parallel Verify runs inside its task isolate: cwd and worktree agree.
+        for item in receipt["landed"]:
+            self.assertEqual(item["verify"]["cwd"], item["verify"]["worktree"])
+            self.assertRegex(item["verify"]["base"], r"^[0-9a-f]{40}$")
         for task in ("T001", "T002"):
             text = (root / f".project/tasks/{task}-demo.md").read_text(encoding="utf-8")
             self.assertIn("status: done", text)
@@ -1051,6 +1055,12 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertTrue(own["reuse"], own)
         self.assertNotIn("regressions", own["entry"]["execution"])
         self.assertFalse(lookup(str(root), verify_t001, landed["commit"])["hit"])
+        # The serial Verify runs in the sidecar; `cwd` names that directory, `worktree` the checkout.
+        execution = own["entry"]["execution"]
+        self.assertTrue(execution["cwd"].endswith("task-t002-verify"), execution)
+        self.assertNotEqual(execution["cwd"], execution["worktree"])
+        self.assertEqual(Path(execution["worktree"]).resolve(), root.resolve())
+        self.assertRegex(execution["base"], r"^[0-9a-f]{40}$")
 
     def test_later_wave_task_without_a_shared_file_runs_only_its_own_verify(self) -> None:
         root = self.root
