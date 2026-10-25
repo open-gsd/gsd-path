@@ -1,3 +1,4 @@
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,6 +38,53 @@ class MemberRetirementTests(unittest.TestCase):
         self.assertEqual(self.remote_ref("refs/heads/main"), self.merge)
         self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), tag_object)
         self.retire()  # a rerun after a crash finds nothing left to retire
+
+    def test_retirement_removes_a_bound_checkout_with_submodules(self) -> None:
+        # A member product tree can carry submodules that its Prepare step
+        # initialises; git refuses a plain worktree removal for them no matter
+        # how clean the superproject is (#486).
+        nested = self.root.parent / "nested"
+        git(self.root.parent, "init", "-q", "-b", "main", str(nested))
+        git(nested, "config", "user.name", "t")
+        git(nested, "config", "user.email", "t@t")
+        (nested / "lib.txt").write_bytes("submodule\n".encode("utf-8"))
+        git(nested, "add", ".")
+        git(nested, "commit", "-q", "-m", "nested base")
+        nested_tip = git(nested, "rev-parse", "HEAD")
+        advance = self.root.parent / "advance"
+        git(self.member, "worktree", "add", "-q", "--detach", str(advance), self.member_tip)
+        (advance / ".gitmodules").write_bytes(
+            (f'[submodule "vendor/lib"]\n\tpath = vendor/lib\nurl = {nested.as_posix()}\n').encode("utf-8"))
+        git(advance, "add", ".gitmodules")
+        git(advance, "update-index", "--add", "--cacheinfo", f"160000,{nested_tip},vendor/lib")
+        git(advance, "commit", "-q", "-m", "member: vendor the lib")
+        self.member_tip = git(advance, "rev-parse", "HEAD")
+        git(self.member, "branch", "-f", "gsd-path/demo-M001", self.member_tip)
+        # The advance worktree's own index carries the gitlink, so its removal
+        # needs force too — the very refusal this test exercises at retire time.
+        git(self.member, "worktree", "remove", "--force", str(advance))
+
+        self.integrate()
+        # Local-path submodule clones need the file transport, which git only
+        # re-enables from the command line for submodules.
+        initialised = subprocess.run(
+            ["git", "-c", "protocol.file.allow=always", "-C", str(self.bound),
+             "submodule", "update", "--init"], capture_output=True, encoding="utf-8")
+        self.assertEqual(initialised.returncode, 0, initialised.stderr)
+        self.assertEqual(git(self.bound, "status", "--porcelain", "--untracked-files=all"), "")
+        self.assertTrue((self.bound / "vendor" / "lib" / "lib.txt").is_file())
+
+        self.retire()
+
+        self.assertFalse(self.bound.exists())
+        self.assertEqual(self.remote_ref(BOUND), "")
+
+    def test_dirty_bound_checkout_blocks_retirement_before_the_remote_delete(self) -> None:
+        self.integrate()
+        (self.bound / "dirty.txt").write_bytes("dirt\n".encode("utf-8"))
+        with self.assertRaisesRegex(ArchiveError, "is not clean"):
+            self.retire()
+        self.assertEqual(self.remote_ref(BOUND), self.member_tip)
 
     def test_moved_remote_bound_branch_blocks_retirement(self) -> None:
         self.integrate()
