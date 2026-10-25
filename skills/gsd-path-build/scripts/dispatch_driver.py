@@ -778,15 +778,23 @@ def land_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
         except isolation.IsolationError as error:
             raise DriverStop(str(error), task=task_id) from error
         execution, reruns = landing_verify(command, regressions, sidecar_path)
+        # The serial Verify runs in the sidecar, not the task checkout; `cwd` names the
+        # directory the command saw, `worktree` the task checkout it will land on.
+        execution_dir = sidecar_path
+        execution_base = base
         location = f"sidecar {sidecar['branch']}"
         isolation.clean_verify(primary, sidecar_path, base, str(sidecar["branch"]))
         isolation.retire(primary, sidecar_path, str(sidecar["branch"]), False)
     else:
         execution, reruns = landing_verify(command, regressions, worktree)
+        execution_dir = worktree
+        # A member Verify starts from the member repository's base, not the coordinator's.
+        execution_base = str(state["member_base"]) if state["mode"] == "member" else base
         location = f"isolate {state['task_branch']}"
     passed = execution["exit_code"] == 0
     broken = [item for item in reruns if item["exit_code"]]
-    execution.update({"worktree": str(worktree), "location": location})
+    execution.update({"worktree": str(worktree), "cwd": str(execution_dir),
+                      "base": execution_base, "location": location})
     evidence_dir = (Path(str(state["_path"])).parent if state.get("_path")
                     else records_root(primary) / task_id / f"manual-{now().replace(':', '')}")
     evidence_dir.mkdir(parents=True, exist_ok=True)
