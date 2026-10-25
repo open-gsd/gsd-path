@@ -378,8 +378,7 @@ def main(argv=None) -> int:
     except (ValueError, OSError) as error:
         print(f"publish failed: {error}", file=sys.stderr)
         return 1
-    result = {**pin, "path": path,
-              "provenance": arguments.provenance or str(source)}
+    result = {**pin, "path": path, "provenance": arguments.provenance}
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 

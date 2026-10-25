@@ -826,6 +826,7 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertIsNone(payload["path"])
+        self.assertIsNone(payload["provenance"])
         self.assertFalse((self.home / ".gsd-path" / "runtimes").exists())
 
     def test_reupgrade_without_provenance_flags_preserves_provenance(self):
