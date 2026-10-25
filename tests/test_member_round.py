@@ -267,6 +267,15 @@ class MemberRoundTests(unittest.TestCase):
         rows = [json.loads(line) for line in
                 (self.root / ".project" / "build" / "verify-ledger.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertIn(("web", landed["T002"]["landing"]), [(row.get("repo"), row["commit"]) for row in rows])
+        # The manifest joins both landings to their authoritative evidence; the member row
+        # is found through the coordinator record commit's Member line.
+        manifest = build_state.evidence_manifest(
+            str(self.root), ".project", git(self.root, "rev-parse", "HEAD"))
+        states = {item["task"]: item for item in manifest["tasks"]}
+        self.assertEqual(states["T001"]["state"], "ledger" if landed["T001"]["ledger"] else "log-only")
+        self.assertEqual(states["T002"]["state"], "ledger")
+        self.assertEqual(states["T002"]["receipt"],
+                         {"source": "verify-ledger", "commit": landed["T002"]["landing"]})
         bound = "gsd-path/demo-M001"
         self.assertEqual(git(self.member, "show", f"{bound}:tests/test_app.py"), "print('hello')")
         self.assertEqual(git(self.member, "log", "-1", "--format=%s", bound), "T002: Demo task T002")

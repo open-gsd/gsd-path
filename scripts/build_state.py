@@ -1111,6 +1111,251 @@ def verify_lookup(repo: str, command: str, commit: str, member: Optional[str] = 
     }
 
 
+VERIFY_LOG_RE = re.compile(r"orchestrator Verify \((?:isolate|sidecar) [^)]+\): (pass|fail), exit \d+")
+MEMBER_RECORD_RE = re.compile(r"^Member: (\S+) ([0-9a-f]{40}) ([0-9a-f]{40})$", re.MULTILINE)
+GAP_MEMBER_RE = re.compile(r"^Member reviewed HEAD: (\S+) ([0-9a-f]{40})$", re.MULTILINE)
+GAP_HEAD_RE = re.compile(r"^Reviewed HEAD: ([0-9a-f]{40})$", re.MULTILINE)
+GAP_VERDICT_RE = re.compile(r"^Gap verdict: (pass|blocked)$", re.MULTILINE)
+
+
+def _proven_landings(
+    repository: Path,
+    done_paths: Dict[str, Path],
+    canonical_tasks_dir: str,
+    head: str,
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Map each provably landed task id to its landing commit and record proof failures."""
+
+    def collect(payload: Mapping[str, object]) -> Dict[str, str]:
+        proven: Dict[str, str] = {}
+        for item in payload["tasks"]:  # type: ignore[index]
+            if not isinstance(item, Mapping):
+                continue
+            if str(item.get("verdict")) in LANDED_VERDICTS and item.get("commit"):
+                proven[str(item.get("task_id"))] = str(item["commit"])
+        return proven
+
+    try:
+        batch = verify_landed_task_files(repository, list(done_paths.values()), canonical_tasks_dir, head)
+        return collect(batch), {}
+    except IsolationError:
+        pass
+    proven: Dict[str, str] = {}
+    errors: Dict[str, str] = {}
+    for task_id, path in sorted(done_paths.items()):
+        try:
+            single = verify_landed_task_files(repository, [path], canonical_tasks_dir, head)
+        except IsolationError as error:
+            errors[task_id] = str(error)
+            continue
+        found = collect(single)
+        if task_id in found:
+            proven[task_id] = found[task_id]
+    return proven, errors
+
+
+def _ledger_absence_reason(
+    repository: Path,
+    task: Task,
+    landing: str,
+    member_landing: Optional[str],
+    member_base: Optional[str],
+) -> str:
+    """Explain why a passing task has no reusable ledger row."""
+
+    if task.repo:
+        if not member_landing or not member_base:
+            return "member record does not name the member landing"
+        try:
+            checkout = _member_checkout(repository, task.repo)
+            parent = _git_output(checkout, "rev-parse", f"{member_landing}^")
+        except BuildStateError:
+            return "member checkout unavailable — the record condition cannot be re-derived"
+        return ("ledger row absent although the member landing meets the record condition"
+                if parent == member_base else
+                "member landing parent differs from the member base — row deliberately not written")
+    parent = _git_output(repository, "rev-parse", f"{landing}^")
+    return ("ledger row absent although the landing meets the record condition"
+            if parent == task.base else
+            "landing parent differs from the recorded base — row deliberately not written")
+
+
+def evidence_manifest(
+    repo: str,
+    project_dir: str,
+    head: str,
+    canonical_project_dir: str = DEFAULT_PROJECT_DIR,
+) -> Dict[str, object]:
+    """Join every task to its authoritative accepted evidence and classify the result.
+
+    States: `ledger` (a reusable verify-ledger row matches the task's Verify command
+    at its proven landing — for member tasks, at the member landing recorded in the
+    coordinator record body), `log-only` (the retained task Log records the isolated
+    Verify pass and the landing is proven, but no reusable row exists), `rejected`
+    (the Log records a failed Verify, or a ledger row at the landing failed), and
+    `superseded` / `missing` (a plan-approved supersedes retired the Verify, or no
+    durable evidence exists at this head). A pass is never inferred from a Log label
+    alone: done tasks require a proven first-parent landing, and member rows must
+    match the recorded member landing. The project section reports the member
+    milestone project Verify only when a final-gap artifact records a passing verdict
+    at exactly this head (`gap-embedded`), or a reusable ledger row matches PLAN's
+    project Verify command at this head (`ledger`); a blocked gap verdict or a
+    different reviewed HEAD is listed but never accepted. Limits: failed-attempt
+    executions kept only in uncommitted dispatch records are not consulted, and a
+    noncanonical task artifact aborts with `invalid-task-file` naming the file — the
+    same strictness as every other build_state command; fix or flag the file first.
+    """
+
+    repository = _repo_root(repo)
+    artifact_dir, artifact_path = _project_path(repository, project_dir)
+    canonical_dir, _ = _project_path(repository, canonical_project_dir)
+    if not FULL_SHA_RE.fullmatch(head) or not _commit_resolves(repository, head):
+        raise BuildStateError("invalid-head", "--head must be a full, existing commit SHA")
+    if _git_output(repository, "rev-parse", f"{head}^{{commit}}") != head:
+        raise BuildStateError("invalid-head", "--head must resolve to itself")
+    tasks = _load_tasks(
+        repository, artifact_dir, artifact_path, canonical_project_dir=canonical_dir
+    )
+    superseded_by: Dict[str, str] = {}
+    for task in tasks:
+        for earlier in task.supersedes:
+            superseded_by.setdefault(earlier, task.task_id)
+    done_paths = {
+        task.task_id: artifact_path / "tasks" / Path(task.task_file).name
+        for task in tasks if task.status == "done"
+    }
+    canonical_tasks_dir = str(PurePosixPath(canonical_dir) / "tasks")
+    proven, proof_errors = (
+        _proven_landings(repository, done_paths, canonical_tasks_dir, head) if done_paths else ({}, {})
+    )
+    ledger_path = _ledger_path(repository)
+    entries = _ledger_entries(ledger_path) if ledger_path.exists() else []
+    manifest: List[Dict[str, object]] = []
+    for task in tasks:
+        text = _read_file(
+            artifact_path / "tasks" / Path(task.task_file).name,
+            f"{artifact_dir}/tasks/{Path(task.task_file).name}",
+        )
+        results = VERIFY_LOG_RE.findall(text)
+        entry: Dict[str, object] = {
+            "task": task.task_id,
+            "title": task.title,
+            "status": task.status,
+            "repo": task.repo or None,
+            "verify_command": _common.task_verify_command(text),
+            "superseded_by": superseded_by.get(task.task_id),
+        }
+        manifest.append(entry)
+        if task.status != "done":
+            entry["state"] = "rejected" if "fail" in results else "missing"
+            entry["reason"] = "verify failed" if "fail" in results else "task never landed"
+            if "fail" in results:
+                entry["receipt"] = {"source": "task-log", "path": task.task_file}
+            continue
+        landing = proven.get(task.task_id)
+        if landing is None:
+            entry["state"] = "missing"
+            entry["reason"] = ("landing proof failed: " + proof_errors[task.task_id]
+                               if task.task_id in proof_errors
+                               else "done task without a provable first-parent landing at this head")
+            continue
+        entry["landing"] = landing
+        member_landing: Optional[str] = None
+        member_base: Optional[str] = None
+        if task.repo:
+            body = _git_output(repository, "log", "-1", "--format=%b", landing)
+            record = MEMBER_RECORD_RE.search(body)
+            if record is None or record.group(1) != task.repo:
+                entry["state"] = "missing"
+                entry["reason"] = "member record commit does not name this member's landing"
+                continue
+            member_landing, member_base = record.group(2), record.group(3)
+        lookup_commit = member_landing or landing
+        if not entry["verify_command"]:
+            entry["state"] = "missing"
+            entry["reason"] = "landed task without a Verify command"
+            continue
+        try:
+            lookup = verify_lookup(str(repository), str(entry["verify_command"]), lookup_commit,
+                                   task.repo or None)
+        except BuildStateError:
+            lookup = None
+        if lookup is not None and lookup["hit"]:
+            entry["state"] = "ledger" if lookup["reuse"] else "rejected"
+            entry["receipt"] = {"source": "verify-ledger", "commit": lookup_commit}
+        elif "pass" in results:
+            entry["state"] = "log-only"
+            entry["receipt"] = {"source": "task-log", "path": task.task_file}
+            entry["reason"] = _ledger_absence_reason(
+                repository, task, landing, member_landing, member_base)
+        elif entry["superseded_by"]:
+            entry["state"] = "superseded"
+            entry["reason"] = (f"verify retired by {entry['superseded_by']}; "
+                               "the superseding task carries the evidence")
+        else:
+            entry["state"] = "missing"
+            entry["reason"] = "proven landing without a recorded Verify result"
+    gap_members: List[Dict[str, object]] = []
+    gap_accepted = False
+    gap_reasons: List[str] = []
+    review_dir = repository.joinpath(*PurePosixPath(canonical_dir).parts) / "review"
+    if review_dir.is_dir() and not review_dir.is_symlink():
+        for path in sorted(review_dir.iterdir()):
+            if _common.is_ignored_junk(path) or not path.is_file():
+                continue
+            if not re.fullmatch(r"final-gap-\d+\.md", path.name):
+                continue
+            text = path.read_text(encoding="utf-8")
+            verdict = GAP_VERDICT_RE.findall(text)
+            reviewed = GAP_HEAD_RE.findall(text)
+            for name, sha in GAP_MEMBER_RE.findall(text):
+                gap_members.append({
+                    "member": name,
+                    "head": sha,
+                    "verdict": verdict[-1] if verdict else None,
+                    "source": f"{canonical_dir}/review/{path.name}",
+                })
+            if not any(name for name, _ in GAP_MEMBER_RE.findall(text)):
+                continue
+            if verdict and verdict[-1] == "pass" and reviewed and reviewed[-1] == head:
+                gap_accepted = True
+            else:
+                gap_reasons.append(
+                    f"{path.name}: verdict {verdict[-1] if verdict else 'unreadable'}"
+                    f" at reviewed HEAD {reviewed[-1] if reviewed else 'unreadable'}")
+    plan = _read_file(artifact_path / "plan" / "PLAN.md", f"{artifact_dir}/plan/PLAN.md")
+    try:
+        project_command = check_handoffs._line_value(plan, "Project verify:")
+    except check_handoffs.HandoffError:
+        project_command = ""
+    project_state = "missing"
+    project_reason: Optional[str] = None
+    if gap_accepted:
+        project_state = "gap-embedded"
+    elif gap_reasons:
+        project_reason = "; ".join(gap_reasons)
+    elif project_command:
+        project_lookup = verify_lookup(str(repository), project_command, head)
+        if project_lookup["reuse"]:
+            project_state = "ledger"
+        elif project_lookup["hit"]:
+            project_reason = "the recorded project Verify row at this head failed"
+    elif gap_members:
+        project_reason = "final-gap member results exist but none prove this head"
+    return {
+        "command": "evidence-manifest",
+        "project_dir": artifact_dir,
+        "canonical_project_dir": canonical_dir,
+        "head": head,
+        "tasks": manifest,
+        "project": {
+            "members": gap_members or None,
+            "state": project_state,
+            **({"reason": project_reason} if project_reason else {}),
+        },
+    }
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -1143,6 +1388,13 @@ def _parser() -> argparse.ArgumentParser:
     lookup_parser.add_argument("--repo", required=True)
     lookup_parser.add_argument("--command", required=True, dest="verify_command")
     lookup_parser.add_argument("--commit", required=True)
+    manifest_parser = subcommands.add_parser(
+        "evidence-manifest", help="join every task to its authoritative accepted evidence"
+    )
+    manifest_parser.add_argument("--repo", required=True)
+    manifest_parser.add_argument("--project-dir", default=DEFAULT_PROJECT_DIR)
+    manifest_parser.add_argument("--head", required=True)
+    manifest_parser.add_argument("--canonical-project-dir", default=DEFAULT_PROJECT_DIR)
     return parser
 
 
@@ -1159,6 +1411,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
         elif arguments.command == "verify-lookup":
             result = verify_lookup(arguments.repo, arguments.verify_command, arguments.commit)
+        elif arguments.command == "evidence-manifest":
+            result = evidence_manifest(
+                arguments.repo,
+                arguments.project_dir,
+                arguments.head,
+                arguments.canonical_project_dir,
+            )
         else:
             result = verify_landed_tasks(
                 arguments.repo,

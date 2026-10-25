@@ -641,6 +641,130 @@ archive: null
             ".project/tasks/T001-task.md",
         )
 
+    def manifest_fixture(self) -> str:
+        """Five tasks covering every evidence state; returns the manifest head."""
+        self.write_plan((
+            (("T001", "First", (), ("app.py",)),),
+            (("T002", "Second", (), ("two.py",)),),
+            (("T003", "Third", (), ("three.py",)),),
+            (("T004", "Fourth", (), ("four.py",)),),
+            (("T005", "Fifth", (), ("five.py",)),),
+        ))
+        for name in ("app.py", "two.py", "three.py", "four.py", "five.py"):
+            (self.repo / name).write_bytes(b"value = 0\n")
+        titles = {"T001": "First", "T002": "Second", "T003": "Third", "T004": "Fourth", "T005": "Fifth"}
+        products = {"T001": "app.py", "T002": "two.py", "T003": "three.py",
+                    "T004": "four.py", "T005": "five.py"}
+        for task_id, title in titles.items():
+            pending = task_text(task_id, title, int(task_id[1:]), (), (products[task_id],))
+            if task_id == "T005":  # plan-approved supersedes belongs in the plan-era file
+                pending = pending.replace("files: [", "supersedes: [T003]\nfiles: [", 1)
+            self.write_task(task_id, pending)
+        base = self.commit_all("plan")
+        verify = "\n## Verify\n\n```bash\npython3 -c 'print(1)'\n```\n"
+
+        def activate_and_land(task_id: str, title: str, task_base: str, product: str,
+                              sequence: int, log: tuple[str, ...],
+                              extra_frontmatter: str = "") -> str:
+            """Activate the task in the working tree (uncommitted) and land it."""
+            task_file = f".project/tasks/{task_id}-task.md"
+            text = task_text(task_id, title, int(task_id[1:]), (), (product,),
+                             status="in-progress", agent="builder", base=task_base,
+                             worktree=str(self.repo), log=log)
+            if extra_frontmatter:
+                text = text.replace("files: [", extra_frontmatter + "files: [", 1)
+            (self.repo / task_file).write_bytes((text + verify).encode("utf-8"))
+            (self.repo / product).write_bytes(f"value = {sequence}\n".encode("utf-8"))
+            return str(isolation.land(
+                self.repo, self.repo, task_base, task_id, title, task_file, [product]
+            )["commit"])
+
+        # T001 lands with a passing Log line and a recorded ledger row: state `ledger`.
+        landed_one = activate_and_land(
+            "T001", "First", base, "app.py", 1,
+            ("created", "orchestrator Verify (isolate gsd-path-task/T001): pass, exit 0"))
+        self.assertEqual(self.cli("verify-record", "--command", "python3 -c 'print(1)'",
+                                  "--commit", landed_one, "--result", "pass")[0].returncode, 0)
+        # T002 lands with a passing Log line but no ledger row: state `log-only`.
+        landed_two = activate_and_land(
+            "T002", "Second", landed_one, "two.py", 2,
+            ("created", "orchestrator Verify (sidecar gsd-path-verify/task-t002-verify): pass, exit 0"))
+        # T003 lands without any Verify evidence; T005 supersedes it: state `superseded`.
+        landed_three = activate_and_land("T003", "Third", landed_two, "three.py", 3, ("created",))
+        # T005 supersedes T003 and lands with its own ledger row.
+        landed_five = activate_and_land(
+            "T005", "Fifth", landed_three, "five.py", 5,
+            ("created", "orchestrator Verify (isolate gsd-path-task/T005): pass, exit 0"),
+            extra_frontmatter="supersedes: [T003]\n")
+        self.assertEqual(self.cli("verify-record", "--command", "python3 -c 'print(1)'",
+                                  "--commit", landed_five, "--result", "pass")[0].returncode, 0)
+        # T004 stays blocked with a failed Verify Log line (never landed): state `rejected`.
+        self.write_task("T004", task_text(
+            "T004", "Fourth", 4, (), ("four.py",), status="blocked", agent="builder",
+            base=landed_three, worktree=str(self.repo),
+            log=("created", "orchestrator Verify (isolate gsd-path-task/T004): fail, exit 1"),
+        ))
+        return landed_five
+
+    def test_evidence_manifest_classifies_every_task_state(self) -> None:
+        head = self.manifest_fixture()
+
+        result, payload = self.cli("evidence-manifest", "--project-dir", ".project", "--head", head)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        states = {item["task"]: item for item in payload["tasks"]}
+        self.assertEqual(states["T001"]["state"], "ledger")
+        self.assertEqual(states["T001"]["receipt"], {"source": "verify-ledger", "commit": states["T001"]["landing"]})
+        self.assertEqual(states["T002"]["state"], "log-only")
+        self.assertEqual(states["T002"]["receipt"]["source"], "task-log")
+        self.assertIn("meets the record condition", states["T002"]["reason"])
+        self.assertEqual(states["T003"]["state"], "superseded")
+        self.assertEqual(states["T003"]["superseded_by"], "T005")
+        self.assertEqual(states["T004"]["state"], "rejected")
+        self.assertEqual(states["T005"]["state"], "ledger")
+        self.assertEqual(states["T005"]["superseded_by"], None)
+        self.assertEqual(payload["project"]["state"], "missing")
+        self.assertIsNone(payload["project"]["members"])
+
+    def test_evidence_manifest_reports_member_project_results_from_final_gaps(self) -> None:
+        _, task_file = self.prepare_in_progress_task()
+        landed = self.land_task(task_file, 1)
+        review = self.repo / ".project" / "review"
+        review.mkdir(parents=True)
+
+        def write_gap(verdict: str, reviewed_head: str) -> None:
+            (review / "final-gap-1.md").write_text(
+                "# Gap Review — 1: project Verify\n\n"
+                f"Reviewed HEAD: {reviewed_head}\n"
+                "Member reviewed HEAD: web " + "a" * 40 + "\n"
+                f"Gap verdict: {verdict}\n",
+                encoding="utf-8",
+            )
+
+        write_gap("pass", landed)
+        result, payload = self.cli("evidence-manifest", "--project-dir", ".project", "--head", landed)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(payload["project"]["state"], "gap-embedded")
+        self.assertEqual(payload["project"]["members"], [{
+            "member": "web", "head": "a" * 40, "verdict": "pass",
+            "source": ".project/review/final-gap-1.md",
+        }])
+
+        # A blocked verdict never reads as accepted, and a gap for a different
+        # reviewed HEAD proves nothing at this head.
+        write_gap("blocked", landed)
+        result, payload = self.cli("evidence-manifest", "--project-dir", ".project", "--head", landed)
+        self.assertEqual(payload["project"]["state"], "missing")
+        self.assertIn("verdict blocked", payload["project"]["reason"])
+        write_gap("pass", "b" * 40)
+        result, payload = self.cli("evidence-manifest", "--project-dir", ".project", "--head", landed)
+        self.assertEqual(payload["project"]["state"], "missing")
+        self.assertIn("reviewed HEAD " + "b" * 40, payload["project"]["reason"])
+
+        tasks = {item["task"]: item for item in payload["tasks"]}
+        self.assertEqual(tasks["T001"]["state"], "missing")
+        self.assertIn("without a Verify command", tasks["T001"]["reason"])
+
     def attest_task_outside_land(self) -> tuple[str, str]:
         base, task_file = self.prepare_in_progress_task()
         (self.repo / "app.py").write_bytes("value = 1\n".encode("utf-8"))
