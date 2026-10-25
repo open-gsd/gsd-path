@@ -2072,6 +2072,10 @@ def retire_member(coordinator: Path, member: str, archive_path: str, reviewed_he
         import members
     except ImportError:  # pragma: no cover - package import used by tests
         from scripts import members
+    try:
+        import isolation
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import isolation
     checkout, project, bound, _, tag_name, default = _member_names(coordinator, member, archive_path)
     proven = validate_member_integrated(coordinator, member, archive_path, reviewed_head)
     if (proven["merge"], proven["tag"]) != (merge, tag):
@@ -2105,10 +2109,14 @@ def retire_member(coordinator: Path, member: str, archive_path: str, reviewed_he
             run_git(checkout, "push", f"--force-with-lease={bound_ref}:{reviewed_head}", "origin", "--delete", bound),
             f"delete member origin/{bound}")
     if holder is not None:
-        if holder.is_dir():
-            _defuse_links(holder)
-        archive_milestone.require_git_success(run_git(checkout, "worktree", "remove", str(holder)),
-                                              "remove member bound checkout")
+        # The bound checkout may contain submodules: git refuses a plain worktree
+        # removal for them regardless of cleanliness. isolation's remover defuses
+        # links, deinits submodules, and forces the removal after the clean check
+        # above has already guarded the dirty case.
+        try:
+            isolation._remove_worktree(checkout, holder, force=False)
+        except isolation.IsolationError as error:
+            raise ArchiveError(f"remove member bound checkout failed: {error}") from error
     if local is not None:
         archive_milestone.require_git_success(run_git(checkout, "update-ref", "-d", bound_ref, reviewed_head),
                                               "delete member bound branch")
