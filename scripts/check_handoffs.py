@@ -2064,7 +2064,11 @@ def validate_wave_evidence(
 
     if not review:
         raise HandoffError("wave validation requires --review")
-    review_path = PurePosixPath(review)
+    # Native Windows separators are accepted at the CLI boundary and
+    # normalized before interpretation; every other restriction applies
+    # unchanged (#470).
+    normalized_review = review.replace("\\", "/")
+    review_path = PurePosixPath(normalized_review)
     name = review_path.name
     named = WAVE_REVIEW_NAME.fullmatch(name)
     if not named:

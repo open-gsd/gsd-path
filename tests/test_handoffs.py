@@ -3121,6 +3121,32 @@ Tasks reviewed: 2
             ):
                 check_handoffs.validate_wave(root, review="/" + relative)
 
+    def test_wave_accepts_windows_separators_in_the_review_path(self) -> None:
+        # Issue #470: a native Windows spelling of the same canonical path
+        # validates; separators are normalized at the CLI boundary and every
+        # other restriction applies unchanged.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            relative = self.write_wave_review(root)
+            backslashed = relative.replace("/", "\\")
+
+            result = check_handoffs.validate_wave(root, review=backslashed)
+
+            self.assertEqual(result["wave"], 1)
+            # The other restrictions still refuse: traversal, absolute, and
+            # noncanonical depth all keep their canonical-path error.
+            for hostile in (
+                ".project\\review\\..\\review\\wave-1.cycle1.md",
+                "\\\\.project\\review\\wave-1.cycle1.md",
+                "review\\wave-1.cycle1.md",
+            ):
+                with self.subTest(path=hostile), self.assertRaisesRegex(
+                    check_handoffs.HandoffError,
+                    "unrecognized wave review file|wave review must be the canonical path",
+                ):
+                    check_handoffs.validate_wave(root, review=hostile)
+
     def test_wave_rejects_the_wrong_task_standing_in(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
