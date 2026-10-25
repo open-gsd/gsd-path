@@ -434,6 +434,32 @@ class TaskBriefTests(unittest.TestCase):
                 else:
                     self.assertEqual(result, 0, error)
 
+    def test_prose_naming_an_absent_gitlink_is_missing_at_base(self) -> None:
+        # Old `cat-file -e <base>:<path>` failed for a gitlink whose commit is
+        # absent, so prose naming it is a hallucinated path; present passes.
+        for present in (False, True):
+            with self.subTest(present=present), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.init_repo(root)
+                self.commit(root)
+                if present:
+                    sha = git(root, "commit-tree", git(root, "rev-parse", "HEAD^{tree}"),
+                              "-m", "gitlink target")
+                else:
+                    sha = "0123456789" * 4
+                git(root, "update-index", "--add", "--cacheinfo", f"160000,{sha},vendor/lib.py")
+                git(root, "commit", "-m", "gitlink base")
+                base = git(root, "rev-parse", "HEAD")
+                self.write_task(root, "T001", files=("src/app.py",), contract="- None",
+                                context="The vendor lives at `vendor/lib.py`.",
+                                verify="python3 tests/test_app.py")
+                result, _, error = self.lint(root, base)
+                if present:
+                    self.assertEqual(result, 0, error)
+                else:
+                    self.assertEqual(result, 1)
+                    self.assertIn("missing at the layer base: vendor/lib.py", error)
+
     def test_hallucinated_prose_path_in_context_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

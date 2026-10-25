@@ -127,9 +127,10 @@ def _base_listing(repo: Path, base: str) -> Tuple[FrozenSet[str], FrozenSet[str]
     if directories_result.returncode != 0:
         raise BriefError(
             f"cannot list the layer base {base}: {directories_result.stderr.strip()}")
+    # `ls-tree -d` also lists gitlinks; they are never directories.
     directories = frozenset(
         path for path in directories_result.stdout.split("\0") if path
-    )
+    ) - {path for _, path in gitlinks}
     return frozenset(files), directories
 
 
