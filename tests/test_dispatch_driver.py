@@ -1215,6 +1215,19 @@ class DispatchDriverTests(unittest.TestCase):
                           + "- 2026-10-10 — implemented src/app.py; Verify pass\n").encode("utf-8"))
         return head
 
+    def test_finish_reason_is_visible_when_nothing_landed_or_blocked(self) -> None:
+        # Issue #469 item 6: a finish that neither lands nor records a
+        # blocked entry must still carry a visible cause.
+        from scripts import dispatch_driver as driver_module
+        receipt = {
+            "landed": [], "blocked": [], "questions": [],
+            "dispatched": [], "in_flight": [], "wave": 1,
+        }
+        result = driver_module.finish_receipt(receipt)
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("reason", result)
+        self.assertTrue(result["reason"])
+
     def test_finish_runs_again_after_a_failed_serial_verify_once_the_task_is_fixed(self) -> None:
         root = self.root
         self.fixture(root, deps_t002="[T001]")
