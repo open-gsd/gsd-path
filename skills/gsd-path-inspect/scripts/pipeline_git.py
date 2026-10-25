@@ -1119,6 +1119,48 @@ def closeout_main(repo: Path, ship: str, base: str, *, apply: bool = False,
     return dict(result, status="complete")
 
 
+def retire_maintenance_checkout(repo: Path, checkout: Path, head: str, *, apply: bool = False) -> dict:
+    """Delete only a clean redundant clone whose committed history is retained."""
+    if __package__:
+        from . import integration
+    else:
+        import integration
+    repo, checkout = _require_worktree_root(repo), _require_worktree_root(checkout)
+    if repo == checkout or repo.is_relative_to(checkout) or checkout.is_relative_to(repo):
+        raise PipelineGitError("maintenance checkout must be a separate clone")
+    if not (checkout / ".git").is_dir() or (checkout / ".git").is_symlink():
+        raise PipelineGitError("maintenance cleanup requires an independent Git directory")
+    for root in (repo, checkout):
+        if _run_git(root, "rev-parse", "HEAD").stdout.strip() != head:
+            raise PipelineGitError("both checkouts must be at the approved default HEAD")
+    if _run_git(repo, "remote", "get-url", "origin").stdout != _run_git(checkout, "remote", "get-url", "origin").stdout:
+        raise PipelineGitError("maintenance checkout has a different origin")
+    if _run_git(checkout, "status", "--porcelain", "--untracked-files=all").stdout:
+        raise PipelineGitError("maintenance checkout contains local changes")
+    ignored = _run_git(checkout, "ls-files", "--others", "--ignored", "--exclude-standard", "-z").stdout
+    for path in ignored.split("\0"):
+        if path and not (path.startswith((".venv/", ".cache/", "dist/"))
+                         or "__pycache__" in Path(path).parts):
+            raise PipelineGitError(f"maintenance checkout contains unrecognized ignored data: {path}")
+    retained = set(_run_git(repo, "rev-list", "--all").stdout.splitlines())
+    redundant = set(_run_git(checkout, "rev-list", "--all").stdout.splitlines())
+    if not redundant <= retained:
+        raise PipelineGitError("maintenance checkout contains history not retained in the original")
+    state = _validated_shipped_state(repo)
+    try:
+        proof = integration.validate_integrated(repo, state["milestone"], refresh=False, historical=True)
+    except integration.ArchiveError as error:
+        raise PipelineGitError(str(error)) from error
+    if proof["base"] != head or _symbolic_branch(repo) != state.get("default_branch", "main"):
+        raise PipelineGitError("original checkout must be at the verified remote default")
+    result = {"status": "preview", "checkout": str(checkout), "head": head,
+              "preserved_commits": len(redundant), "proof": proof}
+    if apply:
+        _common.rmtree_force(checkout)
+        return dict(result, status="complete")
+    return result
+
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1128,6 +1170,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     closeout.add_argument("--base", required=True)
     closeout.add_argument("--runtime-pin-sha")
     closeout.add_argument("--apply", action="store_true")
+    retire = subparsers.add_parser("retire-maintenance", help="remove a verified redundant maintenance clone")
+    retire.add_argument("--repo", required=True, type=Path)
+    retire.add_argument("--checkout", required=True, type=Path)
+    retire.add_argument("--head", required=True)
+    retire.add_argument("--apply", action="store_true")
     bind_next = subparsers.add_parser(
         "bind-next",
         help=(
@@ -1157,7 +1204,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     try:
-        if args.command == "closeout-main":
+        if args.command == "retire-maintenance":
+            result = retire_maintenance_checkout(args.repo, args.checkout, args.head, apply=args.apply)
+        elif args.command == "closeout-main":
             result = closeout_main(args.repo, args.ship, args.base,
                                    apply=args.apply, runtime_pin_sha=args.runtime_pin_sha)
         elif args.command == "bind-next":

@@ -276,3 +276,12 @@ to its verified published object. The helper never pushes, edits the archive or
 STATE, retires the bound milestone, or creates a new milestone. It checks clean
 status and integration again after switching. The same arguments safely resume
 an interrupted switch; changed remote inputs require a new preview.
+
+After closeout, `pipeline_git.py retire-maintenance --repo <retained-root>
+--checkout <duplicate-clone> --head <default-SHA>` previews removal of a redundant
+maintenance clone. Both checkouts must be at that SHA with the same origin; the
+retained checkout must be on the verified remote default. Every duplicate commit
+must remain reachable in the retained repository. Local changes and unknown
+ignored data block removal; only build/cache directories are expendable. Add
+`--apply` to remove the reviewed duplicate. Canonical milestone artifacts remain
+in the retained checkout; linked worktrees are not accepted by this command.
