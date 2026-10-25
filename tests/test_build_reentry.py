@@ -379,6 +379,16 @@ class BuildReentryTests(unittest.TestCase):
         failure = self.cli("prepare-build-recovery", success=False)
         self.assertIn("review backup differs from the recovery base", failure)
 
+    def test_recovery_backup_refusal_names_files_and_direction(self):
+        self.reopen("plan")
+        prepared = self.cli("prepare-build-recovery")
+        backup = Path(prepared["path"])
+        (backup / "PLAN-PANEL.md").unlink()
+        (backup / "EXTRA.md").write_bytes(b"stray\n")
+        failure = self.cli("prepare-build-recovery", success=False)
+        self.assertIn("files at the recovery base missing from the review backup: PLAN-PANEL.md", failure)
+        self.assertIn("files in the review backup that the recovery base does not have: EXTRA.md", failure)
+
     def test_recovery_cannot_change_milestone_identity(self):
         self.reopen("define")
         failure = self.cli(

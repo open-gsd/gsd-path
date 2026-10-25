@@ -1,3 +1,4 @@
+import contextlib
 import io
 import json
 import subprocess
@@ -2097,6 +2098,34 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(result["status"], "approved")
             self.assertNotEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), expected_head)
             self.assertFalse(pipeline_state._git_path(repo, pipeline_state.CHECKPOINT_JOURNAL_NAME).exists())
+
+    def test_patch_approve_accepts_expected_head(self) -> None:
+        # Issue #469 item 1: --patch pinned no checkpoint, so the typed head
+        # is recorded rather than rejected; the approval itself still runs.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._approval_repo(tmp, "plan")
+            captured = io.StringIO()
+            with contextlib.redirect_stdout(captured):
+                code = pipeline_state.main([
+                    "approve", "--repo", str(repo), "--kind", "plan",
+                    "--project-dir", ".project", "--patch",
+                    "--expected-head", "a" * 40,
+                ])
+            self.assertEqual(code, 0)
+            self.assertIn('"expected_head_accepted": "' + "a" * 40 + '"', captured.getvalue())
+
+    def test_deferred_approve_still_rejects_expected_head(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._approval_repo(tmp, "plan")
+            captured = io.StringIO()
+            with contextlib.redirect_stderr(captured):
+                code = pipeline_state.main([
+                    "approve", "--repo", str(repo), "--kind", "plan",
+                    "--project-dir", ".project", "--defer-checkpoint",
+                    "--expected-head", "a" * 40,
+                ])
+            self.assertEqual(code, 1)
+            self.assertIn("--expected-head is not accepted with --defer-checkpoint", captured.getvalue())
 
     def test_plan_approval_names_tracked_unsupported_entries(self) -> None:
         # Issue #466: unsupported .project entries must surface at plan

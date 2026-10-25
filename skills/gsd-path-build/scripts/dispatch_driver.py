@@ -724,6 +724,19 @@ def state_from_task(primary: Path, task_id: str) -> Dict[str, object]:
             "sidecar": sidecar}
 
 
+def finish_receipt(receipt: Dict[str, object]) -> Dict[str, object]:
+    """The finish result: landed, question, or blocked — always with a visible cause (#469)."""
+    if receipt.get("landed"):
+        return {**receipt, "status": "landed"}
+    if receipt.get("questions"):
+        return {**receipt, "status": "question"}
+    result = {**receipt, "status": "blocked"}
+    if not receipt.get("blocked"):
+        result["reason"] = (
+            "task did not land and no blocked entry was recorded; inspect the task Log")
+    return result
+
+
 def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
     """Verify in the isolate, land, record the ledger, retire. Returns the landing receipt."""
     landing = land_task(primary, state)
@@ -2595,7 +2608,7 @@ def main(argv=None) -> int:
             else:  # a coder dispatched by hand: derive the isolate from the task frontmatter
                 current.receipt["landed"].append(
                     finish_task(primary, native or state_from_task(primary, arguments.task_id)))
-            result = {**current.receipt, "status": "landed" if current.receipt["landed"] else "blocked"}
+            result = finish_receipt(current.receipt)
         elif arguments.action == "answer":
             result = answer(primary, arguments.task_id, arguments.answer)
         elif arguments.action == 'reassign-model':
