@@ -1,6 +1,16 @@
 ## Final integration mode
 
 Use only final-review.md. Treat INTENT.md success criteria as the rubric.
+To locate each task's authoritative accepted evidence instead of joining
+task Logs, ledger rows, and gap artifacts by hand, run
+`python3 <absolute build_state.py> evidence-manifest --repo
+<absolute primary> --project-dir .project --head <reviewed HEAD>`:
+it classifies every task as `ledger`, `log-only`, `rejected`,
+`superseded`, or `missing` and names the receipt, and reports the member
+project Verify as `gap-embedded` only from a passing `final-gap-1.md` at
+the reviewed HEAD — a
+`log-only` task is accepted through its retained isolated-Verify Log, and
+an absent ledger row is explained, never treated as data loss.
 Each `### SCn —` heading must have every word of the criterion in INTENT.md
 `## Success criteria`: join indented continuation lines and sub-bullets
 with a single space. You can keep or remove the `- ` markers of the
