@@ -4536,45 +4536,65 @@ REMOTE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 FETCH_DESTINATION = re.compile(r"^refs/remotes/[^\s]+/")
 
 
-def _fetch_refspecs_write_only_remote_tracking(repo, remote) -> bool:
-    """Every configured refspec of remote writes only remote-tracking refs.
+FETCH_BEHAVIOR_KEYS = (
+    "remote.{remote}.uploadpack", "fetch.uploadpack",
+    "remote.{remote}.prune", "fetch.prune",
+    "remote.{remote}.pruneTags", "fetch.pruneTags",
+    "remote.{remote}.mirror", "remote.{remote}.tagopt",
+)
 
-    A configured `remote.<name>.fetch` line can name ANY destination ref
-    (a hand-added `+refs/heads/main:refs/heads/retired` moves a local
-    branch), so the guard proves the destinations itself: every refspec's
-    destination must sit under refs/remotes/. A remote with no fetch
-    refspecs writes nothing but FETCH_HEAD.
+
+def _configured_fetch_read_only(repo, remote) -> bool:
+    """The configured remote fetches into remote-tracking refs only.
+
+    Repo config can change what a bare `git fetch REMOTE` does, so the
+    guard proves it instead of assuming it: the remote has a URL (an
+    unconfigured name makes git fetch from a local directory of that
+    name); none of uploadpack (runs a program), prune/pruneTags (delete
+    refs), mirror (rewrites every ref) or tagopt (forces tag fetches) is
+    set at any scope; and every `remote.<name>.fetch` refspec writes only
+    under refs/remotes/ (a hand-added `+refs/heads/main:refs/heads/retired`
+    moves a local branch). Default tag auto-follow still creates missing
+    tags that point at fetched commits; it never moves an existing ref.
     """
-    try:
-        configured = subprocess.run(
-            ["git", "config", "--get-all", f"remote.{remote}.fetch"],
-            cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
-            check=False,
-        )
-    except OSError:
+    def config(*arguments):
+        try:
+            return subprocess.run(
+                ["git", "config", *arguments], cwd=repo, capture_output=True,
+                encoding="utf-8", errors="replace", check=False,
+            )
+        except OSError:
+            return None
+
+    url = config("--get", f"remote.{remote}.url")
+    if url is None or url.returncode != 0 or not url.stdout.strip():
         return False
-    if configured.returncode not in (0, 1):
+    for key in FETCH_BEHAVIOR_KEYS:
+        result = config("--get", key.format(remote=remote))
+        if result is None or result.returncode != 1:
+            return False
+    refspecs = config("--get-all", f"remote.{remote}.fetch")
+    if refspecs is None or refspecs.returncode not in (0, 1):
         return False
-    for line in configured.stdout.splitlines():
+    for line in refspecs.stdout.splitlines():
         destination = line.rsplit(":", 1)[-1].strip()
         if not FETCH_DESTINATION.match(destination):
             return False
     return True
 
 
-def _closed_fetch_allowed(git, options, segment, directories) -> bool:
+def _closed_fetch_allowed(git, segment, directories) -> bool:
     """A read-only fetch on a closed milestone (#468).
 
-    `git fetch [REMOTE]` moves only remote-tracking refs and FETCH_HEAD —
-    but only once three properties are PROVEN, never assumed:
-    (1) no global option but -C appears before the subcommand (checked on
-    the raw segment tokens, so valueless flags like -p cannot slip past a
-    value-pair walk; --upload-pack/--exec additionally raise in
+    `git fetch [REMOTE]` is allowed only once these properties are PROVEN,
+    never assumed:
+    (1) the raw segment is `git (-C DIR)* fetch`: no other global option
+    precedes the subcommand (walked on raw tokens, consuming each -C with
+    its value, so neither valueless flags like -p nor a -C value named
+    fetch can slip past; --upload-pack/--exec additionally raise in
     git_command);
-    (2) the remote is CONFIGURED in the repo (an unconfigured name makes
-    git fetch from a local directory of that name);
-    (3) every configured `remote.<remote>.fetch` refspec writes only under
-    refs/remotes/ (a hand-configured refspec can move local branches).
+    (2) the remote's configuration fetches read-only (see
+    _configured_fetch_read_only).
     Any refspec or option on the command line stays denied.
     """
     if git is None:
@@ -4583,14 +4603,11 @@ def _closed_fetch_allowed(git, options, segment, directories) -> bool:
     if subcommand != "fetch":
         return False
     words = [str(token) for token in segment]
-    if "fetch" not in words:
+    index = 1
+    while words[index:index + 1] == ["-C"]:
+        index += 2
+    if words[index:index + 1] != ["fetch"]:
         return False
-    before = words[1:words.index("fetch")]
-    index = 0
-    while index < len(before):
-        if before[index] != "-C":
-            return False
-        index += 2  # -C and its value
     remote = arguments[0] if arguments else None
     if remote is not None and not REMOTE_NAME.fullmatch(remote):
         return False
@@ -4598,27 +4615,21 @@ def _closed_fetch_allowed(git, options, segment, directories) -> bool:
         return False
     if remote is None:
         # No argument fetches the current branch's remote, else origin.
-        branch = _git_output([], directories[0] if directories else Path.cwd(), "branch", "--show-current") if directories else None
         remote = "origin"
-        if branch:
-            configured_branch_remote = subprocess.run(
-                ["git", "config", "--get", f"branch.{branch}.remote"],
-                cwd=directories[0], capture_output=True, encoding="utf-8",
-                errors="replace", check=False,
-            ).stdout.strip() if directories else ""
-            if configured_branch_remote:
-                remote = configured_branch_remote
-    for directory in directories or [Path.cwd()]:
-        url = subprocess.run(
-            ["git", "config", "--get", f"remote.{remote}.url"],
-            cwd=directory, capture_output=True, encoding="utf-8",
-            errors="replace", check=False,
-        )
-        if url.returncode != 0 or not url.stdout.strip():
-            return False
-        if not _fetch_refspecs_write_only_remote_tracking(Path(directory), remote):
-            return False
-    return True
+        if directories:
+            branch = _git_output([], directories[0], "branch", "--show-current")
+            if branch:
+                configured_branch_remote = subprocess.run(
+                    ["git", "config", "--get", f"branch.{branch}.remote"],
+                    cwd=directories[0], capture_output=True, encoding="utf-8",
+                    errors="replace", check=False,
+                ).stdout.strip()
+                if configured_branch_remote:
+                    remote = configured_branch_remote
+    return all(
+        _configured_fetch_read_only(Path(directory), remote)
+        for directory in directories or [Path.cwd()]
+    )
 
 
 def closed_shell_execution_reason(
@@ -4642,7 +4653,6 @@ def closed_shell_execution_reason(
                 return reason
             continue
         metadata_closed = None
-        options: list = []
         git = git_command(segment, assignments)
         checked_segment = segment
         if git is not None:
@@ -4669,7 +4679,7 @@ def closed_shell_execution_reason(
             continue
         executable, _ = invocation
         if executable in DIRECTORY_CHANGE_COMMANDS or _closed_fetch_allowed(
-            git, options, segment, directories
+            git, segment, directories
         ):
             continue
         plain = checked_segment[:next((i for i, token in enumerate(checked_segment) if is_redirection(token)), len(checked_segment))]

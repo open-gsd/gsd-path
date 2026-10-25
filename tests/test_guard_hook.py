@@ -3577,6 +3577,36 @@ class GuardHookTests(unittest.TestCase):
         # local directory of that name).
         self.assert_denied(inside("git fetch neighbor"))
 
+        # Configured fetch behavior that runs a program, deletes refs,
+        # rewrites every ref or forces tags is refused; unsetting it
+        # restores the allowance.
+        for key, value in (
+            ("remote.origin.uploadpack", "touch pwned; git-upload-pack"),
+            ("remote.origin.prune", "true"),
+            ("remote.origin.pruneTags", "true"),
+            ("fetch.prune", "true"),
+            ("fetch.pruneTags", "true"),
+            ("remote.origin.mirror", "true"),
+            ("remote.origin.tagopt", "--tags"),
+        ):
+            with self.subTest(key=key):
+                subprocess.run(["git", "config", key, value], cwd=repo, check=True)
+                self.assert_denied(inside("git fetch origin"))
+                subprocess.run(["git", "config", "--unset", key], cwd=repo, check=True)
+                self.assert_allowed(inside("git fetch origin"))
+
+        # A -C value that is literally named fetch must not let a later
+        # global flag ride in before the real subcommand.
+        (repo / "fetch").mkdir()
+        self.assert_allowed(inside("git -C fetch fetch origin"))
+        for command in (
+            "git -C fetch -p fetch origin",
+            "git -C fetch --no-pager fetch origin",
+            "git -C fetch --bare fetch origin",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(inside(command))
+
         denied = (
             "git fetch origin main",
             "git fetch origin +refs/heads/*:refs/heads/*",
