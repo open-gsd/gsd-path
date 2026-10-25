@@ -2114,6 +2114,19 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn('"expected_head_accepted": "' + "a" * 40 + '"', captured.getvalue())
 
+    def test_deferred_approve_still_rejects_expected_head(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._approval_repo(tmp, "plan")
+            captured = io.StringIO()
+            with contextlib.redirect_stderr(captured):
+                code = pipeline_state.main([
+                    "approve", "--repo", str(repo), "--kind", "plan",
+                    "--project-dir", ".project", "--defer-checkpoint",
+                    "--expected-head", "a" * 40,
+                ])
+            self.assertEqual(code, 1)
+            self.assertIn("--expected-head is not accepted with --defer-checkpoint", captured.getvalue())
+
     def test_plan_approval_names_tracked_unsupported_entries(self) -> None:
         # Issue #466: unsupported .project entries must surface at plan
         # approval — before build, where removing them is cheapest.

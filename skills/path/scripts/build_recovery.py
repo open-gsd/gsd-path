@@ -257,11 +257,11 @@ def validate_review_backup(repo: Path, recovery: dict, directory: Path) -> None:
         missing = sorted(set(expected) - set(actual))
         detail = ""
         if extra:
-            detail += f" files not present at the recovery base: {', '.join(extra)}."
+            detail += f" files in the review backup that the recovery base does not have: {', '.join(extra)}."
         if changed:
             detail += f" files differing from the recovery base: {', '.join(changed)}."
         if missing:
-            detail += f" files missing at the recovery base: {', '.join(missing)}."
+            detail += f" files at the recovery base missing from the review backup: {', '.join(missing)}."
         raise state.PipelineStateError(
             "review backup differs from the recovery base." + detail
             + " prepare-build-recovery must run before re-planning touches any recovery"

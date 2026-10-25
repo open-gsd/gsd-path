@@ -2379,8 +2379,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.project_dir,
             )
         elif args.command == "approve" and (args.defer_checkpoint or args.patch):
-            # A patch or deferred approval pins no checkpoint, so the head it
-            # was typed against is recorded rather than enforced (#469).
+            if args.defer_checkpoint and args.expected_head is not None:
+                raise PipelineStateError(
+                    "--expected-head is not accepted with --defer-checkpoint"
+                )
             result = state_checkpoint.defer_approval(
                 args.repo,
                 args.kind,

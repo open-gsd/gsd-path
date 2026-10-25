@@ -98,6 +98,13 @@ INLINE_LIST_PATTERN = _common.INLINE_LIST_PATTERN
 LIST_ITEM_PATTERN = _common.LIST_ITEM_PATTERN
 COLLECT_JOURNAL_SCHEMA = "gsd-path/collect-artifact/v1"
 NULL_SHA = "0" * 40
+RETIRE_HINT = (
+    " A stale isolate or sidecar from an earlier attempt may be there; retire it first:"
+    " `python3 -B <absolute isolation.py> retire --repo <absolute primary>"
+    " --worktree <path> --branch <branch> --force` (retire --force exists for exactly"
+    " this; a stale review sidecar must be hash-compared against its archived copy"
+    " before retiring)"
+)
 
 
 class IsolationError(RuntimeError):
@@ -692,15 +699,8 @@ def create_named_worktree(
         raise IsolationError(
             f"refusing to check out the bound branch {bound} in a second worktree"
         )
-    _retire_hint = (
-        " A stale isolate or sidecar from an earlier attempt may be there; retire it first:"
-        "`python3 -B <absolute isolation.py> retire --repo <absolute primary>"
-        " --worktree <path> --branch <branch> --force` (retire --force exists for exactly"
-        " this; a stale review sidecar must be hash-compared against its archived copy"
-        " before retiring)"
-    )
     if os.path.lexists(destination):
-        raise IsolationError(f"worktree path already exists: {destination}." + _retire_hint)
+        raise IsolationError(f"worktree path already exists: {destination}." + RETIRE_HINT)
     destination.parent.mkdir(parents=True, exist_ok=True)
     ref = f"refs/heads/{branch}"
     reserved = run_git(primary, "update-ref", ref, base, NULL_SHA)
@@ -710,7 +710,7 @@ def create_named_worktree(
         destination.mkdir()
     except FileExistsError as error:
         run_git(primary, "update-ref", "-d", ref, base)
-        raise IsolationError(f"worktree path already exists: {destination}." + _retire_hint) from error
+        raise IsolationError(f"worktree path already exists: {destination}." + RETIRE_HINT) from error
     except OSError as error:
         run_git(primary, "update-ref", "-d", ref, base)
         raise IsolationError(f"cannot reserve worktree path {destination}: {error}") from error
@@ -862,16 +862,9 @@ def member_bound_checkout(coordinator: Path, member: str) -> Dict[str, object]:
                 or common.returncode != 0 or Path(common.stdout.strip()).resolve() != common_git_dir(checkout)
                 or head.returncode != 0 or head.stdout.strip() != f"refs/heads/{branch}"):
             raise IsolationError(f"bound checkout is missing or invalid: {destination}")
-    _retire_hint = (
-        " A stale isolate or sidecar from an earlier attempt may be there; retire it first:"
-        "`python3 -B <absolute isolation.py> retire --repo <absolute primary>"
-        " --worktree <path> --branch <branch> --force` (retire --force exists for exactly"
-        " this; a stale review sidecar must be hash-compared against its archived copy"
-        " before retiring)"
-    )
     if not holders:
         if os.path.lexists(destination):
-            raise IsolationError(f"worktree path already exists: {destination}." + _retire_hint)
+            raise IsolationError(f"worktree path already exists: {destination}." + RETIRE_HINT)
         destination.parent.mkdir(parents=True, exist_ok=True)
         added = run_git(checkout, "worktree", "add", str(destination), branch)
         if added.returncode != 0:
@@ -1912,15 +1905,8 @@ def ensure_verify_sidecar(primary: Path, base: str, branch: str) -> Dict[str, ob
     destination = _sidecar_path_for_branch(primary, branch)
     ref = f"refs/heads/{branch}"
     registered = _registered_worktrees(primary)
-    _retire_hint = (
-        " A stale isolate or sidecar from an earlier attempt may be there; retire it first:"
-        "`python3 -B <absolute isolation.py> retire --repo <absolute primary>"
-        " --worktree <path> --branch <branch> --force` (retire --force exists for exactly"
-        " this; a stale review sidecar must be hash-compared against its archived copy"
-        " before retiring)"
-    )
     if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
-        raise IsolationError(f"worktree path already exists: {destination}." + _retire_hint)
+        raise IsolationError(f"worktree path already exists: {destination}." + RETIRE_HINT)
     if destination.is_dir():
         try:
             # A leftover empty directory (a half-deleted sidecar) clears;
