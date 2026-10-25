@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 # gsd-path project runtime
-"""Lint build task briefs against the layer base before dispatch."""
+"""Lint build task briefs against the layer base before dispatch.
+
+The check is read-only and idempotent: git queries and file reads, no writes.
+Progress goes to stderr (one line every 20 tasks); stdout is exactly the final
+JSON. A host timeout with no output is not a contract verdict — rerun with a
+larger timeout; the checker never hangs on state it changed itself.
+"""
 
 import argparse
+import functools
 import json
 import re
 import sys
+import time
 
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
 from pathlib import Path, PurePosixPath
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
 
 if __package__:
     from . import _common
@@ -73,7 +81,56 @@ def _resolve_base(repo: Path, base: str) -> str:
 
 
 def _base_exists(repo: Path, base: str, path: str) -> bool:
-    return _run_git(repo, "cat-file", "-e", f"{base}:{path}").returncode == 0
+    files, directories = _base_listing(repo, base)
+    return path in files or path in directories
+
+
+@functools.lru_cache(maxsize=None)
+def _base_listing(repo: Path, base: str) -> Tuple[FrozenSet[str], FrozenSet[str]]:
+    """Every path an object occupies at the immutable `base` commit.
+
+    One `ls-tree` pair per (repository, base) replaces a `cat-file` subprocess
+    per queried path: a commit is fixed, so its listings never change mid-run.
+    The file set names blobs and symlinks, plus submodule gitlinks whose commit
+    exists in this repository; the directory set names trees.
+    `cat-file -e <base>:<path>` succeeded exactly when the path is in either
+    set, and the ancestor check treated a path as a non-directory ancestor
+    exactly when it is in the file set — a gitlink counted only while its
+    commit object was present, so that property is preserved per gitlink.
+    """
+    files: Set[str] = set()
+    gitlinks: List[Tuple[str, str]] = []
+    result = _run_git(repo, "-c", "core.quotepath=false", "ls-tree", "-r", "-z", base)
+    if result.returncode != 0:
+        raise BriefError(f"cannot list the layer base {base}: {result.stderr.strip()}")
+    for entry in result.stdout.split("\0"):
+        if not entry:
+            continue
+        meta, separator, path = entry.partition("\t")
+        if not separator:
+            continue
+        mode, kind, sha = meta.split()
+        if kind == "commit":
+            gitlinks.append((sha, path))
+        else:
+            files.add(path)
+    present: Dict[str, bool] = {}
+
+    def gitlink_present(sha: str) -> bool:
+        if sha not in present:
+            present[sha] = _run_git(repo, "cat-file", "-e", sha).returncode == 0
+        return present[sha]
+
+    files.update(path for sha, path in gitlinks if gitlink_present(sha))
+    directories_result = _run_git(
+        repo, "-c", "core.quotepath=false", "ls-tree", "-r", "-d", "-z", "--name-only", base)
+    if directories_result.returncode != 0:
+        raise BriefError(
+            f"cannot list the layer base {base}: {directories_result.stderr.strip()}")
+    directories = frozenset(
+        path for path in directories_result.stdout.split("\0") if path
+    )
+    return frozenset(files), directories
 
 
 def _project_track(task: Path, repo: Path) -> Optional[str]:
@@ -382,11 +439,11 @@ def _lint_task(
                 problems.append(
                     f"files entry must stay out of .project/: {normalized}")
                 continue
+            files_at_base, _ = _base_listing(git_root, base)
             for parent in candidate.parents:
                 if str(parent) == ".":
                     break
-                kind = _run_git(git_root, "cat-file", "-t", f"{base}:{parent}")
-                if kind.returncode == 0 and kind.stdout.strip() != "tree":
+                if str(parent) in files_at_base:
                     problems.append(
                         f"files entry {normalized} has non-directory ancestor "
                         f"{parent} at the layer base"
@@ -473,7 +530,11 @@ def validate_task_briefs(
         raise BriefError(f"no task briefs found in {tasks_dir}")
     if member_base is None:
         member_base = _member_bases(root)
-    for path in task_files:
+    started = time.monotonic()
+    for number, path in enumerate(task_files, start=1):
+        if number % 20 == 0:
+            print(f"check_task_briefs: {number}/{len(task_files)} tasks",
+                  file=sys.stderr, flush=True)
         task_id, task_problems, contract, task_checked = _lint_task(
             root, resolved_base, path, dependency_files, landed_bases, member_base
         )
@@ -497,7 +558,8 @@ def validate_task_briefs(
 
     if problems:
         raise BriefError("\n".join(problems))
-    return {"base": resolved_base, "checked": checked, "tasks": len(task_files)}
+    return {"base": resolved_base, "checked": checked, "tasks": len(task_files),
+            "elapsed_seconds": round(time.monotonic() - started, 3)}
 
 
 def _resolve_landed_task_base(

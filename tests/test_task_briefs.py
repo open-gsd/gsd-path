@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
+from unittest import mock
 
 from scripts import check_task_briefs
 from tests._platform import requires_symlink
@@ -156,6 +157,37 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(summary["base"], base)
             self.assertEqual(summary["tasks"], 2)
             self.assertGreater(summary["checked"], 0)
+
+    def test_many_tasks_batch_git_lookups_report_progress_and_time(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            for number in range(1, 46):
+                self.write_task(root, f"T{number:03d}",
+                                context="The task extends `src/app.py`.")
+            base = self.commit(root)
+
+            calls: list[tuple[str, ...]] = []
+            real_run_git = check_task_briefs._run_git
+
+            def counting_run_git(repo, *arguments):
+                calls.append(arguments)
+                return real_run_git(repo, *arguments)
+
+            with mock.patch.object(check_task_briefs, "_run_git", counting_run_git):
+                exit_code, stdout, stderr = self.lint(root, base)
+
+            self.assertEqual(exit_code, 0, stderr)
+            # Path existence comes from one cached listing per base, never a
+            # per-path cat-file: 45 tasks with shared prose and Verify paths
+            # stay at a handful of git invocations.
+            self.assertFalse([arguments for arguments in calls if "cat-file" in arguments])
+            self.assertLessEqual(len(calls), 10, calls)
+            summary = json.loads(stdout)
+            self.assertEqual(summary["tasks"], 45)
+            self.assertIsInstance(summary["elapsed_seconds"], float)
+            self.assertIn("20/45 tasks", stderr)
+            self.assertIn("40/45 tasks", stderr)
 
     def test_uncommitted_supplied_contracts_are_valid_prose_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -366,6 +398,41 @@ class TaskBriefTests(unittest.TestCase):
                 result, _, error = self.lint(root, base)
                 self.assertEqual(result, 1)
                 self.assertIn(path, error)
+
+    def test_gitlink_paths_follow_their_commit_presence(self) -> None:
+        # A submodule gitlink counts as a file exactly while its commit object
+        # exists in this repository — the previous cat-file semantics. A declared
+        # path under the gitlink is a non-directory ancestor only in that case,
+        # and prose naming an absent gitlink never reads as a path at all.
+        for present in (False, True):
+            with self.subTest(present=present), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.init_repo(root)
+                base = self.commit(root)
+                if present:
+                    sha = git(root, "commit-tree", git(root, "rev-parse", "HEAD^{tree}"),
+                              "-m", "gitlink target")
+                else:
+                    sha = "0123456789" * 4
+                git(root, "update-index", "--add", "--cacheinfo", f"160000,{sha},vendor/lib")
+                # Commit the staged gitlink directly: `git add .` would drop an
+                # index entry whose path has no working-tree counterpart.
+                git(root, "commit", "-m", "gitlink base")
+                base = git(root, "rev-parse", "HEAD")
+                self.write_task(root, "T001", files=("src/app.py",), contract="- None",
+                                context="The vendor lives at `vendor/lib`.",
+                                verify="python3 tests/test_app.py")
+                result, _, error = self.lint(root, base)
+                self.assertEqual(result, 0, error)  # prose: present names it, absent is no path
+                self.write_task(root, "T001", files=("vendor/lib/payload.py",), contract="- None",
+                                context="Create the owned file.",
+                                verify="python3 vendor/lib/payload.py")
+                result, _, error = self.lint(root, base)
+                if present:
+                    self.assertEqual(result, 1)
+                    self.assertIn("non-directory ancestor", error)
+                else:
+                    self.assertEqual(result, 0, error)
 
     def test_hallucinated_prose_path_in_context_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -240,7 +240,11 @@ dispatch contract and perform steps 1–5 by hand.
    `python3 <absolute check_handoffs.py> plan --repo <absolute repo root>`
    before creating any worktree; a lint or coverage failure is a documented plan
    defect — repair it against INTENT.md and SYNTHESIS.md, then re-establish
-   the base. Then isolate each ready task with
+   the base. The brief lint is read-only and idempotent; it reports progress
+   on stderr (one line every 20 tasks) and its stdout is exactly the result
+   JSON. A host timeout that cut it off with no failure output is not a
+   contract verdict — rerun it with a larger timeout and judge only the
+   completed run. Then isolate each ready task with
    `python3 <absolute workflow_run.py> prepare-task --repo <absolute primary>
    --expected-head <recorded base> --task-id <id> --round-size <N>` where N is the
    number of tasks in this dispatch round. For a coordinator task, serial
