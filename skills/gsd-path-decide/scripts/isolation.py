@@ -2203,6 +2203,124 @@ def undeclared_paths(
     )
 
 
+RUNTIME_HOTFIX_MARKER = " — runtime-hotfix: "
+RUNTIME_PIN = ".gsd-path/runtime.json"
+
+
+def _runtime_hotfix_receipts(task_text: str, task_file: str) -> List[Dict[str, str]]:
+    """The runtime-hotfix receipts recorded in a task Log (#480).
+
+    Each receipt line is
+    `- <date> — runtime-hotfix: task <id> base <sha> runtime <old> -> <new> authorized by <ruling>`.
+    The orchestrator's own command writes it; a hand-written line without
+    matching digests authorizes nothing.
+    """
+    receipts: List[Dict[str, str]] = []
+    for line in task_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- ") or RUNTIME_HOTFIX_MARKER not in stripped:
+            continue
+        match = re.fullmatch(
+            r"- (?P<date>\d{4}-\d{2}-\d{2}) — runtime-hotfix: task (?P<task>T\d{3}) "
+            r"base (?P<base>[0-9a-f]{40}) runtime (?P<old>[0-9a-f]{16,64}) "
+            r"-> (?P<new>[0-9a-f]{16,64}) authorized by (?P<authority>.+)",
+            stripped,
+        )
+        if match is not None:
+            receipts.append(match.groupdict())
+    return receipts
+
+
+def runtime_hotfix_ref(task_id: str, base: str) -> str:
+    """The orchestrator-owned ref recording a runtime-hotfix receipt (#480).
+
+    The task Log is coder-writable, so a Log line alone proves nothing: the
+    runtime-hotfix command also stores the receipt as a blob behind this ref,
+    and refs/gsd-path/ is guard-owned — an agent cannot write it. A landing
+    admits the pin path only when the Log line and the ref record match
+    verbatim.
+    """
+    return f"refs/gsd-path/runtime-hotfix/{task_id}-{base}"
+
+
+RUNTIME_SCHEMA_VALUE = "gsd-path/runtime/v1"
+
+
+def runtime_hotfix_allowed_paths(
+    repo: Path, task_text: str, task_file: str, base: str,
+    pin_text: Optional[str] = None,
+) -> Set[str]:
+    """The runtime pin path a task's receipts authorize at this base (#480).
+
+    Authorization needs BOTH records: the receipt line in the task Log —
+    matched against the task's own frontmatter id and this landing's base —
+    and the same line stored verbatim behind the orchestrator-owned
+    runtime-hotfix ref. A Log line without the ref is a bare mention and
+    authorizes nothing; a receipt for any other task or base authorizes
+    nothing.
+    """
+    fields, error = task_frontmatter(task_text)
+    if error or fields is None:
+        return set()
+    task_id = str(fields.get("id", ""))
+    if not task_id:
+        return set()
+    ref = runtime_hotfix_ref(task_id, base)
+    recorded = run_git(repo, "cat-file", "blob", ref)
+    if recorded.returncode != 0:
+        return set()
+    recorded_lines = recorded.stdout.splitlines()
+    # The exact pin bytes under admission — from the working tree, the index,
+    # or a commit — supplied by the caller that knows which state it gates.
+    if pin_text is None:
+        try:
+            pin_text = (repo / RUNTIME_PIN).read_text(encoding="utf-8")
+        except OSError:
+            return set()
+    try:
+        landed_pin = json.loads(pin_text)
+    except json.JSONDecodeError:
+        return set()
+    if not isinstance(landed_pin, dict):
+        return set()
+    allowed: Set[str] = set()
+    for receipt in _runtime_hotfix_receipts(task_text, task_file):
+        if (receipt["task"] == task_id and receipt["base"] == base
+                and receipt_line(receipt) in recorded_lines
+                and _pin_is_receipt_runtime(landed_pin, receipt["new"])):
+            allowed.add(RUNTIME_PIN)
+    return allowed
+
+
+def _pin_is_receipt_runtime(pin: Dict[str, object], digest: str) -> bool:
+    """Whether a pin declaration names exactly the receipt's replacement runtime.
+
+    Digest alone is not enough: the guard's loader needs schema and version
+    too, so a receipt must not admit a declaration those checks would refuse.
+    """
+    if pin.get("digest") != digest or str(pin.get("schema", "")) != RUNTIME_SCHEMA_VALUE:
+        return False
+    try:
+        import status_runtime
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import status_runtime
+    manifest_path = status_runtime.runtime_home() / digest / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return pin.get("version") == manifest.get("version")
+
+
+def receipt_line(receipt: Dict[str, str]) -> str:
+    """The canonical Log text of a parsed receipt, without its list marker."""
+    return (
+        f"{receipt['date']} — runtime-hotfix: task {receipt['task']} base "
+        f"{receipt['base']} runtime {receipt['old']} -> {receipt['new']} "
+        f"authorized by {receipt['authority']}"
+    )
+
+
 def validate_allowed_changes(
     repo: Path,
     base: str,
@@ -2475,6 +2593,161 @@ def _write_native_member_dispatch_record(coordinator: Path, activation: Dict[str
     dispatch_driver.record_native_member_activation(coordinator, activation)
 
 
+def _hotfix_snapshot_tree(primary: Path) -> str:
+    """Tree of the primary's complete working tree via a temporary index."""
+    with tempfile.TemporaryDirectory() as temporary:
+        env = dict(os.environ, GIT_INDEX_FILE=str(Path(temporary) / "index"))
+        for arguments in (("read-tree", "HEAD"), ("add", "-A"), ("write-tree",)):
+            completed = subprocess.run(("git", "-C", str(primary), *arguments), env=env,
+                                       encoding="utf-8", errors="replace", capture_output=True)
+            if completed.returncode:
+                raise IsolationError(
+                    f"git {' '.join(arguments)} failed: {completed.stderr.strip()}")
+        return completed.stdout.strip()
+
+
+def _hotfix_task_file(primary: Path, task_id: str) -> str:
+    tasks_dir = primary / ".project" / "tasks"
+    matches = sorted(
+        path for path in (
+            tasks_dir.glob(f"{task_id}-*.md"),
+        ) for path in path
+    ) if tasks_dir.is_dir() else []
+    exact = tasks_dir / f"{task_id}.md"
+    if exact.is_file() and not exact.is_symlink():
+        matches = [exact]
+    if len(matches) != 1 or not matches[0].is_file() or matches[0].is_symlink():
+        raise IsolationError(f"task file for {task_id} is missing or ambiguous")
+    return matches[0].relative_to(primary).as_posix()
+
+
+def _append_task_log(primary: Path, task_file: str, line: str) -> None:
+    path = primary / task_file
+    text = path.read_text(encoding="utf-8")
+    if not text.endswith("\n"):
+        text += "\n"
+    _common.atomic_write(path, text + line + "\n")
+
+
+def runtime_hotfix(
+    primary: Path,
+    task_id: str,
+    runtime_digest: str,
+    authority: str,
+) -> Dict[str, object]:
+    """Authorize a runtime hotfix for one active serial task and re-verify it (#480).
+
+    The replacement runtime must be published in the shared store; the
+    authorization, the exact task/base/digest identities, and the re-run
+    Verify all stay explicit, and no unrelated change may slip into the
+    landing. This command validates the replacement runtime, re-runs the
+    task's Verify in a fresh verify sidecar at the recorded base, and on
+    success records the receipt twice: as a blob behind the guard-owned
+    runtime-hotfix ref (the authority an agent cannot forge) and as a Log
+    line in the task file (the provenance a reader sees). Only a Log line
+    whose identical twin the ref holds later admits `.gsd-path/runtime.json`
+    into that task's landing; a failing re-run refuses the hotfix before
+    either record is written.
+    """
+    primary = require_directory(primary, "primary worktree")
+    task_id = validate_task_id(task_id)
+    if not authority.strip() or "\n" in authority:
+        raise IsolationError("runtime-hotfix requires the authorizing ruling as text")
+    try:
+        import runtime_store
+        import status_runtime
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import runtime_store, status_runtime
+    from datetime import date as _date
+    task_file = _hotfix_task_file(primary, task_id)
+    task_text, _ = _read_task_text(primary / task_file)
+    fields, error = task_frontmatter(task_text)
+    if error or fields is None:
+        raise IsolationError(error or f"unreadable task frontmatter: {task_file}")
+    if fields.get("status") != "in-progress":
+        raise IsolationError(
+            f"runtime-hotfix applies to an active task; {task_id} is {fields.get('status')}")
+    if str(fields.get("worktree", "")) not in ("", "null") and Path(
+            str(fields.get("worktree"))).resolve() != primary.resolve():
+        raise IsolationError(
+            "runtime-hotfix applies to a serial task working in the primary; "
+            f"{task_id} records another worktree")
+    recorded_base = fields.get("base")
+    if not isinstance(recorded_base, str) or not re.fullmatch(r"[0-9a-f]{40}", recorded_base):
+        raise IsolationError(f"{task_id} records no full base; the hotfix cannot be bound")
+    command = _common.task_verify_command(task_text)
+    if not command:
+        raise IsolationError(f"{task_id} has no Verify command to re-run")
+    new_digest = runtime_digest.strip().lower()
+    if re.fullmatch(r"[0-9a-f]{64}", new_digest) is None:
+        raise IsolationError("--runtime must be the 64-hex digest of a published runtime")
+    manifest_path = status_runtime.runtime_home() / new_digest / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise IsolationError(
+            f"runtime {new_digest} is not published in the store: {error}"
+        ) from error
+    status_runtime.validate_runtime({
+        "schema": status_runtime.RUNTIME_SCHEMA,
+        "version": str(manifest.get("version", "")),
+        "digest": new_digest,
+    })
+    declaration = status_runtime.declaration(primary)
+    old_digest = str(declaration.get("digest", ""))
+    if old_digest == new_digest:
+        raise IsolationError("runtime-hotfix requires a different runtime than the pinned one")
+    task_file = _hotfix_task_file(primary, task_id)
+    sidecar = ensure_verify_sidecar(
+        primary, recorded_base, verify_branch_name(f"runtime-hotfix-{task_id}")
+    )
+    sidecar_path = Path(str(sidecar["worktree"]))
+    reproduce_verify_sidecar(sidecar_path, _hotfix_snapshot_tree(primary))
+    # The re-run must prove the task under the REPLACEMENT runtime: write the
+    # new declaration into the sidecar's pin before Verify runs (#480). The
+    # primary's pin stays untouched; sidecar effects are the point of the
+    # sidecar.
+    sidecar_pin = sidecar_path / RUNTIME_PIN
+    sidecar_pin.parent.mkdir(parents=True, exist_ok=True)
+    _common.atomic_write(sidecar_pin, json.dumps({
+        "schema": status_runtime.RUNTIME_SCHEMA,
+        "version": str(manifest.get("version", "")),
+        "digest": new_digest,
+    }, indent=2, sort_keys=True) + "\n")
+    completed = subprocess.run(
+        ("sh", "-c", command), cwd=str(sidecar_path),
+        encoding="utf-8", errors="replace", capture_output=True,
+    )
+    clean_verify(primary, sidecar_path, recorded_base, str(sidecar["branch"]))
+    retire(primary, sidecar_path, str(sidecar["branch"]), False)
+    if completed.returncode != 0:
+        raise IsolationError(
+            f"{task_id} Verify failed in the hotfix sidecar; the hotfix is refused")
+    receipt = (
+        f"- {_date.today().isoformat()} — runtime-hotfix: task {task_id} "
+        f"base {recorded_base} runtime {old_digest} -> {new_digest} "
+        f"authorized by {authority}"
+    )
+    blob = run_git(primary, "hash-object", "-w", "--stdin", input=receipt[2:])
+    if blob.returncode != 0:
+        raise IsolationError("runtime-hotfix could not record its receipt blob")
+    created = run_git(
+        primary, "update-ref", runtime_hotfix_ref(task_id, recorded_base),
+        blob.stdout.strip(),
+    )
+    if created.returncode != 0:
+        raise IsolationError("runtime-hotfix could not record its authorization ref")
+    _append_task_log(primary, task_file, receipt)
+    return {
+        "task": task_id,
+        "base": recorded_base,
+        "old_runtime": old_digest,
+        "new_runtime": new_digest,
+        "receipt": receipt,
+        "authorization_ref": runtime_hotfix_ref(task_id, recorded_base),
+    }
+
+
 def deactivate_task(
     worktree: Path, task_id: str, task_branch: str
 ) -> Dict[str, object]:
@@ -2704,7 +2977,10 @@ def _stamp_and_commit(
     pending = uncommitted_paths(worktree)
     if stamped != task_bytes:
         pending.add(task_file)
-    validate_allowed_changes(worktree, base, pending, allowed, tolerated)
+    # A runtime hotfix receipt for exactly this task and base admits the
+    # runtime pin path into this landing — nothing else does (#480).
+    hotfix_allowed = runtime_hotfix_allowed_paths(worktree, task_text, task_file, base)
+    validate_allowed_changes(worktree, base, pending, allowed | hotfix_allowed, tolerated)
     original_head = current_sha(worktree)
     index_tree = git_output(worktree, "write-tree")
     try:
@@ -2777,6 +3053,11 @@ def land(
     allowed = {relative_posix(task_file)}
     for path in allow_paths:
         allowed.add(relative_posix(path))
+    # A runtime-hotfix receipt for exactly this task and base admits the
+    # runtime pin path into this landing — nothing else does (#480).
+    task_text, _ = _read_task_text(primary / relative_posix(task_file))
+    allowed |= runtime_hotfix_allowed_paths(
+        primary, task_text, relative_posix(task_file), resolved_base)
     serial = source == primary
     if serial:
         if source_branch != bound:
@@ -3087,9 +3368,12 @@ def _landing_state(
             contract_paths,
             f"source commit subject is {subject!r}, expected {expected_subject!r}",
         )
-    if allowed is not None and allowed != contract_paths:
-        missing = sorted(contract_paths - allowed)
-        extra = sorted(allowed - contract_paths)
+    # The runtime pin path joins only with a matching hotfix receipt (#480).
+    receipt_allowed = runtime_hotfix_allowed_paths(repo, after_text, task_file, base)
+    comparable = allowed - receipt_allowed if allowed is not None else None
+    if comparable is not None and comparable != contract_paths:
+        missing = sorted(contract_paths - comparable)
+        extra = sorted(comparable - contract_paths)
         details = []
         if missing:
             details.append("missing " + ", ".join(missing))
@@ -3168,7 +3452,13 @@ def _prove_task_commit(
     )
     if task_file not in changed:
         return None, "commit does not touch the task file"
-    stray = undeclared_paths(repo, base, changed, contract_paths)
+    committed_pin = None
+    if RUNTIME_PIN in changed:
+        committed_pin = git_text(repo, "show", f"{sha}:{RUNTIME_PIN}")
+    stray = undeclared_paths(
+        repo, base, changed,
+        contract_paths | runtime_hotfix_allowed_paths(
+            repo, after_text, task_file, base, pin_text=committed_pin))
     if stray:
         return None, f"commit touches undeclared paths: {', '.join(stray)}"
     if landing_error:
@@ -5497,6 +5787,20 @@ def parser() -> argparse.ArgumentParser:
                                       help="discard a rejected attempt whose Log the coordinator task holds")
     retire_member_parser.add_argument("--task-file")
 
+    runtime_hotfix_parser = subparsers.add_parser(
+        "runtime-hotfix",
+        help="authorize a runtime hotfix for one active task and re-verify it (#480)",
+    )
+    runtime_hotfix_parser.add_argument("--repo", type=Path, required=True)
+    runtime_hotfix_parser.add_argument("--task-id", required=True)
+    runtime_hotfix_parser.add_argument(
+        "--runtime", required=True,
+        help="full commit sha of the replacement runtime, validated before recording",
+    )
+    runtime_hotfix_parser.add_argument(
+        "--authorized-by", required=True,
+        help="the authorizing ruling, recorded verbatim in the task Log receipt",
+    )
     deactivate_task_parser = subparsers.add_parser(
         "deactivate-task",
         help="revoke one helper-owned task dispatch (parallel tasks only: a serial "
@@ -5626,6 +5930,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = {"member": arguments.member, "retired": True, "task_id": arguments.task_id}
             if copy_rejected:
                 result["copy_rejected"] = copy_rejected
+        elif arguments.command == "runtime-hotfix":
+            result = runtime_hotfix(
+                arguments.repo,
+                arguments.task_id,
+                arguments.runtime,
+                arguments.authorized_by,
+            )
         elif arguments.command == "deactivate-task":
             result = deactivate_task(
                 arguments.repo,

@@ -4602,5 +4602,40 @@ class DestructiveScopeTests(unittest.TestCase):
         self.assert_allowed(self.inside_closed(repo, f"rm {(self.scratch / 'file.txt').as_posix()}"))
 
 
+class RuntimeHotfixRefGuardTests(unittest.TestCase):
+    """Agent writes under refs/gsd-path/ forge the trust those refs prove (#480)."""
+
+    def setUp(self) -> None:
+        import tempfile
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.repo = Path(self.temporary.name) / "repo"
+        subprocess.run(("git", "init", "-q", "-b", "gsd-path/M001", str(self.repo)), check=True)
+        (self.repo / ".project").mkdir()
+        (self.repo / ".project" / "STATE.md").write_text(
+            "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: demo\nphase: build\n"
+            "status: active\nbranch: gsd-path/M001\narchive: null\n---\n\n# Project State\n",
+            encoding="utf-8",
+        )
+        subprocess.run(("git", "add", ".project/STATE.md"), cwd=self.repo, check=True, capture_output=True)
+        subprocess.run(
+            ("git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"),
+            cwd=self.repo, check=True, capture_output=True)
+
+    def event(self, command: str):
+        return {"tool_name": "Bash", "tool_input": {"command": command, "cwd": str(self.repo)}}
+
+    def test_agent_cannot_create_a_runtime_hotfix_ref(self) -> None:
+        status, output, error = run_guard(self.event(
+            f"git update-ref refs/gsd-path/runtime-hotfix/T001-{'a' * 40} {'b' * 40}"))
+        self.assertEqual(status, 2, error)
+        self.assertIn("Path-owned ref", output)
+
+    def test_agent_can_still_update_ordinary_refs(self) -> None:
+        status, output, error = run_guard(self.event(
+            "git update-ref refs/heads/ordinary-work " + "b" * 40))
+        self.assertEqual(status, 0, error + output)
+
+
 if __name__ == "__main__":
     unittest.main()

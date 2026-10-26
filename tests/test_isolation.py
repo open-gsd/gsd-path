@@ -373,6 +373,200 @@ class IsolationTests(unittest.TestCase):
             (repo / after).rmdir()
         self.write(repo, after, "the replacement holds other text\n")
 
+    def test_runtime_hotfix_records_and_lands_the_pin(self) -> None:
+        # Full recovery: a published replacement runtime, the command's
+        # re-verified receipt in both the guard-owned ref and the task Log,
+        # and a serial landing that includes the runtime pin (#480).
+        with tempfile.TemporaryDirectory() as temporary:
+            from unittest import mock as _mock
+            home = Path(temporary) / "home"
+            home.mkdir()
+            environment = _mock.patch.dict(
+                os.environ, {"HOME": str(home), "USERPROFILE": str(home)})
+            environment.start()
+            self.addCleanup(environment.stop)
+            source = Path(temporary) / "pkg"
+            (source / "scripts").mkdir(parents=True)
+            (source / "package.json").write_text(
+                '{"version": "9.9.9"}\n', encoding="utf-8")
+            import runtime_store
+            for name in (*runtime_store.RUNTIME_FILES, *runtime_store.GUARDS,
+                         "status_runtime.py"):
+                shutil.copyfile(
+                    PROJECT_ROOT / "scripts" / name, source / "scripts" / name)
+            pin = runtime_store.publish(source)
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            pinned = {"schema": "gsd-path/runtime/v1", "version": "1.0.0",
+                      "digest": "0" * 64}
+            (repo / ".gsd-path").mkdir()
+            (repo / ".gsd-path" / "runtime.json").write_text(
+                json.dumps(pinned) + "\n", encoding="utf-8")
+            git(repo, "add", ".gsd-path/runtime.json")
+            git(repo, "commit", "-q", "-m", "pin runtime")
+            base = git(repo, "rev-parse", "HEAD")
+            # Activation edits stay uncommitted: the recorded base is the
+            # committed layer, and the task file lands with the task.
+            task = TASK_FILE.replace("base: null", f"base: {base}").replace(
+                "worktree: active", f"worktree: {repo}") + (
+                "\n## Verify\n\n```bash\ntest -f src/app.py\n```\n")
+            self.write(repo, ".project/tasks/T001.md", task)
+            self.write(repo, "src/app.py", "print('done')\n")
+
+            result = isolation.runtime_hotfix(
+                repo, "T001", pin["digest"], "owner ruling 2026-10-26")
+
+            self.assertEqual(result["new_runtime"], pin["digest"])
+            recorded = git(repo, "cat-file", "blob", result["authorization_ref"])
+            self.assertIn("runtime-hotfix: task T001", recorded)
+            log = (repo / ".project/tasks/T001.md").read_text(encoding="utf-8")
+            self.assertIn(result["receipt"], log)
+            # The pin change lands with the task under the receipt.
+            self.write(repo, ".gsd-path/runtime.json",
+                       json.dumps({**pin, "provenance": {"source": "hotfix"}}) + "\n")
+            landed = isolation.land(
+                repo, repo, result["base"], "T001", "add greeting",
+                ".project/tasks/T001.md", ["src/app.py"],
+            )
+            changed = git(repo, "show", "--name-only", "--format=", landed["commit"]).split()
+            self.assertIn(".gsd-path/runtime.json", changed)
+
+    def test_runtime_hotfix_command_refusals(self) -> None:
+        # The command refuses an unknown task, a non-active task, a base-less
+        # task, a non-serial worktree, a malformed digest, an unpublished
+        # runtime, and the already-pinned digest — before any receipt is
+        # written (#480).
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            # A properly activated serial task: base set, primary worktree.
+            active = TASK_FILE.replace("base: null", f"base: {base}").replace(
+                "worktree: active", f"worktree: {repo}") + (
+                "\n## Verify\n\n```bash\ntest -f src/app.py\n```\n")
+            self.write(repo, ".project/tasks/T001.md", active)
+            hotfix = lambda *args: isolation.runtime_hotfix(repo, *args)
+            with self.assertRaisesRegex(isolation.IsolationError, "missing or ambiguous"):
+                hotfix("T999", "1" * 64, "owner ruling")
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "64-hex digest"):
+                hotfix("T001", "not-a-digest", "owner ruling")
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "not published in the store"):
+                hotfix("T001", "1" * 64, "owner ruling")
+            pending = TASK_FILE.replace("status: in-progress", "status: pending").replace(
+                "T001", "T002").replace("worktree: active", f"worktree: {repo}")
+            self.write(repo, ".project/tasks/T002.md", pending)
+            with self.assertRaisesRegex(isolation.IsolationError, "T002 is pending"):
+                hotfix("T002", "1" * 64, "owner ruling")
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE.replace(
+                "worktree: active", f"worktree: {repo}"))
+            with self.assertRaisesRegex(isolation.IsolationError, "records no full base"):
+                hotfix("T001", "1" * 64, "owner ruling")
+            self.write(repo, ".project/tasks/T001.md", TASK_FILE.replace(
+                "base: null", f"base: {base}"))
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "working in the primary"):
+                hotfix("T001", "1" * 64, "owner ruling")
+
+    def test_serial_land_admits_runtime_pin_only_with_a_matching_receipt(self) -> None:
+        # A runtime-hotfix receipt for exactly this task and base admits the
+        # runtime pin path into the landing; anything else keeps the refusal.
+        import runtime_store
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "home"
+            home.mkdir()
+            from unittest import mock as _mock
+            environment = _mock.patch.dict(
+                os.environ, {"HOME": str(home), "USERPROFILE": str(home)})
+            environment.start()
+            self.addCleanup(environment.stop)
+            source = Path(temporary) / "pkg"
+            (source / "scripts").mkdir(parents=True)
+            (source / "package.json").write_text(
+                '{"version": "9.9.9"}\n', encoding="utf-8")
+            for name in (*runtime_store.RUNTIME_FILES, *runtime_store.GUARDS,
+                         "status_runtime.py"):
+                shutil.copyfile(
+                    PROJECT_ROOT / "scripts" / name, source / "scripts" / name)
+            published = runtime_store.publish(source)
+            OLD_RUNTIME, NEW_RUNTIME = "0" * 64, published["digest"]
+            receipt = (
+                "- 2026-10-26 — runtime-hotfix: task T001 base {base} "
+                "runtime {old} -> {new} authorized by owner ruling 2026-26"
+            ).replace("2026-26", "2026-10-26")
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolation.isolate_task(repo, base, "T001", 1)
+            self.write(repo, "src/app.py", "print('done')\n")
+            hot_receipt = receipt.format(
+                base=base, old=OLD_RUNTIME, new=NEW_RUNTIME)
+            # The receipt rides uncommitted in the task Log, landing with the
+            # task — but only because the guard-owned ref holds the same line.
+            self.write(
+                repo, ".project/tasks/T001.md",
+                TASK_FILE + f"log\n\n{hot_receipt}\n")
+            blob = subprocess.run(
+                ("git", "-C", str(repo), "hash-object", "-w", "--stdin"),
+                input=hot_receipt[2:], encoding="utf-8", capture_output=True, check=True,
+            ).stdout.strip()
+            git(repo, "update-ref",
+                f"refs/gsd-path/runtime-hotfix/T001-{base}", blob)
+            # The landed pin must name the receipt's published runtime.
+            self.write(repo, ".gsd-path/runtime.json", json.dumps({
+                "schema": published["schema"], "version": published["version"],
+                "digest": NEW_RUNTIME}) + "\n")
+            result = isolation.land(
+                repo, repo, base, "T001", "add greeting",
+                ".project/tasks/T001.md", ["src/app.py"],
+            )
+            self.assertEqual(result["mode"], "serial")
+            changed = git(repo, "show", "--name-only", "--format=", result["commit"]).split()
+            self.assertIn(".gsd-path/runtime.json", changed)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            base = self.init_bound_repo(repo)
+            isolation.isolate_task(repo, base, "T001", 1)
+            self.write(repo, "src/app.py", "print('done')\n")
+            for bad in (
+                receipt.format(base="9" * 40, old=OLD_RUNTIME, new=NEW_RUNTIME),  # wrong base
+                receipt.format(base=base, old=OLD_RUNTIME, new=NEW_RUNTIME).replace(
+                    "task T001", "task T002"),  # wrong task
+                "- 2026-10-26 — runtime-hotfix mentioned for T001",  # bare mention
+                hot_receipt.replace("authorized by", "signed by"),  # no matching ref line
+            ):
+                with self.subTest(bad=bad[:40]):
+                    self.write(repo, ".project/tasks/T001.md",
+                               TASK_FILE + f"log\n\n{bad}\n")
+                    self.write(repo, ".gsd-path/runtime.json", json.dumps({
+                        "schema": published["schema"],
+                        "version": published["version"],
+                        "digest": NEW_RUNTIME}) + "\n")
+                    with self.assertRaisesRegex(
+                        isolation.IsolationError, "unexpected paths.*runtime.json"
+                    ):
+                        isolation.land(
+                            repo, repo, base, "T001", "add greeting",
+                            ".project/tasks/T001.md", ["src/app.py"],
+                        )
+            # A matching receipt+ref pair whose landed pin carries a different
+            # digest admits nothing.
+            self.write(repo, ".project/tasks/T001.md",
+                       TASK_FILE + f"log\n\n{hot_receipt}\n")
+            self.write(repo, ".gsd-path/runtime.json",
+                       '{"schema": "gsd-path/runtime/v1", "digest": "' + "2" * 64 + '"}\n')
+            with self.assertRaisesRegex(
+                isolation.IsolationError, "unexpected paths.*runtime.json"
+            ):
+                isolation.land(
+                    repo, repo, base, "T001", "add greeting",
+                    ".project/tasks/T001.md", ["src/app.py"],
+                )
+
     def test_serial_land_stages_a_file_and_directory_swap(self) -> None:
         # One `git add` for each path fails here: the first call drops the
         # other path from the index, and then its pathspec matches no file.

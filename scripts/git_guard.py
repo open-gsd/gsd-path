@@ -19,7 +19,10 @@ _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py").is_file() else _HERE))
 sys.dont_write_bytecode = True  # a hook must not leave __pycache__ in the worktree
 try:
-    from isolation import BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, task_frontmatter, undeclared_paths
+    from isolation import (
+        BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, runtime_hotfix_allowed_paths,
+        task_frontmatter, undeclared_paths,
+    )
     from pipeline_git import is_ship_subject, ship_body_matches, ship_commit_body, task_commit_body
     from pipeline_state import _completion_status
     from _common import reviewed_head_covers, valid_default_branch
@@ -544,7 +547,18 @@ def product_commit_violations(entries, subject, body):
         if error:
             problems.append(error)
         if contract_paths is not None:
-            stray = undeclared_paths(repo_root(), base, set(staged), contract_paths)
+            # A runtime-hotfix receipt for exactly this task and base admits
+            # the runtime pin path into the commit-msg check too (#480) —
+            # the same dual-record proof isolation.py land applies.
+            staged_pin = subprocess.run(
+                ("git", "-C", str(repo_root()), "show", f":{'.gsd-path/runtime.json'}"),
+                capture_output=True, encoding="utf-8", errors="replace",
+            ).stdout if ".gsd-path/runtime.json" in staged else None
+            hotfix_allowed = runtime_hotfix_allowed_paths(
+                repo_root(), staged_file(task_file), task_file, base,
+                pin_text=staged_pin)
+            stray = undeclared_paths(
+                repo_root(), base, set(staged), contract_paths | hotfix_allowed)
             if stray:
                 problems.append("undeclared paths: " + ", ".join(stray))
         if body != task_commit_body(task_file, staged, base).strip():
