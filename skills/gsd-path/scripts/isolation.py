@@ -1556,15 +1556,7 @@ def _member_sibling_contract_files(
     """
     def contract_bullets(text: str) -> Set[str]:
         body = _common.section_body(text, "Interface contract")
-        if body is None:
-            return set()
-        return {
-            bullet for bullet in (
-                " ".join(line.strip()[2:].split())
-                for line in body.splitlines()
-                if line.strip().startswith("- ") and line.strip() != "- None"
-            ) if bullet
-        }
+        return set() if body is None else _common.contract_shapes(body)
 
     live = contract_bullets(git_text(coordinator, "show", f"{base}:{task_file}"))
     if not live:

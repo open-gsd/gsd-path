@@ -90,7 +90,7 @@ class MemberLandingTests(unittest.TestCase):
         live = TASK.replace("T001", "T004").replace("Change app", "Pair contract").replace(
             "app.py", "paired.py") + contract
         sibling = TASK.replace("T001", "T005").replace("Change app", "Share contract").replace(
-            "app.py", "config.py") + contract
+            "app.py", "config.py") + contract.replace("returns the greeting", "returns the\n  greeting")
         stranger = TASK.replace("T001", "T006").replace("Change app", "Other contract").replace(
             "app.py", "other.py") + (
             "\n## Interface contract\n\n- `other(x: int) -> int` doubles.\n"

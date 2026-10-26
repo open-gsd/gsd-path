@@ -27,7 +27,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import BinaryIO, Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import BinaryIO, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 
 # Chosen by what imports, not os.name, so tests can emulate Windows on POSIX.
@@ -197,6 +197,19 @@ def section_body(text: str, heading: str) -> Optional[str]:
         rf"(?ms)^## {re.escape(heading)}\s*\n(?P<body>.*?)(?=^## |\Z)", text
     )
     return match.group("body") if match else None
+
+
+def contract_shapes(body: str) -> Set[str]:
+    """The whitespace-normalized `- ` entries of an Interface contract body.
+
+    HTML comments are dropped and continuation lines join their entry. A
+    body that says only `None` has no shapes.
+    """
+    cleaned = re.sub(r"(?s)<!--.*?-->", "", body).strip()
+    if " ".join(cleaned.split()) in {"", "None", "- None"}:
+        return set()
+    entries = re.split(r"(?m)^-[ \t]+", cleaned)
+    return {shape for shape in (" ".join(entry.split()) for entry in entries) if shape}
 
 
 def overlapping_paths(left: Sequence[str], right: Sequence[str]) -> List[str]:
