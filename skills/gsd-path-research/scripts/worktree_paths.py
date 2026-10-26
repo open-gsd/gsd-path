@@ -7,11 +7,13 @@ import sys
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
 
+import contextlib
 import hashlib
 import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 if __package__:
     from . import _common
@@ -22,7 +24,39 @@ else:
         from scripts import _common
 
 
+# Run-scoped cache for read-only consumers (#469): recovery resolves a
+# placement per task, and each resolution lists the whole worktree registry
+# and re-reads the placement receipt. Within one read-only run none of that
+# can change, so the listing and the derived workspace answer once. Flows
+# that create, move, or retire worktrees never enter this scope.
+_PLACEMENT_CACHE: Optional[dict] = None
+
+
+@contextlib.contextmanager
+def readonly_placement_cache():
+    global _PLACEMENT_CACHE
+    if _PLACEMENT_CACHE is not None:  # already inside a read-only run
+        yield
+        return
+    _PLACEMENT_CACHE = {"porcelain": {}, "workspace": {}}
+    try:
+        yield
+    finally:
+        _PLACEMENT_CACHE = None
+
+
 def _worktree_list_porcelain(primary: Path) -> tuple[str, bool]:
+    if _PLACEMENT_CACHE is not None:
+        key = str(primary)
+        if key in _PLACEMENT_CACHE["porcelain"]:
+            return _PLACEMENT_CACHE["porcelain"][key]  # type: ignore[index]
+        output = _worktree_list_porcelain_uncached(primary)
+        _PLACEMENT_CACHE["porcelain"][key] = output
+        return output
+    return _worktree_list_porcelain_uncached(primary)
+
+
+def _worktree_list_porcelain_uncached(primary: Path) -> tuple[str, bool]:
     try:
         if __package__:
             from . import pipeline_git as pg
@@ -58,6 +92,17 @@ def _identity(path: Path) -> str:
 
 
 def _workspace(primary: Path, pin: bool) -> Path:
+    if _PLACEMENT_CACHE is not None and not pin:
+        key = str(primary)
+        if key in _PLACEMENT_CACHE["workspace"]:
+            return _PLACEMENT_CACHE["workspace"][key]  # type: ignore[index]
+        workspace = _workspace_uncached(primary, False)
+        _PLACEMENT_CACHE["workspace"][key] = workspace
+        return workspace
+    return _workspace_uncached(primary, pin)
+
+
+def _workspace_uncached(primary: Path, pin: bool) -> Path:
     common = Path(_git(primary, "rev-parse", "--git-common-dir"))
     common = (primary / common).resolve()
     identity = _identity(primary)

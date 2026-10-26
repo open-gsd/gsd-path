@@ -181,8 +181,20 @@ def common_git_dir(repo: Path) -> Path:
 
 
 def sidecar_root(primary: Path, kind: str, name: str, *, pin: bool = False) -> Path:
+    # Recovery resolves the same placements per task; each resolution lists
+    # every worktree. Within one read-only run the answer cannot change, so
+    # the entrypoint-cleared memo answers repeats (#469).
+    key = ("sidecar-root", str(primary), kind, name)
+    run_active = ("head-sha", str(primary)) in _RECOVERY_MEMO
     try:
-        return worktree_paths.worktree_path(primary, kind, name, pin=pin)
+        if run_active and not pin and key in _RECOVERY_MEMO:
+            return _RECOVERY_MEMO[key]  # type: ignore[return-value]
+        resolved = worktree_paths.worktree_path(primary, kind, name, pin=pin)
+        if run_active and not pin:
+            # Only a read-only recovery run memoizes; pinning writes a
+            # placement receipt and must always run for real (#469).
+            _RECOVERY_MEMO[key] = resolved
+        return resolved
     except (ValueError, OSError) as error:
         raise IsolationError(str(error)) from error
 
@@ -2111,6 +2123,16 @@ def _commit_pending(
     return current_sha(repo)
 
 
+# Run-scoped memo for read-only recovery queries (#469): recovery re-proves
+# every task against the same immutable commits, so shared-base lookups (tree
+# kinds, blob listings, serial bookkeeping, the primary worktree report) answer
+# once per run. Each public recovery entrypoint clears it, so a process that
+# mutates between runs never reads a stale entry, and only immutable inputs —
+# full commit shas or per-run constants — are ever keyed.
+_RECOVERY_MEMO: Dict[tuple, object] = {}
+_FULL_SHA = re.compile(r"[0-9a-f]{40}")
+
+
 def undeclared_paths(
     repo: Path, base: str, paths: Set[str], declared: Set[str]
 ) -> list[str]:
@@ -2120,11 +2142,17 @@ def undeclared_paths(
     An entry that is a file at `base` covers only itself: the task-brief lint
     rejects a path below a base file.
     """
+    cacheable = _FULL_SHA.fullmatch(base) is not None
 
-    @functools.lru_cache(maxsize=None)
     def directory(entry: str) -> bool:
+        key = ("tree-kind", str(repo), base, entry)
+        if cacheable and key in _RECOVERY_MEMO:
+            return _RECOVERY_MEMO[key]  # type: ignore[index]
         kind = run_git(repo, "cat-file", "-t", f"{base}:{entry}")
-        return kind.returncode != 0 or kind.stdout.strip() == "tree"
+        covering = kind.returncode != 0 or kind.stdout.strip() == "tree"
+        if cacheable:
+            _RECOVERY_MEMO[key] = covering
+        return covering
 
     return sorted(
         path
@@ -2915,13 +2943,52 @@ def _declared_task_paths(
         return None, str(error)
 
 
+def _tree_blob_map(repo: Path, revision: str) -> Dict[str, tuple[str, str, str]]:
+    """{path: (mode, type, oid)} for one commit's full tree."""
+    mapping: Dict[str, tuple[str, str, str]] = {}
+    for entry in git_output(
+        repo, "ls-tree", "-r", "-z", revision
+    ).split("\0"):
+        if not entry:
+            continue
+        meta, separator, name = entry.partition("\t")
+        if not separator:
+            continue
+        parts = meta.split()
+        if len(parts) == 3:
+            mapping[name] = (parts[0], parts[1], parts[2])
+    return mapping
+
+
 def _regular_blob_oid(repo: Path, revision: str, path: str) -> str:
+    # A full-sha revision addresses immutable content: the listing answers
+    # once per run (#469). Moving names are never cached, but within one
+    # read-only run HEAD is the entrypoint's recorded head, so resolve it.
+    if revision == "HEAD":
+        recorded = _RECOVERY_MEMO.get(("head-sha", str(repo)))
+        if isinstance(recorded, str):
+            # Every task compares against the same run head: one full listing
+            # answers all of them (#469).
+            map_key = ("head-tree", str(repo), recorded)
+            if map_key not in _RECOVERY_MEMO:
+                _RECOVERY_MEMO[map_key] = _tree_blob_map(repo, recorded)
+            mapping = _RECOVERY_MEMO[map_key]
+            assert isinstance(mapping, dict)
+            entry = mapping.get(path)
+            if entry is None or entry[1] != "blob" or entry[0] not in {"100644", "100755"}:
+                raise IsolationError(f"task path is not a regular file in HEAD: {path}")
+            return entry[2]
+    key = ("blob-oid", str(repo), revision, path)
+    if _FULL_SHA.fullmatch(revision) is not None and key in _RECOVERY_MEMO:
+        return str(_RECOVERY_MEMO[key])
     entries = git_output(repo, "ls-tree", revision, "--", path).splitlines()
     if len(entries) != 1:
         raise IsolationError(f"task path is not a regular file in {revision}: {path}")
     parts = entries[0].split(maxsplit=3)
     if len(parts) != 4 or parts[0] not in {"100644", "100755"} or parts[1] != "blob":
         raise IsolationError(f"task path is not a regular file in {revision}: {path}")
+    if _FULL_SHA.fullmatch(revision) is not None:
+        _RECOVERY_MEMO[key] = parts[2]
     return parts[2]
 
 
@@ -3231,6 +3298,23 @@ def _worktree_report(
         return None, f"invalid sidecar worktree {path}: {error}"
 
 
+def _primary_worktree_report(
+    primary: Path, bound: str, head: str
+) -> tuple[Optional[Dict[str, object]], Optional[str]]:
+    """The primary's own worktree report, answered once per recovery run.
+
+    Recovery is read-only and the run's head is fixed, so every serial task
+    sees the same answer; the entrypoint-cleared memo scopes it to one run
+    (#469).
+    """
+    key = ("primary-report", str(primary), bound, head)
+    if key in _RECOVERY_MEMO:
+        return _RECOVERY_MEMO[key]  # type: ignore[return-value]
+    report = _worktree_report(primary, primary, bound)
+    _RECOVERY_MEMO[key] = report
+    return report
+
+
 def _retained_task_contract_error(
     current_text: str, isolate_text: str
 ) -> Optional[str]:
@@ -3295,6 +3379,15 @@ def _serial_bookkeeping_error(primary: Path, base: str, head: str) -> Optional[s
     """Prove that serial task history advanced only through linear .project commits."""
     if base == head:
         return None
+    key = ("serial-bookkeeping", str(primary), base, head)
+    if key in _RECOVERY_MEMO:
+        return _RECOVERY_MEMO[key]  # type: ignore[return-value]
+    error = _serial_bookkeeping_proof(primary, base, head)
+    _RECOVERY_MEMO[key] = error
+    return error
+
+
+def _serial_bookkeeping_proof(primary: Path, base: str, head: str) -> Optional[str]:
     if run_git(primary, "merge-base", "--is-ancestor", base, head).returncode != 0:
         return "recorded base is not an ancestor of the current branch"
     commits = git_output(
@@ -3634,7 +3727,7 @@ def _recover_task(
                     "block",
                     reason=f"{status} serial task advanced past its base: {advance_error}",
                 )
-            primary_worktree, primary_error = _worktree_report(primary, primary, bound)
+            primary_worktree, primary_error = _primary_worktree_report(primary, bound, head)
             if primary_error:
                 return result("block", reason=primary_error)
             report["worktree"] = primary_worktree
@@ -3690,7 +3783,7 @@ def _recover_task(
                     "block",
                     reason=f"{status} serial task advanced past its base: {advance_error}",
                 )
-            primary_worktree, primary_error = _worktree_report(primary, primary, bound)
+            primary_worktree, primary_error = _primary_worktree_report(primary, bound, head)
             if primary_error:
                 return result("block", reason=primary_error)
             report["worktree"] = primary_worktree
@@ -3780,9 +3873,7 @@ def _recover_task(
             primary, recorded_base, task_file, task_text, subject
         )
         if retry_error is None:
-            primary_worktree, primary_error = _worktree_report(
-                primary, primary, bound
-            )
+            primary_worktree, primary_error = _primary_worktree_report(primary, bound, head)
             if primary_error:
                 return result("block", reason=primary_error)
             report["worktree"] = primary_worktree
@@ -3887,6 +3978,20 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
         raise IsolationError(f"primary is not its Git root: {primary}")
     bound = require_attached(primary)
     head = current_sha(primary)
+    _RECOVERY_MEMO.clear()
+    _RECOVERY_MEMO[("head-sha", str(primary))] = head
+    try:
+        with worktree_paths.readonly_placement_cache():
+            return _recover_all(primary, tasks_dir, bound, head)
+    finally:
+        # HEAD resumes its moving-name meaning the moment the read-only run
+        # ends: landing flows in the same process must never resolve it to a
+        # stale recorded head.
+        _RECOVERY_MEMO.pop(("head-sha", str(primary)), None)
+        _RECOVERY_MEMO.pop(("head-tree", str(primary), head), None)
+
+
+def _recover_all(primary: Path, tasks_dir: Path, bound: str, head: str) -> Dict[str, object]:
     task_paths, inventory_error = _recovery_task_inventory(primary, tasks_dir, head)
     if inventory_error:
         return {
@@ -3900,10 +4005,11 @@ def recover(primary: Path, tasks_dir: Path) -> Dict[str, object]:
     branches = set(
         git_output(primary, "for-each-ref", "--format=%(refname:short)", f"refs/heads/{TASK_BRANCH_PREFIX}").splitlines()
     )
-    tasks = [
-        _recover_task(primary, path, history, branches, head, bound)
-        for path in task_paths
-    ]
+    tasks = []
+    for number, path in enumerate(task_paths, start=1):
+        if number % 20 == 0:
+            print(f"recover: {number}/{len(task_paths)} tasks", file=sys.stderr, flush=True)
+        tasks.append(_recover_task(primary, path, history, branches, head, bound))
     return {
         "bound_branch": bound,
         "tasks": tasks,
@@ -3924,7 +4030,6 @@ def verify_landed_task_files(
         raise IsolationError(f"primary is not its Git root: {primary}")
     bound = require_attached(primary)
     resolved_head = require_commit(primary, require_full_sha(head))
-    canonical_dir = relative_posix(canonical_tasks_dir)
     history = _first_parent_history(primary, resolved_head)
     branches = set(
         git_output(
@@ -3934,8 +4039,30 @@ def verify_landed_task_files(
             f"refs/heads/{TASK_BRANCH_PREFIX}",
         ).splitlines()
     )
+    _RECOVERY_MEMO.clear()
+    _RECOVERY_MEMO[("head-sha", str(primary))] = resolved_head
+    try:
+        with worktree_paths.readonly_placement_cache():
+            return _verify_landed_all(
+                primary, list(task_paths), relative_posix(canonical_tasks_dir),
+                resolved_head, history, branches, bound,
+            )
+    finally:
+        _RECOVERY_MEMO.pop(("head-sha", str(primary)), None)
+        _RECOVERY_MEMO.pop(("head-tree", str(primary), resolved_head), None)
+def _verify_landed_all(
+    primary: Path,
+    task_paths: Sequence[Path],
+    canonical_dir: str,
+    resolved_head: str,
+    history: Dict[str, list[tuple[str, str]]],
+    branches: Set[str],
+    bound: str,
+) -> Dict[str, object]:
     tasks = []
-    for path in task_paths:
+    for number, path in enumerate(task_paths, start=1):
+        if number % 20 == 0:
+            print(f"recover: {number}/{len(task_paths)} tasks", file=sys.stderr, flush=True)
         resolved = path.resolve()
         if path.is_symlink() or not path.is_file():
             raise IsolationError(f"task artifact is missing or unsafe: {path}")
