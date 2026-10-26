@@ -2816,7 +2816,7 @@ def unresolved_runner_word(token):
 
 POWERSHELL_ASSIGNMENT_TARGET = re.compile(r"^\$(?:env:)?[A-Za-z_][A-Za-z0-9_]*$")
 POWERSHELL_LITERAL_VALUE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/\\ +,-]*")
-POWERSHELL_STATIC_CALL = re.compile(r"^\[(?P<type>[^\]()]+)\]::")
+POWERSHELL_STATIC_CALL = re.compile(r"\[(?P<type>[^\]()]+)\]::")
 POWERSHELL_PURE_TYPES = frozenset(
     {
         "math", "string", "int", "int32", "long", "int64", "double", "bool",
@@ -2835,15 +2835,16 @@ POWERSHELL_DYNAMIC_COMMANDS = frozenset(
 )
 
 
-def powershell_assignment_invocation(segment):
-    """A validated PowerShell assignment statement, or None.
+def powershell_assignment_invocation(segment, unwrap_runners=True):
+    """The invocation a validated PowerShell assignment runs, or None.
 
     ``$name = literal`` and ``$env:NAME = literal`` set a process-local
-    variable or environment entry: no file, ref, or repository state can
-    change. The value must be plain literals; anything richer — expansions,
-    substitutions, member access — keeps the unresolvable denial rather than
-    guessing at expression semantics. An environment name that changes where
-    Git reads its configuration is refused exactly like the shell form (#468).
+    variable or environment entry. PowerShell runs a bare-word value as a
+    pipeline, so the value is judged as the command it would run. The value
+    must be plain literals; anything richer — expansions, substitutions,
+    member access — keeps the unresolvable denial rather than guessing at
+    expression semantics. An environment name that changes where Git reads
+    its configuration is refused exactly like the shell form (#468).
     """
     if len(segment) < 3 or segment[1] != "=":
         return None
@@ -2864,7 +2865,7 @@ def powershell_assignment_invocation(segment):
         return None  # shell-style names keep their shell semantics, not PowerShell's
     if any(POWERSHELL_LITERAL_VALUE.fullmatch(token) is None for token in segment[2:]):
         return None
-    return segment[0], segment[2:]
+    return command_invocation(segment[2:], unwrap_runners)
 
 
 def powershell_expression_reason(tokens, depth=0):
@@ -2877,8 +2878,17 @@ def powershell_expression_reason(tokens, depth=0):
     members and denies every other static call — wherever the token appears,
     including inside a script block or a wrapped ``-Command`` payload — plus
     every dynamic-execution command (aliases included) inside a block or as
-    the executable, the call operator, and opaque encoded payloads (#468).
+    the executable, and the call operator (#468).
     """
+    previous = None
+    for token in tokens:
+        if token == "&" and (
+            previous is None
+            or previous.endswith("{")
+            or set(previous) <= set("|;&()\n\r")
+        ):
+            return "the PowerShell call operator target cannot be resolved"
+        previous = token
     for segment in command_segments(tokens):
         wrapped = wrapped_command_tokens(segment, expand_parameters=False)
         if wrapped is not None:
@@ -2891,30 +2901,20 @@ def powershell_expression_reason(tokens, depth=0):
         invocation = command_invocation(list(segment))
         if invocation is None:
             continue
-        executable, arguments = invocation
+        executable = invocation[0]
         if executable in POWERSHELL_DYNAMIC_COMMANDS:
             return f"dynamic execution cannot be inspected by the guard: {executable}"
-        if executable == "&":
-            return "the PowerShell call operator target cannot be resolved"
-        if executable in {"powershell", "pwsh"} and any(
-            argument.casefold() in {"-encodedcommand", "-enc", "-e"}
-            for argument in arguments
-        ):
-            return "encoded command payloads cannot be inspected by the guard"
-        in_block = False
+        block_depth = 0
         for token in segment:
-            if token == "{":
-                in_block = True
-                continue
-            if token == "}":
-                in_block = False
-                continue
-            match = POWERSHELL_STATIC_CALL.match(token)
+            match = POWERSHELL_STATIC_CALL.search(token)
             if match is not None and match.group("type").strip().casefold() not in POWERSHELL_PURE_TYPES:
                 return (f"static member call is not on the guard's read-only type "
                         f"whitelist: {token}")
-            if in_block and token.casefold() in POWERSHELL_DYNAMIC_COMMANDS:
+            word = token.lstrip("{")
+            block_depth += len(token) - len(word)
+            if block_depth and word.rstrip("}").casefold() in POWERSHELL_DYNAMIC_COMMANDS:
                 return f"dynamic execution cannot be inspected by the guard: {token}"
+            block_depth = max(0, block_depth - (len(word) - len(word.rstrip("}"))))
     return None
 
 
@@ -3012,10 +3012,8 @@ def command_invocation(segment, unwrap_runners=True):
             break
     arguments = segment[index + 1 :]
     if SHELL_PARAMETER_SYNTAX.search(executable):
-        assignment = powershell_assignment_invocation(list(segment[index:]))
+        assignment = powershell_assignment_invocation(list(segment[index:]), unwrap_runners)
         if assignment is not None:
-            # A process-local assignment is not an executable; the statement
-            # continues as an inert unrecognized command (#468).
             return assignment
         raise ValueError(
             f"executable {segment[index]} cannot be resolved by the guard; "

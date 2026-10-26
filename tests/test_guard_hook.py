@@ -4425,6 +4425,10 @@ class PowerShellExpressionTests(unittest.TestCase):
             "$x = $(Get-Content secret.txt)",
             "$env:PATH = $other",
             "$x = [System.IO.File]::ReadAllText('f')",
+            # A bare-word value runs as a pipeline; it is judged as that command.
+            "$x = git config core.fsmonitor evil",
+            "$x = Remove-Item C:/Users/x/file.txt",
+            "$x = iex foo",
         ):
             with self.subTest(command=command):
                 self.assert_denied(self.powershell(command))
@@ -4454,12 +4458,17 @@ class PowerShellExpressionTests(unittest.TestCase):
             "saps notepad",
             "New-Object System.Net.WebClient",
             "& $cmd",
+            "& foo",
+            "&foo",
+            "1 | % { & foo }",
             "powershell -EncodedCommand YWJj",
             "pwsh -enc YWJj",
             # A script block executes its contents: the static call is an
             # argument of ForEach-Object, not an executable.
             "1 | ForEach-Object { [System.IO.File]::WriteAllText('x','y') }",
             "Get-ChildItem | ForEach-Object { iex $_.FullName }",
+            "1 | % {iex x}",
+            "1 | % {[System.IO.File]::WriteAllText('x','y')}",
             # Wrapped payloads are inspected with the same rules.
             "pwsh -Command '[System.IO.File]::WriteAllText(\"x\",\"y\")'",
         ):
