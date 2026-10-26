@@ -2814,6 +2814,110 @@ def unresolved_runner_word(token):
     ) and not parameters_double_quoted(token)
 
 
+POWERSHELL_ASSIGNMENT_TARGET = re.compile(r"^\$(?:env:)?[A-Za-z_][A-Za-z0-9_]*$")
+POWERSHELL_LITERAL_VALUE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:/\\ +,-]*")
+POWERSHELL_STATIC_CALL = re.compile(r"^\[(?P<type>[^\]()]+)\]::")
+POWERSHELL_PURE_TYPES = frozenset(
+    {
+        "math", "string", "int", "int32", "long", "int64", "double", "bool",
+        "byte", "char", "decimal", "single", "guid", "datetime", "timespan",
+        "version",
+        "system.math", "system.string", "system.int32", "system.int64",
+        "system.double", "system.boolean", "system.guid", "system.datetime",
+        "system.timespan", "system.version",
+    }
+)
+POWERSHELL_DYNAMIC_COMMANDS = frozenset(
+    {
+        "invoke-expression", "iex", "invoke-command", "icm", "add-type",
+        "start-process", "saps", "sap", "start-job", "new-object",
+    }
+)
+
+
+def powershell_assignment_invocation(segment):
+    """A validated PowerShell assignment statement, or None.
+
+    ``$name = literal`` and ``$env:NAME = literal`` set a process-local
+    variable or environment entry: no file, ref, or repository state can
+    change. The value must be plain literals; anything richer — expansions,
+    substitutions, member access — keeps the unresolvable denial rather than
+    guessing at expression semantics. An environment name that changes where
+    Git reads its configuration is refused exactly like the shell form (#468).
+    """
+    if len(segment) < 3 or segment[1] != "=":
+        return None
+    if POWERSHELL_ASSIGNMENT_TARGET.fullmatch(segment[0]) is None:
+        return None
+    name = segment[0].removeprefix("$")
+    folded = name.casefold()
+    if ":" in name:
+        variable, _, scope = name.partition(":")
+        if variable != "env":
+            return None
+        if scope.casefold() in {"home", "xdg_config_home"} or scope.casefold().startswith("git_"):
+            raise ValueError(
+                f"{name} changes where Git reads its configuration, which the guard "
+                "cannot validate; run git without it"
+            )
+    elif folded in {"home", "xdg_config_home"} or folded.startswith("git_"):
+        return None  # shell-style names keep their shell semantics, not PowerShell's
+    if any(POWERSHELL_LITERAL_VALUE.fullmatch(token) is None for token in segment[2:]):
+        return None
+    return segment[0], segment[2:]
+
+
+def powershell_expression_reason(tokens, depth=0):
+    """Why a PowerShell expression form stays denied, or None when safe.
+
+    PowerShell expression statements are not executables: assignments are
+    process-local, while .NET static member calls run arbitrary code
+    (``[System.IO.File]::WriteAllText`` writes a file the write-target
+    classification never sees). The guard allows the provably pure type
+    members and denies every other static call — wherever the token appears,
+    including inside a script block or a wrapped ``-Command`` payload — plus
+    every dynamic-execution command (aliases included) inside a block or as
+    the executable, the call operator, and opaque encoded payloads (#468).
+    """
+    for segment in command_segments(tokens):
+        wrapped = wrapped_command_tokens(segment, expand_parameters=False)
+        if wrapped is not None:
+            if depth >= 4:
+                return "nested command payloads exceed the guard's inspection depth"
+            reason = powershell_expression_reason(wrapped, depth + 1)
+            if reason:
+                return reason
+            continue
+        invocation = command_invocation(list(segment))
+        if invocation is None:
+            continue
+        executable, arguments = invocation
+        if executable in POWERSHELL_DYNAMIC_COMMANDS:
+            return f"dynamic execution cannot be inspected by the guard: {executable}"
+        if executable == "&":
+            return "the PowerShell call operator target cannot be resolved"
+        if executable in {"powershell", "pwsh"} and any(
+            argument.casefold() in {"-encodedcommand", "-enc", "-e"}
+            for argument in arguments
+        ):
+            return "encoded command payloads cannot be inspected by the guard"
+        in_block = False
+        for token in segment:
+            if token == "{":
+                in_block = True
+                continue
+            if token == "}":
+                in_block = False
+                continue
+            match = POWERSHELL_STATIC_CALL.match(token)
+            if match is not None and match.group("type").strip().casefold() not in POWERSHELL_PURE_TYPES:
+                return (f"static member call is not on the guard's read-only type "
+                        f"whitelist: {token}")
+            if in_block and token.casefold() in POWERSHELL_DYNAMIC_COMMANDS:
+                return f"dynamic execution cannot be inspected by the guard: {token}"
+    return None
+
+
 def command_invocation(segment, unwrap_runners=True):
     """`unwrap_runners` is False where a command runner itself must be judged."""
     index = 0
@@ -2908,6 +3012,11 @@ def command_invocation(segment, unwrap_runners=True):
             break
     arguments = segment[index + 1 :]
     if SHELL_PARAMETER_SYNTAX.search(executable):
+        assignment = powershell_assignment_invocation(list(segment[index:]))
+        if assignment is not None:
+            # A process-local assignment is not an executable; the statement
+            # continues as an inert unrecognized command (#468).
+            return assignment
         raise ValueError(
             f"executable {segment[index]} cannot be resolved by the guard; "
             "name the program literally"
@@ -4861,6 +4970,9 @@ def command_denial(command, working_directories, allow_destructive=True):
             )
             if state_reason:
                 return state_reason
+        expression_reason = powershell_expression_reason(tokens)
+        if expression_reason:
+            return expression_reason
         reason = closed_shell_execution_reason(command, tokens, working_directories)
         if reason:
             return reason
