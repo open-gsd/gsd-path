@@ -4631,6 +4631,22 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
         self.assertEqual(status, 2, error)
         self.assertIn("Path-owned ref", output)
 
+    def test_agent_cannot_run_runtime_hotfix_in_any_command_shape(self) -> None:
+        tail = f"runtime-hotfix --repo . --task-id T001 --runtime {'1' * 64} --authorized-by x"
+        for command in (
+            f"python3 scripts/isolation.py {tail}",
+            f"py -3 scripts/isolation.py {tail}",
+            f"python3 -I -B scripts/isolation.py {tail}",
+            f"cd scripts && python3 isolation.py {tail}",
+            f"true; python3 scripts/isolation.py {tail}",
+            f"env A=1 python3 scripts/isolation.py {tail}",
+            f"sh -c 'python3 scripts/isolation.py {tail}'",
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertEqual(status, 2, error + output)
+                self.assertIn("operator-only", output)
+
     def test_agent_can_still_update_ordinary_refs(self) -> None:
         status, output, error = run_guard(self.event(
             "git update-ref refs/heads/ordinary-work " + "b" * 40))

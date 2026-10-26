@@ -4972,6 +4972,21 @@ def closed_shell_execution_reason(
     return None
 
 
+def runtime_hotfix_invocation(tokens):
+    """True when any simple command, prefixed or wrapped, runs isolation.py runtime-hotfix."""
+    for segment in command_segments(tokens):
+        names = [token.replace("\\", "/").rsplit("/", 1)[-1] for token in segment]
+        if "isolation.py" in names and "runtime-hotfix" in names[names.index("isolation.py") + 1:]:
+            return True
+        try:
+            wrapped = wrapped_command_tokens(segment, expand_parameters=False)
+        except ValueError:  # the shape checks below refuse what cannot be unwrapped
+            continue
+        if wrapped is not None and runtime_hotfix_invocation(wrapped):
+            return True
+    return False
+
+
 def command_denial(command, working_directories, allow_destructive=True):
     """Return why a shell command is denied, or None when it may run."""
     working_directories = working_directories or [os.getcwd()]
@@ -4989,14 +5004,7 @@ def command_denial(command, working_directories, allow_destructive=True):
         # the owner authorization a landing later trusts, so an agent running
         # the command self-authorizes. Deny by subcommand name regardless of
         # the script's path.
-        helper_tokens = tokens[1:] if tokens and tokens[0] in ("python", "python3") else (
-            tokens[3:] if tokens[:2] == ["py", "-3"] else tokens)
-        if helper_tokens[:1] == ["-B"]:
-            helper_tokens = helper_tokens[1:]
-        if any(
-            name.endswith("/isolation.py") or name == "isolation.py"
-            for name in helper_tokens[:1]
-        ) and helper_tokens[1:2] == ["runtime-hotfix"]:
+        if runtime_hotfix_invocation(tokens):
             return (
                 "isolation.py runtime-hotfix records the owner authorization a "
                 "landing trusts; it is operator-only — request the hotfix from "

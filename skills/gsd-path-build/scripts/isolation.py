@@ -2651,8 +2651,9 @@ def runtime_hotfix(
     """
     primary = require_directory(primary, "primary worktree")
     task_id = validate_task_id(task_id)
-    if not authority.strip() or "\n" in authority:
-        raise IsolationError("runtime-hotfix requires the authorizing ruling as text")
+    authority = authority.strip()
+    if not authority or authority.splitlines() != [authority]:
+        raise IsolationError("runtime-hotfix requires the authorizing ruling as one line of text")
     try:
         import runtime_store
         import status_runtime
@@ -2688,12 +2689,15 @@ def runtime_hotfix(
         raise IsolationError(
             f"runtime {new_digest} is not published in the store: {error}"
         ) from error
-    status_runtime.validate_runtime({
-        "schema": status_runtime.RUNTIME_SCHEMA,
-        "version": str(manifest.get("version", "")),
-        "digest": new_digest,
-    })
-    declaration = status_runtime.declaration(primary)
+    try:
+        status_runtime.validate_runtime({
+            "schema": status_runtime.RUNTIME_SCHEMA,
+            "version": str(manifest.get("version", "")),
+            "digest": new_digest,
+        })
+        declaration = status_runtime.declaration(primary)
+    except (OSError, ValueError) as error:
+        raise IsolationError(f"runtime-hotfix refused: {error}") from error
     old_digest = str(declaration.get("digest", ""))
     if old_digest == new_digest:
         raise IsolationError("runtime-hotfix requires a different runtime than the pinned one")
@@ -5795,7 +5799,7 @@ def parser() -> argparse.ArgumentParser:
     runtime_hotfix_parser.add_argument("--task-id", required=True)
     runtime_hotfix_parser.add_argument(
         "--runtime", required=True,
-        help="full commit sha of the replacement runtime, validated before recording",
+        help="64-hex runtime digest printed by runtime_store.py publish, validated before recording",
     )
     runtime_hotfix_parser.add_argument(
         "--authorized-by", required=True,

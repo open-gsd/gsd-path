@@ -455,6 +455,17 @@ class IsolationTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 isolation.IsolationError, "not published in the store"):
                 hotfix("T001", "1" * 64, "owner ruling")
+            with self.assertRaisesRegex(isolation.IsolationError, "one line"):
+                hotfix("T001", "1" * 64, "owner\rruling")
+            from unittest import mock as _mock
+            home = Path(temporary) / "home"
+            tampered = home / ".gsd-path" / "runtimes" / ("1" * 64)
+            tampered.mkdir(parents=True)
+            (tampered / "manifest.json").write_text('{"version": "1"}\n', encoding="utf-8")
+            with _mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
+                with self.assertRaisesRegex(
+                        isolation.IsolationError, "refused: .*manifest identity mismatch"):
+                    hotfix("T001", "1" * 64, "owner ruling")
             pending = TASK_FILE.replace("status: in-progress", "status: pending").replace(
                 "T001", "T002").replace("worktree: active", f"worktree: {repo}")
             self.write(repo, ".project/tasks/T002.md", pending)
