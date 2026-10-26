@@ -9,6 +9,9 @@ base: null          # orchestrator-owned: clean layer SHA for isolated Verify
 worktree: null      # orchestrator-owned: isolated task worktree while active
 task_branch: null   # orchestrator-owned: gsd-path-task/<id> while parallel; null when serial
 # member_base: <sha> # orchestrator-owned, member-repo tasks only: the member repository's starting commit
+# reads:                # optional read-only cross-repository inputs, one per line (#471):
+#   - web: .github/workflows/build.yml    # a member path at that member's validation base
+#   - coordinator: docs/decisions.tsv     # from a member task: the coordinator's layer base
 # Optional explicit dispatch overrides: model: <advertised slug|inherit>
 # effort: <advertised effort|inherit>
 # repo: <member>    # multi-repo only: the MEMBERS.md member this task changes; omit for the coordinator

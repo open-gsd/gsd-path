@@ -393,6 +393,10 @@ def _lint_task(
     # where the member bound branch starts; `repo:` absent means the coordinator.
     git_root = repo
     member = fields.get("repo")
+    # The coordinator's own layer base, before any landed or member override: a
+    # member task's `coordinator:` reads resolve here (#471).
+    coordinator_base = (landed_bases or {}).get(task_id, base) if member is not None else base
+    base = (landed_bases or {}).get(task_id, base)
     if member is not None:
         located = member_base(member) if isinstance(member, str) and member and member_base else None
         if located is None:
@@ -428,6 +432,11 @@ def _lint_task(
             if ".." in candidate.parts:
                 problems.append(f"files entry must not contain '..': {entry}")
                 continue
+            if ": " in entry or ":" in entry.split("/", 1)[0]:
+                problems.append(
+                    f"files entries are repository-local write scope; a "
+                    f"repository-qualified reference is a read: {entry}")
+                continue
             normalized = str(candidate)
             declared.add(normalized)
             checked += 1
@@ -451,6 +460,53 @@ def _lint_task(
                     )
                     break
 
+    # Repository-qualified read-only inputs (#471): `reads:` holds `repo: path`
+    # entries resolved in that repository at the same base its own briefs use.
+    read_paths: Set[str] = set()
+    reads = fields.get("reads")
+    if reads is not None and not isinstance(reads, list):
+        problems.append("frontmatter reads must be a list")
+        reads = None
+    for entry in reads or []:
+        checked += 1
+        if not isinstance(entry, str) or ": " not in entry:
+            problems.append(f"reads entry must be `repo: path`: {entry!r}")
+            continue
+        name, _, read_path = entry.partition(": ")
+        candidate = PurePosixPath(read_path)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            problems.append(f"reads entry is not repo-relative: {entry}")
+            continue
+        normalized = str(candidate)
+        read_paths.add(normalized)
+        if ".git" in candidate.parts:
+            problems.append(f"reads entry must not enter .git: {normalized}")
+            continue
+        if member is None:
+            # A coordinator task may read from any member of this project.
+            located = member_base(name) if member_base else None
+            if located is None:
+                problems.append(
+                    f"reads entry names no member in MEMBERS.md: {name}: {normalized}")
+                continue
+            read_root, read_base = located
+        elif name == "coordinator":
+            # A member task may read the coordinator at its own layer base.
+            read_root, read_base = repo, coordinator_base
+        else:
+            # Cross-repository reads are read-only (#471): any member of the
+            # project may be named, resolved at that member's own base.
+            located_other = member_base(name) if member_base else None
+            if located_other is None:
+                problems.append(
+                    f"reads entry names no member in MEMBERS.md: {name}: {normalized}")
+                continue
+            read_root, read_base = located_other
+        if not _base_exists(read_root, str(read_base), normalized):
+            problems.append(
+                f"reads entry {name}: {normalized} is missing at repository {name} "
+                f"base {read_base}")
+
     # A landed brief is history that nobody can edit: only an unlanded brief must name present paths.
     landed = task_id in (landed_bases or {})
     for name in () if landed else PROSE_SECTIONS:
@@ -464,6 +520,7 @@ def _lint_task(
             if (
                 token not in declared
                 and token not in supplied
+                and token not in read_paths
                 and not _supplied_contract(repo, path, token)
                 and not _pipeline_workspace_file(repo, path, token)
                 and not _base_exists(git_root, base, token)
@@ -487,6 +544,7 @@ def _lint_task(
                 if (
                     token not in declared
                     and token not in supplied
+                    and token not in read_paths
                     and not _pipeline_workspace_file(repo, path, token)
                     and not _base_exists(git_root, base, token)
                 ):

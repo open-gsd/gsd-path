@@ -399,6 +399,76 @@ class TaskBriefTests(unittest.TestCase):
                 self.assertEqual(result, 1)
                 self.assertIn(path, error)
 
+    def test_reads_field_covers_cross_repository_tokens(self) -> None:
+        # A coordinator task declares a member path as a read: the token in
+        # its prose is covered, the entry must exist at the member's base,
+        # and files: cannot smuggle a repository-qualified entry (#471).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            member = Path(directory) / "web"
+            member.mkdir()
+            git(member, "init", "-q", "-b", "main")
+            git(member, "config", "user.email", "t@example.test")
+            git(member, "config", "user.name", "T")
+            (member / ".github").mkdir()
+            (member / ".github" / "workflows").mkdir()
+            (member / ".github" / "workflows" / "windows-build.yml").write_bytes(
+                b"name: build\n")
+            git(member, "add", ".")
+            git(member, "commit", "-q", "-m", "member base")
+            git(member, "update-ref", "refs/remotes/origin/main", "HEAD")
+            (root / ".project").mkdir(exist_ok=True)
+            (root / ".project" / "MEMBERS.md").write_bytes(
+                ("# Members\n\n## web\n"
+                 f"Checkout: {member}\n"
+                 "Remote: https://github.com/acme/web.git\n"
+                 "Integration: default\n"
+                 "Default branch: main\n").encode("utf-8"))
+            self.write_task(root, "T001",
+                            files=("src/app.py",), contract="- None",
+                            context="The workflow lives in `.github/workflows/windows-build.yml`.",
+                            verify="python3 tests/test_app.py")
+            task = root / ".project/tasks/T001-demo.md"
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "files:\n  - src/app.py",
+                "files:\n  - src/app.py\nreads:\n  - web: .github/workflows/windows-build.yml",
+            ).encode("utf-8"))
+            base = self.commit(root)
+
+            # Without the read, the cross-repo token is flagged.
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "reads:\n  - web: .github/workflows/windows-build.yml", ""
+            ).encode("utf-8"))
+            exit_code, _stdout, stderr = self.run_main(["--repo", str(root), "--base", base])
+            self.assertEqual(exit_code, 1, stderr)
+            self.assertIn("missing at the layer base: .github/workflows/windows-build.yml", stderr)
+
+            # With the read, it passes; a missing member path names repo and base.
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "files:\n  - src/app.py",
+                "files:\n  - src/app.py\nreads:\n  - web: .github/workflows/windows-build.yml"
+            ).encode("utf-8"))
+            exit_code, _stdout, stderr = self.run_main(["--repo", str(root), "--base", base])
+            self.assertEqual(exit_code, 0, stderr)
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "- web: .github/workflows/windows-build.yml",
+                "- web: .github/workflows/absent.yml").encode("utf-8"))
+            exit_code, _stdout, stderr = self.run_main(["--repo", str(root), "--base", base])
+            self.assertEqual(exit_code, 1, stderr)
+            self.assertIn("reads entry web: .github/workflows/absent.yml is missing at repository web", stderr)
+
+            # A repository-qualified files entry is refused.
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "reads:\n  - web: .github/workflows/absent.yml", "").replace(
+                "files:\n  - src/app.py",
+                "files:\n  - src/app.py\n  - web: .github/workflows/windows-build.yml"
+            ).encode("utf-8"))
+            exit_code, _stdout, stderr = self.run_main(["--repo", str(root), "--base", base])
+            self.assertEqual(exit_code, 1, stderr)
+            self.assertIn("files entries are repository-local", stderr)
+
+
     def test_gitlink_paths_follow_their_commit_presence(self) -> None:
         # A submodule gitlink counts as a file exactly while its commit object
         # exists in this repository — the previous cat-file semantics. A declared
