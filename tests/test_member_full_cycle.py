@@ -154,7 +154,7 @@ Tasks reviewed: 1
 
 ## T001 — raise value: pass
 
-- ✅ lib.value is 2 — focused Verify passed
+- ✅ T001/AC1 — focused Verify passed
 
 ## Intent coverage
 
