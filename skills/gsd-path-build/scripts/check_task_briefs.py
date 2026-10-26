@@ -598,10 +598,8 @@ def validate_task_briefs(
         )
         problems.extend(f"{task_id}: {problem}" for problem in task_problems)
         if contract is not None:
-            for entry in re.split(r"(?m)^-[ \t]+", contract):
-                shape = " ".join(entry.split())
-                if shape:
-                    contracts.setdefault(shape, set()).add(task_id)
+            for shape in _common.contract_shapes(contract):
+                contracts.setdefault(shape, set()).add(task_id)
         checked += task_checked
 
     for shape, task_ids in contracts.items():

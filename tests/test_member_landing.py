@@ -80,6 +80,51 @@ class MemberLandingTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def test_activation_pins_interface_sharing_sibling_files(self) -> None:
+        # The coder's sibling-interface preflight needs each sibling's task
+        # file; activation projects them from the immutable coordinator base
+        # beside the live task copy (#484). A task with a different contract
+        # is not pinned.
+        contract = "\n## Interface contract\n\n- `render(name: str) -> str` returns the greeting.\n"
+        live_file = ".project/tasks/T004-pair.md"
+        live = TASK.replace("T001", "T004").replace("Change app", "Pair contract").replace(
+            "app.py", "paired.py") + contract
+        sibling = TASK.replace("T001", "T005").replace("Change app", "Share contract").replace(
+            "app.py", "config.py") + contract.replace("returns the greeting", "returns the\n  greeting")
+        stranger = TASK.replace("T001", "T006").replace("Change app", "Other contract").replace(
+            "app.py", "other.py") + (
+            "\n## Interface contract\n\n- `other(x: int) -> int` doubles.\n"
+            "- `render(name: str) -> str` returns the greeting.\n")
+        (self.coordinator / live_file).write_bytes(live.encode("utf-8"))
+        (self.coordinator / ".project/tasks/T005-share.md").write_bytes(sibling.encode("utf-8"))
+        unrelated = TASK.replace("T001", "T007").replace("Change app", "Unrelated contract").replace(
+            "app.py", "unrelated.py") + "\n## Interface contract\n\n- `other(x: int) -> int` doubles.\n"
+        (self.coordinator / ".project/tasks/T006-other.md").write_bytes(stranger.encode("utf-8"))
+        (self.coordinator / ".project/tasks/T007-unrelated.md").write_bytes(unrelated.encode("utf-8"))
+        git(self.coordinator, "add", "-A")
+        git(self.coordinator, "commit", "-q", "-m", "add paired tasks")
+        base = git(self.coordinator, "rev-parse", "HEAD")
+        (self.coordinator / ".project/tasks/T005-share.md").write_bytes(
+            sibling.replace("Share", "Changed").encode("utf-8"))
+        isolated = isolation.isolate_member_task(self.coordinator, "web", "T004")
+        sidecar = Path(isolated["worktree"])
+        isolation.activate_member_task(self.coordinator, "web", "T004", "coder", live_file, base)
+
+        pinned = sidecar / ".gsd-path-coordinator" / ".project/tasks/T005-share.md"
+        self.assertTrue(pinned.is_file(), sorted(
+            path.name for path in (sidecar / ".gsd-path-coordinator").rglob("*")))
+        self.assertIn("Share contract", pinned.read_text(encoding="utf-8"))
+        # Sharing one bullet is enough (#484): the checker accepts per-bullet
+        # contracts, so a stranger sharing a bullet is also pinned.
+        stranger_copy = sidecar / ".gsd-path-coordinator" / ".project/tasks/T006-other.md"
+        self.assertTrue(stranger_copy.is_file())
+        self.assertIn("Other contract", stranger_copy.read_text(encoding="utf-8"))
+        self.assertFalse(
+            (sidecar / ".gsd-path-coordinator" / ".project/tasks/T007-unrelated.md").exists())
+        # The pinned copy is the immutable base text, not the uncommitted working-tree edit.
+        self.assertIn("Share contract", pinned.read_text(encoding="utf-8"))
+        self.assertNotIn("Changed contract", pinned.read_text(encoding="utf-8"))
+
     def land(self):
         return isolation.land_member(self.coordinator, "web", "T001", "Change app", TASK_FILE,
                                      self.base, self.member_base)

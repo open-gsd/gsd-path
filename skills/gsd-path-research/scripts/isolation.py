@@ -1259,6 +1259,15 @@ def activate_member_task(
     elif not copy.is_file():
         copy.parent.mkdir(parents=True, exist_ok=True)
         _common.atomic_write(copy, activated)
+    # Pin the sibling preflight inputs (#484): the coder's role requires the
+    # Interface-contract-sharing sibling task files; a member sidecar receives
+    # them from the immutable coordinator base beside the live task copy.
+    for sibling_file in _member_sibling_contract_files(coordinator, resolved_base, task_file):
+        sibling_copy = _safe_member_task_copy(sidecar, sibling_file)
+        sibling_copy.parent.mkdir(parents=True, exist_ok=True)
+        _common.atomic_write(
+            sibling_copy, git_text(coordinator, "show", f"{resolved_base}:{sibling_file}")
+        )
     ref = member_task_authorization_ref(project, task_id)
     created = run_git(checkout, "update-ref", ref, member_base, "0" * 40)
     if created.returncode != 0 and run_git(checkout, "rev-parse", "--verify", "--quiet", ref).stdout.strip() != member_base:
@@ -1531,6 +1540,36 @@ def _require_member_coordinator_branch(coordinator: Path) -> None:
 def _record_member_journal(path: Path, journal: Dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     _common.atomic_write(path, json.dumps(journal, indent=2, sort_keys=True) + "\n")
+
+
+def _member_sibling_contract_files(
+    coordinator: Path, base: str, task_file: str
+) -> List[str]:
+    """Sibling task files sharing this task's Interface contract, at the base.
+
+    The coder's sibling-interface preflight needs each sibling's task file;
+    a member activation projects only the live task, so the preflight had no
+    sanctioned read (#484). Siblings are recognized by their Interface
+    contract text: every other task at `base` that shares at least one
+    Interface-contract bullet with this task. The copies land beside the live task under the
+    member copy directory, read from the immutable `base` tree.
+    """
+    def contract_bullets(text: str) -> Set[str]:
+        body = _common.section_body(text, "Interface contract")
+        return set() if body is None else _common.contract_shapes(body)
+
+    live = contract_bullets(git_text(coordinator, "show", f"{base}:{task_file}"))
+    if not live:
+        return []
+    listing = git_output(
+        coordinator, "ls-tree", "-r", "--name-only", base, "--", ".project/tasks")
+    siblings: List[str] = []
+    for sibling_file in listing.splitlines():
+        if not sibling_file.endswith(".md") or sibling_file == task_file:
+            continue
+        if contract_bullets(git_text(coordinator, "show", f"{base}:{sibling_file}")) & live:
+            siblings.append(sibling_file)
+    return siblings
 
 
 def _member_contract(
