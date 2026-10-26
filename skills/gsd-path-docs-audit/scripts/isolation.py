@@ -1263,17 +1263,8 @@ def activate_member_task(
     # Interface-contract-sharing sibling task files; a member sidecar receives
     # them from the immutable coordinator base beside the live task copy.
     for sibling_file in _member_sibling_contract_files(coordinator, resolved_base, task_file):
-        sibling_copy = sidecar / MEMBER_TASK_COPY_DIR / PurePosixPath(sibling_file)
-        # Every existing ancestor must be a real directory inside the sidecar:
-        # a pre-existing symlink would redirect the write outside it.
-        parts = PurePosixPath(sibling_file).parts[:-1]
-        for depth in range(1, len(parts) + 1):
-            ancestor = sidecar / MEMBER_TASK_COPY_DIR / PurePosixPath("/".join(parts[:depth]))
-            if ancestor.is_symlink() or (ancestor.exists() and not ancestor.is_dir()):
-                raise IsolationError(f"member sibling copy parent is not a real directory: {ancestor}")
+        sibling_copy = _safe_member_task_copy(sidecar, sibling_file)
         sibling_copy.parent.mkdir(parents=True, exist_ok=True)
-        if sibling_copy.is_symlink() or (sibling_copy.exists() and not sibling_copy.is_file()):
-            raise IsolationError(f"member sibling copy is not a regular file: {sibling_copy}")
         _common.atomic_write(
             sibling_copy, git_text(coordinator, "show", f"{resolved_base}:{sibling_file}")
         )
@@ -1559,19 +1550,10 @@ def _member_sibling_contract_files(
     The coder's sibling-interface preflight needs each sibling's task file;
     a member activation projects only the live task, so the preflight had no
     sanctioned read (#484). Siblings are recognized by their Interface
-    contract text: every other task at `base` whose normalized contract
-    equals this task's. The copies land beside the live task under the
+    contract text: every other task at `base` that shares at least one
+    Interface-contract bullet with this task. The copies land beside the live task under the
     member copy directory, read from the immutable `base` tree.
     """
-    def contract_text(text: str) -> Optional[str]:
-        body = _common.section_body(text, "Interface contract") if hasattr(_common, "section_body") else None
-        if body is None:
-            return None
-        cleaned = " ".join(" ".join(body.split()).split())
-        if not cleaned or cleaned in {"None", "- None"}:
-            return None
-        return cleaned
-
     def contract_bullets(text: str) -> Set[str]:
         body = _common.section_body(text, "Interface contract")
         if body is None:

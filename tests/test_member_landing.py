@@ -97,10 +97,15 @@ class MemberLandingTests(unittest.TestCase):
             "- `render(name: str) -> str` returns the greeting.\n")
         (self.coordinator / live_file).write_bytes(live.encode("utf-8"))
         (self.coordinator / ".project/tasks/T005-share.md").write_bytes(sibling.encode("utf-8"))
+        unrelated = TASK.replace("T001", "T007").replace("Change app", "Unrelated contract").replace(
+            "app.py", "unrelated.py") + "\n## Interface contract\n\n- `other(x: int) -> int` doubles.\n"
         (self.coordinator / ".project/tasks/T006-other.md").write_bytes(stranger.encode("utf-8"))
+        (self.coordinator / ".project/tasks/T007-unrelated.md").write_bytes(unrelated.encode("utf-8"))
         git(self.coordinator, "add", "-A")
         git(self.coordinator, "commit", "-q", "-m", "add paired tasks")
         base = git(self.coordinator, "rev-parse", "HEAD")
+        (self.coordinator / ".project/tasks/T005-share.md").write_bytes(
+            sibling.replace("Share", "Changed").encode("utf-8"))
         isolated = isolation.isolate_member_task(self.coordinator, "web", "T004")
         sidecar = Path(isolated["worktree"])
         isolation.activate_member_task(self.coordinator, "web", "T004", "coder", live_file, base)
@@ -115,11 +120,10 @@ class MemberLandingTests(unittest.TestCase):
         self.assertTrue(stranger_copy.is_file())
         self.assertIn("Other contract", stranger_copy.read_text(encoding="utf-8"))
         self.assertFalse(
-            (sidecar / ".gsd-path-coordinator" / ".project/tasks/T001-raise.md").exists())
-        # The pinned copy is the immutable base text, not a live working-tree edit.
-        (self.coordinator / ".project/tasks/T005-share.md").write_bytes(
-            sibling.replace("Share", "Changed").encode("utf-8"))
+            (sidecar / ".gsd-path-coordinator" / ".project/tasks/T007-unrelated.md").exists())
+        # The pinned copy is the immutable base text, not the uncommitted working-tree edit.
         self.assertIn("Share contract", pinned.read_text(encoding="utf-8"))
+        self.assertNotIn("Changed contract", pinned.read_text(encoding="utf-8"))
 
     def land(self):
         return isolation.land_member(self.coordinator, "web", "T001", "Change app", TASK_FILE,
