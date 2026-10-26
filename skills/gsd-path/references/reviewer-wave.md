@@ -38,6 +38,13 @@ tasks in this wave as the rubric. For each task:
    `fail` line always copies the criterion verbatim: finding grouping binds
    that text to the task. Give the observed result, `file:line`, and
    concrete fix direction for each failure.
+5. Account for every claim. Each acceptance criterion (`T012/AC3`) and
+   interface bullet (`T012/IF2`) of the task must appear in its
+   section as an evidence reference, a finding, or an explicitly
+   authorized disposition — a bare line naming the id with
+   `disposition: <authority and date>: <reason>`. One observation may
+   support several claims when each is identified by its id. The wave gate
+   rejects a review that leaves a claim unaccounted for.
 
 A Log entry `orchestrator regression Verify of <task id> retired: superseded
 by <task id>` is not evidence: judge the superseding task's acceptance

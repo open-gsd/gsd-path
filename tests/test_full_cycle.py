@@ -227,7 +227,7 @@ Tasks reviewed: 1
 
 ## T001 — render greeting: pass
 
-- ✅ render works — focused Verify passed
+- ✅ T001/AC1 — focused Verify passed
 
 ## Intent coverage
 

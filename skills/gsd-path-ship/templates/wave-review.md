@@ -43,6 +43,11 @@ Tasks reviewed: <count>
 - ✅ <criterion> — <evidence: verify output / file:line checked>
 - ❌ <criterion> — found: <what exists instead, file:line>
   fix: <concrete direction a coder can execute without re-investigating>
+- <task id>/<ACn|IFn> — disposition: <authority and date>: <reason>
+     <!-- Only for a claim an approved ruling defers or excludes; every
+          acceptance criterion and interface bullet must otherwise appear
+          above, as evidence or a finding. One line may cite several ids
+          (T001/AC1, T001/AC2) when one observation covers them. -->
 
 Warnings (non-blocking):
 - <weakened test / unfailable verify / none>
