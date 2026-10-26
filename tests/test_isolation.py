@@ -4475,15 +4475,18 @@ class SidecarRootPinningTests(unittest.TestCase):
         isolation._RECOVERY_MEMO.clear()
         isolation._RECOVERY_MEMO[("head-sha", str(self.repo))] = git(
             self.repo, "rev-parse", "HEAD")
-        self.assertEqual(
-            isolation.sidecar_root(self.repo, "task", "T001"),
-            first,
-        )
-        isolation._RECOVERY_MEMO.pop(("head-sha", str(self.repo)), None)
+        try:
+            self.assertEqual(
+                isolation.sidecar_root(self.repo, "task", "T001"),
+                first,
+            )
+            self.assertFalse(any(receipts.glob("*.json")))
 
-        again = isolation.sidecar_root(self.repo, "task", "T001", pin=True)
-        self.assertEqual(again, first)
-        self.assertTrue(any(receipts.glob("*.json")))
+            again = isolation.sidecar_root(self.repo, "task", "T001", pin=True)
+            self.assertEqual(again, first)
+            self.assertTrue(any(receipts.glob("*.json")))
+        finally:
+            isolation._RECOVERY_MEMO.pop(("head-sha", str(self.repo)), None)
 
 
 if __name__ == "__main__":
