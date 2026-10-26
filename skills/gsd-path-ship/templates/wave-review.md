@@ -31,10 +31,13 @@ Tasks reviewed: <count>
      the task file. An evidence line starts with `- ✅ ` (pass) or `- ❌ `
      (fail). A section needs one or more lines with the marker of its own
      verdict, so a failed task needs a `- ❌ ` criterion line.
-     Per task criterion: copy every word of the acceptance/interface
-     criterion before the em dash; join wrapped lines and sub-bullets with
-     spaces (the `- ` markers of sub-bullets are optional). An AC id or
-     summary alone cannot be matched by review_findings.py.
+     On a `- ✅ ` line, name the criterion either by copying every word of
+     the acceptance/interface criterion before the em dash (join wrapped
+     lines and sub-bullets with spaces; the `- ` markers of sub-bullets are
+     optional) or by citing its stable id in the task's numbered list
+     (`T001/AC1`, `T001/IF2`) together with the evidence. A `- ❌ ` line
+     always copies the criterion verbatim: review_findings.py groups
+     findings by that text.
      Write literal markup and code in backticks inside a sentence: text
      such as <b> outside backticks reads as an unfilled placeholder. -->
 - ✅ <criterion> — <evidence: verify output / file:line checked>

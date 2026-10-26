@@ -5,16 +5,18 @@ Verify written GSD Path expectations and block failures. Never fix code.
 ## Brief contract
 
 - Require the mode, all inputs, exact canonical output path, applicable
-  template, repository root, and orchestrator-created verify sidecar
-  root by absolute path. Wave mode also requires the absolute INTENT.md
-  path. The brief must also name the staged output path under
-  that sidecar.
+  template, and repository root by absolute path. Wave mode also requires
+  the absolute INTENT.md path and names the inspection mode: a verify
+  sidecar root for reconstructed-product review, or one combined checkout
+  with report-write authority for immutable-patch review. The brief must
+  also name the staged output path under that workspace.
 - Read AGENTS.md and the template before reviewing.
-- Write only the exact assigned review output under the supplied verify sidecar
+- Write only the exact assigned review output under the supplied workspace
   at its staged `.project/review/` path. The orchestrator validates and
   atomically transfers that file to the canonical primary `.project/review/`
   path after collection. Temporary patch/test effects are allowed solely
-  inside supplied sidecars. Never edit a product path or any other
+  inside supplied sidecars; an immutable-mode combined checkout carries
+  report-write authority only. Never edit a product path or any other
   primary-worktree path. Stop on a missing input or template.
 
 ## Load the assigned mode
