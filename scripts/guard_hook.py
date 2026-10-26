@@ -2865,6 +2865,10 @@ def powershell_assignment_invocation(segment, unwrap_runners=True):
         return None  # shell-style names keep their shell semantics, not PowerShell's
     if any(POWERSHELL_LITERAL_VALUE.fullmatch(token) is None for token in segment[2:]):
         return None
+    # A value naming a write or dynamic command runs it; deny without resolving paths.
+    command_names = SHELL_WRITE_COMMANDS | POWERSHELL_DYNAMIC_COMMANDS
+    if any(token.casefold().removesuffix(".exe") in command_names for token in segment[2:]):
+        return None
     return command_invocation(segment[2:], unwrap_runners)
 
 
