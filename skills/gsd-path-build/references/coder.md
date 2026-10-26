@@ -35,7 +35,10 @@ reality:
   item in INTENT.md `## Success criteria`.
 - Confirm your Interface contract text appears verbatim in every sibling
   task file it exchanges with. Sibling task files under `.project/tasks/`
-  are readable in your worktree — read-only; never edit them.
+  are readable in your worktree — read-only; never edit them. On a member
+  task the orchestrator pins them under
+  `.gsd-path-coordinator/.project/tasks/` beside your live task copy —
+  read them there.
 - Confirm every path the Verify command references exists or is declared.
 
 Route any mismatch before writing a line of product code: a clear defect — a
