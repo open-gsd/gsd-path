@@ -2120,9 +2120,9 @@ def validate_wave(
 def _uncovered_claims(section_lines: Sequence[str], task_text: str, task_id: str):
     """Claims a task review section leaves unaccounted for (#474).
 
-    A claim is accounted for when the section cites its stable id anywhere,
-    copies it verbatim before an evidence separator on a marker line, or
-    records an authorized disposition naming it. One observation may cover
+    A claim is accounted for when a `- ✅`/`- ❌` marker line cites its
+    stable id or copies it verbatim before an evidence separator, or when
+    an authorized disposition line names it. One observation may cover
     several claims when each is identified.
     """
     claims = task_claims(task_text, task_id)
