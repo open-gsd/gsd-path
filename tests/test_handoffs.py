@@ -3127,6 +3127,10 @@ Tasks reviewed: 2
                 check_handoffs.HandoffError, "not numbered"
             ):
                 check_handoffs.validate_wave(root, review=self.write_wave_review(root))
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "not numbered"
+            ):
+                check_handoffs.validate_intent(root)
 
             corrections_with(
                 "## Corrections\n\n- C1 2026-10-26: \"first\"\n"
@@ -3190,6 +3194,27 @@ Tasks reviewed: 2
                 .replace(
                     "- T001/AC2 — disposition: owner ruling 2026-10-26 (C1): out of scope",
                     "- T001/AC2 — disposition: owner ruling 2026-10-26 (C9): out of scope",
+                )
+                .encode("utf-8")
+            )
+            result = check_handoffs.effective_contract(root)
+            states = {entry["criterion"]: entry["state"] for entry in result["criteria"]}
+            self.assertEqual(states, {"SC1": "original-claim", "SC2": "original-claim"})
+            self.assertEqual(result["dispositions"], [])
+
+            # A legacy disposition citing no correction, and an exclusion
+            # hidden in a comment, are not effective either.
+            latest = root / ".project/review/wave-1.cycle3.md"
+            latest.write_bytes(
+                later.read_text(encoding="utf-8")
+                .replace("Cycle: 2", "Cycle: 3")
+                .replace(
+                    "- ✅ hello.py output",
+                    "- ✅ hello.py output\n<!-- - Excluded by C1: the slow-path output -->",
+                )
+                .replace(
+                    "- T001/AC2 — disposition: owner ruling 2026-10-26 (C9): out of scope",
+                    "- T001/AC2 — disposition: deferred by 2026-10-26 owner ruling: out of scope",
                 )
                 .encode("utf-8")
             )

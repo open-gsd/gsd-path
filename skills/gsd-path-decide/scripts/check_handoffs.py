@@ -1365,6 +1365,7 @@ def validate_intent(
     intent = _read(root, _intent_path(project_dir))
     criteria = _success_criteria(intent)
     _surfaces(intent, "INTENT.md")
+    _corrections(intent)
     edges = edge_coverage(intent, criteria)
     rows = prohibitions(intent, criteria)
     return {
@@ -2819,7 +2820,7 @@ def effective_contract(root: Path, project_dir: str = DEFAULT_PROJECT_DIR) -> Di
                 latest[key] = (cycle, path)
         for path in sorted((entry[1] for entry in latest.values()), key=lambda item: item.name):
             current_sc = None
-            for line in path.read_text(encoding="utf-8").splitlines():
+            for line in _strip_comments(path.read_text(encoding="utf-8")).splitlines():
                 heading = WAVE_SC_HEADING.fullmatch(line.strip())
                 if heading is not None:
                     current_sc = heading.group(1)
@@ -2836,10 +2837,8 @@ def effective_contract(root: Path, project_dir: str = DEFAULT_PROJECT_DIR) -> Di
                 disposition = CLAIM_DISPOSITION_LINE.fullmatch(line.strip())
                 if disposition is not None and re.search(r"[A-Za-z]", disposition.group("authority")):
                     authority = " ".join((disposition.group("authority"), disposition.group("reason")))
-                    if not all(
-                        correction in corrections
-                        for correction in CORRECTION_CITATION.findall(authority)
-                    ):
+                    cited = CORRECTION_CITATION.findall(authority)
+                    if not cited or not all(correction in corrections for correction in cited):
                         continue
                     dispositions.append({
                         "state": "deferred",
@@ -2849,7 +2848,7 @@ def effective_contract(root: Path, project_dir: str = DEFAULT_PROJECT_DIR) -> Di
                             for task, kind, number
                             in CLAIM_ID_IN_REVIEW.findall(disposition.group("ids"))
                         ],
-                        "corrections": CORRECTION_CITATION.findall(authority),
+                        "corrections": cited,
                         "reason": disposition.group("reason"),
                     })
     effective = [

@@ -42,7 +42,9 @@ tasks in this wave as the rubric. For each task:
    interface bullet (`T012/IF2`) of the task must appear in its
    section as an evidence reference, a finding, or an explicitly
    authorized disposition — a bare line naming the id with
-   `disposition: <authority and date>: <reason>`. One observation may
+   `disposition: <authority and date> (<Cn>): <reason>`, where `Cn` is a
+   numbered INTENT.md correction. No citation, or a `Cn` that
+   `## Corrections` does not define, fails the gate. One observation may
    support several claims when each is identified by its id. The wave gate
    rejects a review that leaves a claim unaccounted for.
 
@@ -56,7 +58,10 @@ against that same isolated product. In each `### SCn —` heading, copy the
 complete criterion text from INTENT.md `## Success criteria` (see Review
 file format below). Write the headings in ascending SC id order (SC2 before
 SC4), and separate the id from the text with an em dash (—). Mark `pass`
-or `fail` with evidence; a failed owned SC blocks the wave. Omit the Intent coverage section when no task in the wave owns
+or `fail` with evidence; a failed owned SC blocks the wave. Under a `pass`
+SC, record each subclaim a numbered INTENT.md correction excludes as
+`- Excluded by <Cn>: <subclaim>`; the gate rejects an exclusion under a
+failing SC or one that cites an undefined correction. Omit the Intent coverage section when no task in the wave owns
 an SC. When INTENT.md `## Edge coverage` or `## Prohibitions` has rows for
 an owned SC, judge it against those rulings too: cite each `held-out` edge
 id with its held-out test's recorded output and each `judgment` prohibition
