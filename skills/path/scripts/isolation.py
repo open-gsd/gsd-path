@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import functools
 import hashlib
 import io
 import json
@@ -4050,6 +4049,8 @@ def verify_landed_task_files(
     finally:
         _RECOVERY_MEMO.pop(("head-sha", str(primary)), None)
         _RECOVERY_MEMO.pop(("head-tree", str(primary), resolved_head), None)
+
+
 def _verify_landed_all(
     primary: Path,
     task_paths: Sequence[Path],
