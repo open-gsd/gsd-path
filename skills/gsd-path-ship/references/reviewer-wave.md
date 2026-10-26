@@ -8,18 +8,35 @@ tasks in this wave as the rubric. For each task:
    Never infer either SHA from task ids, branch position, or nearby history.
 2. Fail a missing, malformed, or invalid SHA. Inspect the commit with
    `git show --format=fuller --stat --patch <commit> --`.
-3. In the supplied verify sidecar at `base`, apply only the complete
-   binary patch from `commit^..commit` for the task's declared product files
-   and inspect the diff. Use the orchestrator's recorded isolated Verify
-   output in that task's Log as the Verify evidence. Do not re-run the
-   task Verify command or PLAN.md's project Verify. Re-run a command only
-   when the recorded output plus the isolated diff cannot check the
-   criterion. Never use the primary worktree or branch tip as task
-   evidence. Do not create or remove Git worktrees yourself.
-4. Mark `pass` or `fail`. Before the evidence separator (` — `), copy the
-   complete task acceptance or interface criterion (see Review file format
-   below). Do not substitute an AC id or summary: finding grouping binds
-   this text to the task. Give the observed result, `file:line`, and
+3. Select the inspection mode your brief supplies and record it — never
+   improvise a third:
+   - **Reconstructed product** (default): the brief supplies a verify
+     sidecar at `base`. In it, apply only the complete binary patch from
+     `commit^..commit` for the task's declared product files and inspect
+     the diff. Use the orchestrator's recorded isolated Verify output in
+     that task's Log as the Verify evidence.
+   - **Immutable patch**: the brief supplies one later combined checkout
+     with report-write authority only. Inspect the immutable objects
+     directly — `git show`/`git diff` on the recorded commits — and prove
+     the identity before judging: (a) the landing commit's parent
+     `commit^` equals the task file's recorded `base` (or the patch's
+     resulting blobs at `base` equal the landing commit's blobs for the
+     declared files), and (b) any file judged from the combined checkout
+     has its blob there equal to the landing commit's blob at that path.
+     Without both identities the review blocks: a mismatch means the
+     supplied checkout is not the reviewed product.
+   In both modes: do not re-run the task Verify command or PLAN.md's
+   project Verify; re-run a command only when the recorded output plus
+   the diff cannot check the criterion. Never use the primary worktree
+   or branch tip as task evidence. Do not create or remove Git worktrees
+   yourself.
+4. Mark `pass` or `fail`. Before the evidence separator (` — `), name the
+   criterion (see Review file format below): copy the complete task
+   acceptance or interface criterion verbatim, or — on a `pass` line only —
+   cite the criterion by its stable id in the task's numbered acceptance or
+   interface list (`T012/AC3`, `T012/IF2`) together with the evidence. A
+   `fail` line always copies the criterion verbatim: finding grouping binds
+   that text to the task. Give the observed result, `file:line`, and
    concrete fix direction for each failure.
 
 A Log entry `orchestrator regression Verify of <task id> retired: superseded
@@ -70,10 +87,14 @@ criterion text does not match. Apply the rules before you write the file.
   `- ❌ ` for fail. Each task section and each `### SCn —` block needs one
   or more lines with the marker of its own verdict. A failed task needs a
   `- ❌ ` criterion line, also when other text describes the failure.
-- **Criterion text.** In a task evidence line and in a `### SCn —` heading,
-  copy every word of the criterion. Join wrapped lines and sub-bullets with
-  one space. You can keep or remove the `- ` markers of the sub-bullets.
-  A changed, added, removed or moved word does not match.
+- **Criterion text.** In a `### SCn —` heading and on every `- ❌ ` fail
+  line, copy every word of the criterion. Join wrapped lines and
+  sub-bullets with one space. You can keep or remove the `- ` markers of
+  the sub-bullets. A changed, added, removed or moved word does not
+  match. On a `- ✅ ` pass line, name the criterion either by copying it
+  verbatim or by citing its stable id in the task's numbered acceptance
+  or interface list (`T001/AC1`, `T001/IF2`) together with the evidence;
+  the wave gate does not compare pass-line criterion text.
 - **Angle brackets.** Text such as `<b>` or `<path>` outside backticks reads
   as an unfilled template placeholder and is rejected. Write literal markup
   and code in backticks inside a sentence, for example: the output has
@@ -121,8 +142,9 @@ runtime checks freshness and derives the final view from these records.
 ## Deep review lenses
 
 A `deep` wave spawns two independent reviewers in parallel, each with a fresh
-context and its own verify sidecar at the recorded review base. Every
-Wave mode rule above applies to both lenses.
+context and its own isolated workspace at the recorded review base (a verify
+sidecar in reconstructed mode, or the supplied combined checkout in immutable
+mode). Every Wave mode rule above applies to both lenses.
 
 - **Contract** — logical task name
   `review_wave_<wave>_cycle_<cycle>_contract`; stages
