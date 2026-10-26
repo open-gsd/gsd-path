@@ -399,6 +399,121 @@ class TaskBriefTests(unittest.TestCase):
                 self.assertEqual(result, 1)
                 self.assertIn(path, error)
 
+    def test_landed_briefs_skip_reads_and_keep_coordinator_base(self) -> None:
+        # A landed member task's base is a member commit: its `coordinator:`
+        # read must not search the coordinator there, and a landed brief's
+        # reads are history that later member changes cannot break (#471).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write(root, "docs/x.md", "# x\n")
+            member = root / "web"
+            member.mkdir()
+            git(member, "init", "-q", "-b", "main")
+            git(member, "config", "user.email", "t@example.test")
+            git(member, "config", "user.name", "T")
+            (member / "a.yml").write_bytes(b"a: 1\n")
+            git(member, "add", ".")
+            git(member, "commit", "-q", "-m", "member base")
+            member_commit = git(member, "rev-parse", "HEAD").strip()
+            git(member, "rm", "-q", "a.yml")
+            git(member, "commit", "-q", "-m", "drop a.yml")
+            git(member, "update-ref", "refs/remotes/origin/main", "HEAD")
+            self.write(root, ".project/MEMBERS.md",
+                       "# Members\n\n## web\n"
+                       f"Checkout: {member}\n"
+                       "Remote: https://github.com/acme/web.git\n"
+                       "Integration: default\n"
+                       "Default branch: main\n")
+            self.write(root, ".gitignore", "web/\n")
+            self.write_task(root, "T001", files=("src/app.py",), contract="- None",
+                            context="Read `docs/x.md`.", verify="python3 src/app.py")
+            self.write_task(root, "T002", files=("src/owned.py",), contract="- None",
+                            context="Read `a.yml`.", verify="python3 src/owned.py")
+            for task_id, extra in (("T001", "repo: web\nreads:\n  - coordinator: docs/x.md"),
+                                   ("T002", "reads:\n  - web: a.yml")):
+                task = root / f".project/tasks/{task_id}-demo.md"
+                task.write_bytes(task.read_text(encoding="utf-8").replace(
+                    "\n---\n", f"\n{extra}\n---\n", 1).encode("utf-8"))
+            head = self.commit(root)
+            with self.assertRaises(check_task_briefs.BriefError) as failure:
+                check_task_briefs.validate_task_briefs(root, head)
+            self.assertIn("reads entry web: a.yml is missing at repository web", str(failure.exception))
+            result = check_task_briefs.validate_task_briefs(
+                root, head, landed_bases={"T001": member_commit, "T002": head},
+            )
+            self.assertEqual(result["tasks"], 2)
+
+    def test_reads_field_covers_cross_repository_tokens(self) -> None:
+        # A coordinator task declares a member path as a read: the token in
+        # its prose is covered, the entry must exist at the member's base,
+        # and files: cannot smuggle a repository-qualified entry (#471).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            member = Path(directory) / "web"
+            member.mkdir()
+            git(member, "init", "-q", "-b", "main")
+            git(member, "config", "user.email", "t@example.test")
+            git(member, "config", "user.name", "T")
+            (member / ".github").mkdir()
+            (member / ".github" / "workflows").mkdir()
+            (member / ".github" / "workflows" / "windows-build.yml").write_bytes(
+                b"name: build\n")
+            git(member, "add", ".")
+            git(member, "commit", "-q", "-m", "member base")
+            git(member, "update-ref", "refs/remotes/origin/main", "HEAD")
+            (root / ".project").mkdir(exist_ok=True)
+            (root / ".project" / "MEMBERS.md").write_bytes(
+                ("# Members\n\n## web\n"
+                 f"Checkout: {member}\n"
+                 "Remote: https://github.com/acme/web.git\n"
+                 "Integration: default\n"
+                 "Default branch: main\n").encode("utf-8"))
+            self.write_task(root, "T001",
+                            files=("src/app.py",), contract="- None",
+                            context="The workflow lives in `.github/workflows/windows-build.yml`.",
+                            verify="python3 tests/test_app.py")
+            task = root / ".project/tasks/T001-demo.md"
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "files:\n  - src/app.py",
+                "files:\n  - src/app.py\nreads:\n  - web: .github/workflows/windows-build.yml",
+            ).encode("utf-8"))
+            base = self.commit(root)
+
+            # Without the read, the cross-repo token is flagged.
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "reads:\n  - web: .github/workflows/windows-build.yml", ""
+            ).encode("utf-8"))
+            exit_code, _stdout, stderr = self.run_main(["--repo", str(root), "--base", base])
+            self.assertEqual(exit_code, 1, stderr)
+            self.assertIn("missing at the layer base: .github/workflows/windows-build.yml", stderr)
+
+            # With the read, it passes; a missing member path names repo and base.
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "files:\n  - src/app.py",
+                "files:\n  - src/app.py\nreads:\n  - web: .github/workflows/windows-build.yml"
+            ).encode("utf-8"))
+            exit_code, _stdout, stderr = self.run_main(["--repo", str(root), "--base", base])
+            self.assertEqual(exit_code, 0, stderr)
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "- web: .github/workflows/windows-build.yml",
+                "- web: .github/workflows/absent.yml").encode("utf-8"))
+            exit_code, _stdout, stderr = self.run_main(["--repo", str(root), "--base", base])
+            self.assertEqual(exit_code, 1, stderr)
+            self.assertIn("reads entry web: .github/workflows/absent.yml is missing at repository web", stderr)
+
+            # A repository-qualified files entry is refused.
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "reads:\n  - web: .github/workflows/absent.yml", "").replace(
+                "files:\n  - src/app.py",
+                "files:\n  - src/app.py\n  - web: .github/workflows/windows-build.yml"
+            ).encode("utf-8"))
+            exit_code, _stdout, stderr = self.run_main(["--repo", str(root), "--base", base])
+            self.assertEqual(exit_code, 1, stderr)
+            self.assertIn("files entries are repository-local", stderr)
+
+
     def test_gitlink_paths_follow_their_commit_presence(self) -> None:
         # A submodule gitlink counts as a file exactly while its commit object
         # exists in this repository — the previous cat-file semantics. A declared
