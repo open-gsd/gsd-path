@@ -728,6 +728,10 @@ def _numbered_entries(section: str, *, continuations: bool = False) -> List[Tupl
 
 
 CLAIM_ID_IN_REVIEW = re.compile(r"\b(?P<task>T\d{3})/(?P<kind>AC|IF)(?P<number>[1-9]\d*)\b")
+CLAIM_DISPOSITION_LINE = re.compile(
+    r"^- (?P<ids>[^—]+?) — disposition: "
+    r"(?P<authority>[^:]*\b\d{4}-\d{2}-\d{2}\b[^:]*): (?P<reason>\S.*)$"
+)
 
 
 def _interface_bullets(task_text: str) -> Dict[int, str]:
@@ -2130,10 +2134,15 @@ def _uncovered_claims(section_lines: Sequence[str], task_text: str, task_id: str
     covered: set = set()
     for line in section_lines:
         stripped = line.strip()
-        accounting = stripped.startswith(("- ✅ ", "- ❌ ")) or "disposition:" in stripped.casefold()
-        if accounting:
-            for match in CLAIM_ID_IN_REVIEW.finditer(stripped):
-                covered.add(f"{match.group('task')}/{match.group('kind')}{match.group('number')}")
+        disposition = CLAIM_DISPOSITION_LINE.fullmatch(stripped)
+        if disposition is not None and re.search(r"[A-Za-z]", disposition.group("authority")):
+            cited = disposition.group("ids")
+        elif stripped.startswith(("- ✅ ", "- ❌ ")):
+            cited = stripped
+        else:
+            cited = ""
+        for match in CLAIM_ID_IN_REVIEW.finditer(cited):
+            covered.add(f"{match.group('task')}/{match.group('kind')}{match.group('number')}")
         if stripped.startswith(("- ✅ ", "- ❌ ")):
             # Reuse the canonical quote matcher: a criterion may itself
             # contain em dashes and may be quoted with or without its
@@ -2288,7 +2297,8 @@ def validate_wave_evidence(
                 f"{name} task {task_id} does not account for "
                 + "; ".join(f"{claim_id} ({body[:80]})" for claim_id, body in uncovered)
                 + "; account for every claim with an evidence reference, a "
-                "finding, or an authorized disposition"
+                "finding, or an authorized disposition "
+                "(`- <ids> — disposition: <authority> <YYYY-MM-DD>: <reason>`)"
             )
         task_verdicts.append(verdict)
 

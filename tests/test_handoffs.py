@@ -3003,6 +3003,28 @@ Tasks reviewed: 2
                 check_handoffs.validate_wave(root, review=relative)["verdict"], "pass"
             )
 
+            # A disposition without a dated authority and a reason accounts
+            # for nothing.
+            authorized = (
+                "- T001/AC2 — disposition: deferred by 2026-10-26 owner ruling: out of scope"
+            )
+            for unauthorized in (
+                "- T001/AC2 — disposition: skipped",
+                "- T001/AC2 — disposition: owner ruling: out of scope",
+                "- T001/AC2 — disposition: 2026-10-26: out of scope",
+                "- T001/AC2 — disposition: owner 2026-10-26: ",
+                "Narrative T001/AC2 disposition: owner 2026-10-26: out of scope",
+            ):
+                with self.subTest(unauthorized=unauthorized):
+                    review.write_bytes(review.read_text(encoding="utf-8").replace(
+                        authorized, unauthorized
+                    ).encode("utf-8"))
+                    with self.assertRaisesRegex(check_handoffs.HandoffError, r"T001/AC2"):
+                        check_handoffs.validate_wave(root, review=relative)
+                    review.write_bytes(review.read_text(encoding="utf-8").replace(
+                        unauthorized, authorized
+                    ).encode("utf-8"))
+
             # Dropping every reference to the second acceptance claim fails,
             # naming its stable id.
             review.write_bytes(review.read_text(encoding="utf-8").replace(
