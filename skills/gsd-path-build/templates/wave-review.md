@@ -43,8 +43,10 @@ Tasks reviewed: <count>
 - ✅ <criterion> — <evidence: verify output / file:line checked>
 - ❌ <criterion> — found: <what exists instead, file:line>
   fix: <concrete direction a coder can execute without re-investigating>
-- <task id>/<ACn|IFn> — disposition: <authority and date>: <reason>
-     <!-- Only for a claim an approved ruling defers or excludes; every
+- <task id>/<ACn|IFn> — disposition: <authority and date> (<Cn>): <reason>
+     <!-- Only for a claim an INTENT.md correction defers or excludes; cite
+          its number (C1) — a disposition with no citation, or with a Cn
+          that INTENT.md `## Corrections` does not define, fails the gate. Every
           acceptance criterion and interface bullet must otherwise appear
           above, as evidence or a finding. One line may cite several ids
           (T001/AC1, T001/AC2) when one observation covers them. -->
@@ -69,10 +71,15 @@ Contract violations (blocking):
      (the `- ` markers of sub-bullets are optional). The gate compares every
      other word: no paraphrase, no dropped sub-bullet.
      Each SC block needs an evidence line with the marker of its own
-     verdict: `- ✅ ` (pass) or `- ❌ ` (fail). -->
+     verdict: `- ✅ ` (pass) or `- ❌ ` (fail).
+     Under a `pass` SC only, record each subclaim an INTENT.md correction
+     excludes as `- Excluded by <Cn>: <subclaim>`; the Cn must exist in
+     INTENT.md `## Corrections`. An exclusion records retained scope, not
+     a failure. -->
 
 ### SC1 — <criterion from INTENT.md>: <pass | fail>
 - ✅ <evidence: verify output / file:line checked>
+- Excluded by <Cn>: <subclaim the correction removes>
 - ❌ <criterion> — found: <what exists instead, file:line>
   fix: <concrete direction a coder can execute without re-investigating>
 <!-- Quick-lane final scope (Review scope: final): add after the evidence line:

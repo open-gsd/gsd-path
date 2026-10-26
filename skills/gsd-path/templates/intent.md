@@ -123,6 +123,8 @@ paragraph the user signed off on — do not edit without a new sign-off.>
 
 ## Corrections
 
-<!-- Verbatim user corrections from playback and later phases. Append-only.
-     These are the highest-signal intent data in the file. -->
-- <date>: "<what the user said>"
+<!-- Verbatim user corrections from playback and later phases. Append-only,
+     numbered from C1: the id gives a correction citable identity — wave
+     dispositions and scope exclusions authorize through it. These are the
+     highest-signal intent data in the file. -->
+- C1 <YYYY-MM-DD>: "<what the user said>"
