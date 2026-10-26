@@ -399,6 +399,51 @@ class TaskBriefTests(unittest.TestCase):
                 self.assertEqual(result, 1)
                 self.assertIn(path, error)
 
+    def test_landed_briefs_skip_reads_and_keep_coordinator_base(self) -> None:
+        # A landed member task's base is a member commit: its `coordinator:`
+        # read must not search the coordinator there, and a landed brief's
+        # reads are history that later member changes cannot break (#471).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write(root, "docs/x.md", "# x\n")
+            member = root / "web"
+            member.mkdir()
+            git(member, "init", "-q", "-b", "main")
+            git(member, "config", "user.email", "t@example.test")
+            git(member, "config", "user.name", "T")
+            (member / "a.yml").write_bytes(b"a: 1\n")
+            git(member, "add", ".")
+            git(member, "commit", "-q", "-m", "member base")
+            member_commit = git(member, "rev-parse", "HEAD").strip()
+            git(member, "rm", "-q", "a.yml")
+            git(member, "commit", "-q", "-m", "drop a.yml")
+            git(member, "update-ref", "refs/remotes/origin/main", "HEAD")
+            self.write(root, ".project/MEMBERS.md",
+                       "# Members\n\n## web\n"
+                       f"Checkout: {member}\n"
+                       "Remote: https://github.com/acme/web.git\n"
+                       "Integration: default\n"
+                       "Default branch: main\n")
+            self.write(root, ".gitignore", "web/\n")
+            self.write_task(root, "T001", files=("src/app.py",), contract="- None",
+                            context="Read `docs/x.md`.", verify="python3 src/app.py")
+            self.write_task(root, "T002", files=("src/owned.py",), contract="- None",
+                            context="Read `a.yml`.", verify="python3 src/owned.py")
+            for task_id, extra in (("T001", "repo: web\nreads:\n  - coordinator: docs/x.md"),
+                                   ("T002", "reads:\n  - web: a.yml")):
+                task = root / f".project/tasks/{task_id}-demo.md"
+                task.write_bytes(task.read_text(encoding="utf-8").replace(
+                    "\n---\n", f"\n{extra}\n---\n", 1).encode("utf-8"))
+            head = self.commit(root)
+            with self.assertRaises(check_task_briefs.BriefError) as failure:
+                check_task_briefs.validate_task_briefs(root, head)
+            self.assertIn("reads entry web: a.yml is missing at repository web", str(failure.exception))
+            result = check_task_briefs.validate_task_briefs(
+                root, head, landed_bases={"T001": member_commit, "T002": head},
+            )
+            self.assertEqual(result["tasks"], 2)
+
     def test_reads_field_covers_cross_repository_tokens(self) -> None:
         # A coordinator task declares a member path as a read: the token in
         # its prose is covered, the entry must exist at the member's base,

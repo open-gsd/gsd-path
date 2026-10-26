@@ -384,6 +384,9 @@ def _lint_task(
     task_id = path.stem
     if fields and isinstance(fields.get("id"), str):
         task_id = fields["id"]  # type: ignore[assignment]
+    # The coordinator's own layer base, before any landed or member override: a
+    # member task's `coordinator:` reads resolve here (#471).
+    coordinator_base = base
     base = (landed_bases or {}).get(task_id, base)
     problems: List[str] = []
     checked = 0
@@ -393,10 +396,6 @@ def _lint_task(
     # where the member bound branch starts; `repo:` absent means the coordinator.
     git_root = repo
     member = fields.get("repo")
-    # The coordinator's own layer base, before any landed or member override: a
-    # member task's `coordinator:` reads resolve here (#471).
-    coordinator_base = (landed_bases or {}).get(task_id, base) if member is not None else base
-    base = (landed_bases or {}).get(task_id, base)
     if member is not None:
         located = member_base(member) if isinstance(member, str) and member and member_base else None
         if located is None:
@@ -460,10 +459,12 @@ def _lint_task(
                     )
                     break
 
+    # A landed brief is history that nobody can edit: only an unlanded brief must name present paths.
+    landed = task_id in (landed_bases or {})
     # Repository-qualified read-only inputs (#471): `reads:` holds `repo: path`
     # entries resolved in that repository at the same base its own briefs use.
     read_paths: Set[str] = set()
-    reads = fields.get("reads")
+    reads = None if landed else fields.get("reads")
     if reads is not None and not isinstance(reads, list):
         problems.append("frontmatter reads must be a list")
         reads = None
@@ -507,8 +508,6 @@ def _lint_task(
                 f"reads entry {name}: {normalized} is missing at repository {name} "
                 f"base {read_base}")
 
-    # A landed brief is history that nobody can edit: only an unlanded brief must name present paths.
-    landed = task_id in (landed_bases or {})
     for name in () if landed else PROSE_SECTIONS:
         body = sections.get(name)
         if body is None or not _clean(body):
