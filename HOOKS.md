@@ -200,6 +200,18 @@ See [UPDATE.md](UPDATE.md).
   target a routing control (`.git`, `.project/STATE.md`, `.project/next`,
   `.gsd-path`) while `.project/STATE.md` exists, or target a product file
   outside the routed build phase (same rule as direct file-edit tools)
+- PowerShell expression forms the guard cannot inspect: a .NET static member
+  call (`[System.IO.File]::WriteAllText`) outside a small read-only type list
+  (`[Math]`, `[string]`, number, date, and similar types), anywhere in the
+  command, including script blocks; dynamic-execution commands and their
+  aliases (`Invoke-Expression`/`iex`, `Invoke-Command`, `Add-Type`,
+  `Start-Process`, `Start-Job`, `New-Object`) as the program or inside a
+  script block; the `&` call operator; and the same forms inside wrapped
+  `-Command` payloads. A `$name = value` or `$env:NAME = value` assignment
+  with only plain literal words is process-local and passes; a bare-word
+  value is checked as the command it runs. A richer value keeps the
+  unresolvable-executable denial, and `$env:HOME`, `$env:XDG_CONFIG_HOME`,
+  and `$env:GIT_*` are denied like the `env` form
 - repeated assignments to the same shell variable within one command; split
   these into separate tool calls so write targets can be resolved
 - copies whose destinations, including nested recursive-copy entries, resolve
