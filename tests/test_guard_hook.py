@@ -4386,6 +4386,102 @@ class GuardHookTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["permissionDecision"], "deny")
 
 
+class PowerShellExpressionTests(unittest.TestCase):
+    """PowerShell assignments parse; non-pure expressions stay denied (#468)."""
+
+    assert_denied = GuardHookTests.assert_denied
+    assert_allowed = GuardHookTests.assert_allowed
+
+    def setUp(self) -> None:
+        import tempfile
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.repo = Path(temporary.name) / "repo"
+        GuardHookTests.init_git_repo(self, self.repo)
+        self.home = Path(temporary.name) / "home"
+        self.home.mkdir()
+        patcher = mock.patch.dict(
+            os.environ, {"HOME": str(self.home), "USERPROFILE": str(self.home)}
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def powershell(self, command):
+        return {"tool_name": "PowerShell", "tool_input": {"command": command, "cwd": str(self.repo)}}
+
+    def test_process_local_assignments_pass(self) -> None:
+        for command in (
+            '$env:PATH = "x"',
+            "$build_root = C:/work/src",
+            "$count = 5",
+            '$env:PATH = "x"; Get-Location',
+        ):
+            with self.subTest(command=command):
+                self.assert_allowed(self.powershell(command))
+
+    def test_assignments_with_unresolvable_values_stay_denied(self) -> None:
+        for command in (
+            "$x = $y",
+            "$x = $(Get-Content secret.txt)",
+            "$env:PATH = $other",
+            "$x = [System.IO.File]::ReadAllText('f')",
+            # A bare-word value runs as a pipeline; it is judged as that command.
+            "$x = git config core.fsmonitor evil",
+            "$x = Remove-Item C:/Users/x/file.txt",
+            "$x = iex foo",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.powershell(command))
+
+    def test_assignment_chained_with_a_destructive_command_stays_denied(self) -> None:
+        self.assert_denied(
+            self.powershell('$env:PATH = "x"; Remove-Item -Recurse ' + str(self.repo / ".project"))
+        )
+
+    def test_pure_static_members_pass_and_others_deny(self) -> None:
+        self.assert_allowed(self.powershell("[Math]::Abs(-1)"))
+        self.assert_allowed(self.powershell("[System.Math]::Max(1, 2)"))
+        for command in (
+            "[System.IO.File]::WriteAllText('x','y')",
+            "[Environment]::SetEnvironmentVariable('a','b','Machine')",
+            "[System.Net.WebClient]::new()",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.powershell(command))
+
+    def test_dynamic_execution_and_opaque_payloads_deny(self) -> None:
+        for command in (
+            'Invoke-Expression "Remove-Item -Recurse x"',
+            'iex "Remove-Item -Recurse x"',
+            "Add-Type -TypeDefinition 'class X {}'",
+            "Start-Process notepad",
+            "saps notepad",
+            "New-Object System.Net.WebClient",
+            "& $cmd",
+            "& foo",
+            "&foo",
+            "1 | % { & foo }",
+            "powershell -EncodedCommand YWJj",
+            "pwsh -enc YWJj",
+            # A script block executes its contents: the static call is an
+            # argument of ForEach-Object, not an executable.
+            "1 | ForEach-Object { [System.IO.File]::WriteAllText('x','y') }",
+            "Get-ChildItem | ForEach-Object { iex $_.FullName }",
+            "1 | % {iex x}",
+            "1 | % {[System.IO.File]::WriteAllText('x','y')}",
+            # Wrapped payloads are inspected with the same rules.
+            "pwsh -Command '[System.IO.File]::WriteAllText(\"x\",\"y\")'",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied(self.powershell(command))
+
+    def test_git_configuration_assignments_deny(self) -> None:
+        # The PowerShell env form is refused exactly like the shell form:
+        # it changes where Git reads its configuration.
+        self.assert_denied(self.powershell("$env:GIT_CONFIG_GLOBAL = cfg; git status"))
+        self.assert_denied(self.powershell("$env:GIT_CONFIG_COUNT = 1; git fetch origin"))
+
+
 class DestructiveScopeTests(unittest.TestCase):
     """Out-of-repo scratch deletes pass; pipeline state stays protected (#468)."""
 
