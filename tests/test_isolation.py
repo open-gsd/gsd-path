@@ -4441,5 +4441,53 @@ if os.name == "nt":
                 self.assertEqual(list(precious.iterdir()), [precious / "sdk.dll"])
 
 
+class SidecarRootPinningTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = (Path(self.tmp.name) / "repo").resolve()
+        self.repo.mkdir()
+        git(self.repo, "init", "-b", "gsd-path/M001")
+        git(self.repo, "config", "user.email", "t@example.test")
+        git(self.repo, "config", "user.name", "T")
+        (self.repo / "src").mkdir()
+        (self.repo / "src/app.py").write_bytes("print('base')\n".encode("utf-8"))
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "base")
+
+    def tearDown(self) -> None:
+        isolation._RECOVERY_MEMO.clear()
+        self.tmp.cleanup()
+
+    def test_repinning_after_release_recreates_the_receipt(self) -> None:
+        # A read-only recovery run may memoize placement reads, but pinning
+        # writes the placement receipt: after release, a later pin in the
+        # same process must run for real and recreate it (#469).
+        first = isolation.sidecar_root(self.repo, "task", "T001", pin=True)
+        common = Path(git(self.repo, "rev-parse", "--git-common-dir"))
+        if not common.is_absolute():
+            common = self.repo / common
+        receipts = common / "gsd-path" / "workspaces"
+        self.assertTrue(any(receipts.glob("*.json")))
+        isolation.worktree_paths.release_workspace(self.repo)
+        self.assertFalse(any(receipts.glob("*.json")))
+
+        # Simulate a recovery run having memoized the non-pinning lookup.
+        isolation._RECOVERY_MEMO.clear()
+        isolation._RECOVERY_MEMO[("head-sha", str(self.repo))] = git(
+            self.repo, "rev-parse", "HEAD")
+        try:
+            self.assertEqual(
+                isolation.sidecar_root(self.repo, "task", "T001"),
+                first,
+            )
+            self.assertFalse(any(receipts.glob("*.json")))
+
+            again = isolation.sidecar_root(self.repo, "task", "T001", pin=True)
+            self.assertEqual(again, first)
+            self.assertTrue(any(receipts.glob("*.json")))
+        finally:
+            isolation._RECOVERY_MEMO.pop(("head-sha", str(self.repo)), None)
+
+
 if __name__ == "__main__":
     unittest.main()
