@@ -5331,11 +5331,16 @@ def parser() -> argparse.ArgumentParser:
     retire_member_parser.add_argument("--task-file")
 
     deactivate_task_parser = subparsers.add_parser(
-        "deactivate-task", help="revoke one helper-owned task dispatch"
+        "deactivate-task",
+        help="revoke one helper-owned task dispatch (parallel tasks only: a serial "
+             "task has no task branch and no authorization to deactivate)",
     )
     deactivate_task_parser.add_argument("--repo", type=Path, required=True)
     deactivate_task_parser.add_argument("--task-id", required=True)
-    deactivate_task_parser.add_argument("--task-branch", required=True)
+    deactivate_task_parser.add_argument(
+        "--task-branch", required=True,
+        help="the parallel isolate's branch gsd-path-task/<id>",
+    )
 
     isolate_verify_parser = subparsers.add_parser(
         "isolate-verify", help="create a named verify sidecar"

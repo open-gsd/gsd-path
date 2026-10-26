@@ -99,6 +99,11 @@ hook.
   the rename when the directory is tracked.
 - **`<hook>.gsd-path-chained` already exists beside a foreign hook:** the
   installer stops. Decide which of the two files you want to keep.
+- **You disabled a hook by renaming it to `<hook>.disabled*`:** while
+  `<hook>` itself is absent, the installer and `--member-of` leave it disabled
+  (`(left disabled)`), and doctor reports it as deliberately disabled instead
+  of missing. To enable the guard again, remove or rename the disabled file
+  and rerun the installer.
 
 Git hooks are local to a clone. A bot that merges on the server, such as
 Renovate, never runs them, and its commits on the default branch do not

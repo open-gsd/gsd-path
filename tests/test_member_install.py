@@ -175,6 +175,26 @@ class MemberInstallTests(unittest.TestCase):
         self.assertFalse((self.hooks / "pre-commit.gsd-path-chained").exists())
         self.assertEqual(self.change().returncode, 0)
 
+    def test_a_deliberately_disabled_hook_stays_disabled(self) -> None:
+        # A user-disabled hook (renamed to <hook>.disabled*) must not be
+        # silently re-enabled by reinstalling beside the rename (#469).
+        disabled = self.hooks / "pre-push.disabled-2026"
+        executable(disabled, "#!/bin/sh\nexit 0\n")
+
+        self.installed()
+
+        self.assertFalse((self.hooks / "pre-push").exists())
+        self.assertTrue(disabled.is_file())
+        self.assertIn("(left disabled)", self.install().stdout)
+
+        # A leftover ACTIVE hook beside the rename is never hidden: a foreign
+        # one still chains instead of being skipped as disabled.
+        executable(self.hooks / "pre-push", "#!/bin/sh\nexit 3\n")
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("chained", result.stdout)
+        self.assertTrue((self.hooks / "pre-push.gsd-path-chained").is_file())
+
     def test_hooks_follow_a_moved_coordinator_after_repair(self) -> None:
         self.installed()
         moved = self.root / "acme-moved"

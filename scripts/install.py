@@ -345,6 +345,9 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
     plan = []
     for name in GIT_HOOK_NAMES:
         hook, chained = hooks_dir / name, hooks_dir / f"{name}{CHAINED_HOOK_SUFFIX}"
+        if _hook_is_disabled(hooks_dir, name):
+            plan.append((name, hook, chained, False, True))
+            continue
         if hook.is_symlink() or chained.is_symlink():
             raise InstallerError(f"refusing a symlinked git hook: {hook}")
         if _lexists(hook) and not hook.is_file():
@@ -357,17 +360,21 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
         )
         if chain and _lexists(chained):
             raise InstallerError(f"cannot chain {hook}: {chained} already exists")
-        plan.append((name, hook, chained, chain))
+        plan.append((name, hook, chained, chain, False))
     lines = []
-    for name, hook, chained, chain in plan:
+    for name, hook, chained, chain, disabled in plan:
         note = " (keeps the existing hook as a chained hook)" if chain else ""
+        if disabled:
+            note = " (left disabled)"
         lines.append(f"member hook: {hook}{note}" + (" (dry run)" if dry_run else ""))
     if dry_run:
         return lines
     hooks_dir.mkdir(parents=True, exist_ok=True)
     staged = []
     try:
-        for name, _, _, _ in plan:
+        for name, _, _, _, disabled in plan:
+            if disabled:
+                continue
             temporary = hooks_dir / f".{name}.gsd-path-tmp"
             # O_EXCL already refuses any existing name; O_NOFOLLOW (absent on
             # Windows) adds defense in depth where it exists.
@@ -379,7 +386,9 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
                 if hasattr(os, "fchmod"):  # Windows before 3.13; Git for Windows needs no exec bit.
                     os.fchmod(output.fileno(), 0o755)
                 output.write(member_hook(interpreter, name).encode("utf-8"))
-        for name, hook, chained, chain in plan:
+        for name, hook, chained, chain, disabled in plan:
+            if disabled:
+                continue
             if chain:
                 os.replace(hook, chained)
             os.replace(hooks_dir / f".{name}.gsd-path-tmp", hook)
@@ -1308,9 +1317,23 @@ def _project_destinations(
         if hooks_dir is not None:
             for hook_name, generator in GIT_HOOKS:
                 hook = hooks_dir / hook_name
+                if _hook_is_disabled(hooks_dir, hook_name):
+                    continue
                 chained = _lexists(_chained_hook_path(hook)) or _foreign_git_hook(hook)
                 destinations.append((hook, None, generator(interpreter, chained), True))
     return destinations
+
+
+def _hook_is_disabled(hooks_dir: Path, hook_name: str) -> bool:
+    """Whether the user deliberately disabled this hook (#469).
+
+    A hook renamed to `<name>.disabled*` stays disabled: reinstalling beside
+    the rename would silently re-enable it. The rename only disables while
+    the active hook is absent — a leftover active hook next to a rename is
+    inspected and refreshed normally, never hidden. The convention matches
+    the installer's own `disabled-gsd-skills-<n>` rename style.
+    """
+    return not _lexists(hooks_dir / hook_name) and any(hooks_dir.glob(f"{hook_name}.disabled*"))
 
 
 def _native_settings_mergers(
@@ -3049,6 +3072,13 @@ def doctor(
                     hook_path = hooks_dir / hook_name
                     label = _describe_project_path(project, hook_path)
                     if hook_path in unreadable_git_hooks:
+                        continue
+                    if _hook_is_disabled(hooks_dir, hook_name):
+                        push(
+                            "ok",
+                            f"hooks: {hook_name} is deliberately disabled "
+                            f"({hook_name}.disabled* present in {hooks_dir})",
+                        )
                         continue
                     if not _lexists(hook_path):
                         push(
