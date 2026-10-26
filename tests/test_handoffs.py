@@ -2804,7 +2804,9 @@ Tasks reviewed: 2
             )
             old = "- ✅ The demo command prints hello. — ran hello.py"
             review.write_bytes(original.replace(
-                old, "- ❌ Render `a - b` — found: prints `a b`, src/app.py:3"
+                old,
+                "- ❌ Render `a - b` — found: prints `a b`, src/app.py:3\n"
+                "- ✅ Render `a b` — prints `a b` as accepted",
             ).encode("utf-8"))
             self.assertEqual(check_handoffs.validate_wave(root, review=relative)["verdict"], "blocked")
             (group,) = review_findings.compute(root, ".project", 1, 1)["groups"]
@@ -2963,6 +2965,55 @@ Tasks reviewed: 2
                         self.assertNotEqual(failed.returncode, 0, failed.stdout)
                         self.assertIn(f"{relative.rsplit('/', 1)[1]} task T001", failed.stderr)
                         self.assertIn(reason, failed.stderr)
+
+    def test_wave_requires_every_claim_accounted_for(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            relative = self.write_wave_review(root)
+            self.write_coverage_task(
+                root, "T001", "- SC1",
+                acceptance="1. First claim holds.\n2. Second claim holds.",
+            )
+            task_path = root / ".project/tasks/T001-demo.md"
+            task_path.write_bytes(task_path.read_text(encoding="utf-8").replace(
+                "## Acceptance criteria\n\n1. First claim holds.\n2. Second claim holds.",
+                "## Acceptance criteria\n\n1. First claim holds.\n2. Second claim holds."
+                "\n\n## Interface contract\n\n- `render(name)` returns the greeting.",
+            ).encode("utf-8"))
+            review = root / relative
+
+            # Id citations cover every claim, including the interface bullet,
+            # and one observation may cover several identified claims.
+            review.write_bytes(review.read_text(encoding="utf-8").replace(
+                "- ✅ The demo command prints hello. — ran hello.py",
+                "- ✅ T001/AC1, T001/AC2 — both hold in one run of the suite\n"
+                "- ✅ T001/IF1 — render observed",
+            ).encode("utf-8"))
+            result = check_handoffs.validate_wave(root, review=relative)
+            self.assertEqual(result["verdict"], "pass")
+
+            # An authorized disposition accounts for a claim without proving it.
+            review.write_bytes(review.read_text(encoding="utf-8").replace(
+                "- ✅ T001/AC1, T001/AC2 — both hold in one run of the suite",
+                "- ✅ T001/AC1 — observed\n"
+                "- T001/AC2 — disposition: deferred by 2026-10-26 owner ruling: out of scope",
+            ).encode("utf-8"))
+            self.assertEqual(
+                check_handoffs.validate_wave(root, review=relative)["verdict"], "pass"
+            )
+
+            # Dropping every reference to the second acceptance claim fails,
+            # naming its stable id.
+            review.write_bytes(review.read_text(encoding="utf-8").replace(
+                "- ✅ T001/AC1 — observed\n"
+                "- T001/AC2 — disposition: deferred by 2026-10-26 owner ruling: out of scope",
+                "- ✅ First claim holds. — observed\n",
+            ).encode("utf-8"))
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, r"T001/AC2"
+            ):
+                check_handoffs.validate_wave(root, review=relative)
 
     def test_wave_rejects_placeholder_task_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

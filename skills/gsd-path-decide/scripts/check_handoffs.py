@@ -727,6 +727,62 @@ def _numbered_entries(section: str, *, continuations: bool = False) -> List[Tupl
     return entries
 
 
+CLAIM_ID_IN_REVIEW = re.compile(r"\b(?P<task>T\d{3})/(?P<kind>AC|IF)(?P<number>[1-9]\d*)\b")
+
+
+def _interface_bullets(task_text: str) -> Dict[int, str]:
+    """The task's interface contract bullets, numbered by position."""
+    try:
+        section = _section(task_text, "Interface contract")
+    except HandoffError:
+        return {}
+    bullets: Dict[int, str] = {}
+    for line in _strip_comments(section).splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- ") and stripped not in {"- None"}:
+            bullets[len(bullets) + 1] = stripped[2:].strip()
+        elif stripped and not stripped.startswith("- ") and bullets:
+            # A continuation of the previous bullet joins it with one space.
+            bullets[len(bullets)] += " " + stripped
+    return bullets
+
+
+def task_claims(task_text: str, task_id: str) -> Dict[str, str]:
+    """Every acceptance and interface claim of a task under a stable id.
+
+    `T012/AC3` names the third numbered item of `## Acceptance criteria`;
+    `T012/IF2` the second bullet of `## Interface contract` (#474). The ids
+    are stable for the life of the task file: numbering is position-derived.
+    """
+    claims: Dict[str, str] = {}
+    try:
+        section = _section(task_text, "Acceptance criteria")
+    except HandoffError:
+        section = None
+    if section is not None:
+        # Ids are positional: a frozen landed task may repeat a criterion
+        # number (#374), and the third numbered item is still AC3.
+        position = 0
+        for line in _strip_comments(section).splitlines():
+            match = NUMBERED_ITEM_PATTERN.fullmatch(line.strip())
+            if match is None:
+                continue
+            position += 1
+            claims[f"{task_id}/AC{position}"] = match.group(2).strip()
+        try:
+            joined = _numbered_items(section, continuations=True)
+        except HandoffError:
+            joined = {}
+        if joined and sorted(joined) == list(range(1, len(joined) + 1)) and len(joined) == position:
+            # Continuation lines below a numbered item join it (#374 wraps);
+            # a repeated-number frozen task keeps its positional claims.
+            for number, body in joined.items():
+                claims[f"{task_id}/AC{number}"] = body
+    for number, body in _interface_bullets(task_text).items():
+        claims[f"{task_id}/IF{number}"] = body
+    return claims
+
+
 def _numbered_items(section: str, *, continuations: bool = False) -> Dict[int, str]:
     items: Dict[int, str] = {}
     for number, text in _numbered_entries(section, continuations=continuations):
@@ -2057,6 +2113,42 @@ def validate_wave(
     return validate_wave_evidence(root, project_dir, review)
 
 
+def _uncovered_claims(section_lines: Sequence[str], task_text: str, task_id: str):
+    """Claims a task review section leaves unaccounted for (#474).
+
+    A claim is accounted for when the section cites its stable id anywhere,
+    copies it verbatim before an evidence separator on a marker line, or
+    records an authorized disposition naming it. One observation may cover
+    several claims when each is identified.
+    """
+    claims = task_claims(task_text, task_id)
+    if not claims:
+        return []
+    # Issue #392: a quote may drop the `- ` markers of the criterion's
+    # sub-bullet lines, so a criterion is also read without them.
+    bare_claims = task_claims(_common.without_sub_bullet_markers(task_text), task_id)
+    covered: set = set()
+    for line in section_lines:
+        stripped = line.strip()
+        accounting = stripped.startswith(("- ✅ ", "- ❌ ")) or "disposition:" in stripped.casefold()
+        if accounting:
+            for match in CLAIM_ID_IN_REVIEW.finditer(stripped):
+                covered.add(f"{match.group('task')}/{match.group('kind')}{match.group('number')}")
+        if stripped.startswith(("- ✅ ", "- ❌ ")):
+            # Reuse the canonical quote matcher: a criterion may itself
+            # contain em dashes and may be quoted with or without its
+            # sub-bullet markers (#374, #392).
+            item = stripped[4:]
+            for claim_id, body in claims.items():
+                bare = bare_claims.get(claim_id, body)
+                if _common.quoted_criterion(item, [body, bare]) is not None:
+                    # A verbatim quote identifies the claim it quotes;
+                    # supporting several claims requires naming each id.
+                    covered.add(claim_id)
+                    break
+    return [(claim_id, body) for claim_id, body in claims.items() if claim_id not in covered]
+
+
 def validate_wave_evidence(
     root: Path, project_dir: str = DEFAULT_PROJECT_DIR, review: str = ""
 ) -> Dict[str, object]:
@@ -2188,6 +2280,16 @@ def validate_wave_evidence(
         for item in evidence:
             item = task_review_observation(item, tasks[task_id])
             _non_placeholder(item, f"{name} task {task_id} {verdict} evidence")
+        uncovered = _uncovered_claims(
+            lines[heading_index + 1 : end], tasks[task_id], task_id
+        )
+        if uncovered:
+            raise HandoffError(
+                f"{name} task {task_id} does not account for "
+                + "; ".join(f"{claim_id} ({body[:80]})" for claim_id, body in uncovered)
+                + "; account for every claim with an evidence reference, a "
+                "finding, or an authorized disposition"
+            )
         task_verdicts.append(verdict)
 
     if not is_last_cycle:
