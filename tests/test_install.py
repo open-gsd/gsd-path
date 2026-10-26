@@ -3496,6 +3496,37 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    def test_doctor_and_reinstall_keep_a_disabled_hook_disabled(self):
+        # A user-disabled hook (renamed <hook>.disabled*) is deliberate: the
+        # installer must not recreate it and doctor must not call it missing (#469).
+        project = self.root / "doctor-disabled-hook"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-hooks-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        pre_push = project / ".git" / "hooks" / "pre-push"
+        self.assertTrue(pre_push.is_file())
+        pre_push.rename(pre_push.parent / "pre-push.disabled-2026")
+
+        status, _, error = self.run_main(
+            [*self.hooks_arguments(project, target), "--update"]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertFalse(pre_push.exists())
+        findings = install.doctor(self.source, ["claude"], lambda _: target, project)
+        self.assertFalse(
+            any("pre-push is missing" in finding["text"] for finding in findings)
+        )
+        self.assertTrue(
+            any(
+                finding["level"] == "ok"
+                and "pre-push is deliberately disabled" in finding["text"]
+                for finding in findings
+            )
+        )
+
     @requires_symlink
     def test_doctor_rejects_symlinked_project_contracts(self):
         project = self.root / "doctor-symlinked-contracts"
