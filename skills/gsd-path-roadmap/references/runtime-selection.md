@@ -36,13 +36,14 @@ failing re-run refuses the hotfix. Limits: the command serves only a serial
 task working in the primary and refuses parallel or member tasks; the ref is
 local repository state, so a clone without it cannot land the pin and the
 proof fails closed. The guard applies two rules to agent shell commands. It
-denies any command where `runtime-hotfix` directly follows `isolation.py`, a
-`-m isolation` module operand, or stdin `-`. It also denies every Git command
-with an argument that names `refs/gsd-path/`; this deliberately blocks
-read-only uses such as `git log refs/gsd-path/<ref>` too. Limits: it cannot see
-a copied or renamed `isolation.py`, a refspec configured in Git config, a ref
-write made from inside another program, or a direct edit of files under
-`.git/`.
+denies any command where `runtime-hotfix` directly follows `isolation.py`, stdin
+`-`, or an `isolation` module operand (`-m isolation`, `-Bm isolation`,
+`-misolation`). It also denies every Git command whose words, including global
+`-c` options and shell variables set earlier in the command, contain
+`refs/gsd-path/`; this deliberately blocks read-only uses such as
+`git log refs/gsd-path/<ref>` too. Limits: it cannot see a copied or renamed
+`isolation.py`, a refspec stored in a Git config file, a ref write made from
+inside another program, or a direct edit of files under `.git/`.
 
 Publishing a runtime to the shared store is project-free:
 `python3 -B <absolute runtime_store.py> publish --source <absolute package root>`

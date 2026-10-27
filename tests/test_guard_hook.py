@@ -4676,6 +4676,8 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
             f"git symbolic-ref {ref} refs/tags/fake",
             f"git send-pack . {'b' * 40}:{ref}",
             "git log refs/gsd-path/checkpoint",
+            f"git -c remote.self.url=. -c remote.self.push=refs/tags/fake:{ref} push self",
+            f"REF={ref} git push . HEAD:refs/heads/ordinary",
         ):
             with self.subTest(command=command):
                 status, output, error = run_guard(self.event(command))

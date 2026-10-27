@@ -4368,6 +4368,11 @@ def destructive_git_reason(
         if invocation is None:
             continue
         command, arguments, git_options = invocation
+        if any(
+            "refs/gsd-path/" in str(word).casefold()
+            for word in [*words, *(assignments or {}).values()]
+        ):
+            return GIT_REASONS["owned-refspec"]
         # Git matches its own commands by exact case, but alias names in any case.
         built_in = (
             command_invocation(words)[1][-len(arguments) - 1] in GIT_BUILT_IN_COMMANDS
@@ -4443,8 +4448,6 @@ def destructive_git_reason(
             )
             if force_option or force_refspec:
                 return GIT_REASONS[command]
-        if any("refs/gsd-path/" in argument.casefold() for argument in arguments):
-            return GIT_REASONS["owned-refspec"]
         if command == "branch":
             # Git accepts each unique prefix of a long option (--del, --forc).
             deletes = (
@@ -4981,13 +4984,16 @@ def closed_shell_execution_reason(
 def runtime_hotfix_invocation(tokens):
     """True when any simple command, prefixed or wrapped, names isolation.py then runtime-hotfix."""
     for segment in command_segments(tokens):
-        for previous, token, following in zip(["", *segment], segment, [*segment[1:], ""]):
+        for index, (token, following) in enumerate(zip(segment, [*segment[1:], ""])):
             if following != "runtime-hotfix":
                 continue
             clustered = re.fullmatch(r"-[A-Za-ln-z]*m(.+)", token)
             if clustered:
                 module = clustered.group(1)
-            elif previous.startswith("-") and not previous.startswith("--") and "m" in previous:
+            elif any(
+                earlier.startswith("-") and not earlier.startswith("--") and "m" in earlier
+                for earlier in segment[:index]
+            ):
                 module = token
             else:
                 module = None
