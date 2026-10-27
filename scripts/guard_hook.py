@@ -324,7 +324,6 @@ GIT_CONFIG_EDIT_SHORT_OPTION = re.compile(r"-[A-Za-z]*e[A-Za-z]*")
 PLAIN_QUOTED_SEGMENT = re.compile(r"'[^']*'|\"[^\"]*\"")
 ANSI_QUOTE_START = re.compile(r"\$['\"]")
 GIT_CONFIG_EXPANDING_WORD = re.compile(r"[*?\[]|\{.*(?:,|\.\.)")
-SHELL_BRACE_EXPANSION = re.compile(r"\{[^}]*(?:,|\.\.)")
 
 
 def denied_git_config_argument(arguments):
@@ -429,8 +428,8 @@ GIT_REASONS = {
         "recovery protocol inspects"
     ),
     "owned-refspec": (
-        "git commands naming refs/gsd-path/ are denied: that namespace holds "
-        "orchestrator-owned authorizations an agent must not create or move"
+        "git commands naming refs/gsd-path/ or runtime-hotfix are denied: that "
+        "namespace holds orchestrator-owned authorizations an agent must not create or move"
     ),
     "worktree": (
         "git worktree remove --force discards uncommitted task work the recovery "
@@ -4370,14 +4369,9 @@ def destructive_git_reason(
             continue
         command, arguments, git_options = invocation
         if any(
-            "refs/gsd-path/" in str(word).casefold()
-            for word in [*words, *(assignments or {}).values()]
-        ) or any(
-            getattr(word, "literal", "bare") == "bare" and (
-                SHELL_BRACE_EXPANSION.search(word)
-                or ("refs/" in word and GIT_CONFIG_EXPANDING_WORD.search(word))
-            )
+            protected in word.casefold()
             for word in words
+            for protected in ("refs/gsd-path/", "runtime-hotfix")
         ):
             return GIT_REASONS["owned-refspec"]
         # Git matches its own commands by exact case, but alias names in any case.

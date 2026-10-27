@@ -4692,6 +4692,11 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
             "git push origin HEAD:refs/heads/ordinary-work",
             "git log -1 HEAD@{1}",
             "git push origin 'refs/heads/{a,b}'",
+            "git add src/{a,b}.py",
+            "git diff HEAD -- tests/test_{a,b}.py",
+            "git checkout -- {a,b}.py",
+            "git log HEAD~{1..3}",
+            "git commit -m fix,{a,b}",
         ):
             with self.subTest(command=command):
                 status, output, error = run_guard(self.event(command))

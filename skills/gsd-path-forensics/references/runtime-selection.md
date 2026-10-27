@@ -38,14 +38,14 @@ local repository state, so a clone without it cannot land the pin and the
 proof fails closed. The guard applies two rules to agent shell commands. It
 denies any command where `runtime-hotfix` directly follows `isolation.py`, stdin
 `-`, or an `isolation` module operand (`-m isolation`, `-Bm isolation`,
-`-misolation`). It also denies every Git command whose words, including global
-`-c` options and shell variables set earlier in the command, contain
-`refs/gsd-path/`, an unquoted shell brace list or range, or an unquoted glob in
-a word naming `refs/`; this deliberately blocks read-only uses such as
-`git log refs/gsd-path/<ref>` too. Limits: it cannot see a copied or renamed
+`-misolation`). It also denies every Git command with a word, including global
+`-c` options and inline variable assignments, that contains `refs/gsd-path/` or
+`runtime-hotfix`. This deliberately blocks read-only uses such as
+`git log refs/gsd-path/<ref>`. Limits: it cannot see a copied or renamed
 `isolation.py`, a refspec stored in a Git config file, a ref write made from
-inside another program, a direct edit of files under `.git/`, or other shell
-expansion that assembles the ref name at run time.
+inside another program, a direct edit of files under `.git/`, or shell
+expansion that splits both protected words, such as
+`refs/gs{d,}-path/task-authorizations/<task>`.
 
 Publishing a runtime to the shared store is project-free:
 `python3 -B <absolute runtime_store.py> publish --source <absolute package root>`
