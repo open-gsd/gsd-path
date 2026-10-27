@@ -1673,8 +1673,14 @@ def _validate_task_graph(
     for task_id, text in tasks.items():
         task_repos[task_id] = str(_strict_frontmatter(text, task_id).get("repo") or "")
         # Patch mode reopens planning beside landed tasks; only new tasks start clean.
-        landed = _task_scalar(text, task_id, "status") == "done"
+        status = _task_scalar(text, task_id, "status")
+        landed = status == "done"
         _require_task_structure(task_id, text, initial=initial and not landed)
+        if status == "withdrawn" and not _common.withdrawn_citations(text):
+            raise HandoffError(
+                f"{task_id} is withdrawn without an owner citation; append a "
+                "`- Withdrawn — <YYYY-MM-DD>: <owner ruling verbatim>` Log entry"
+            )
         wave = _task_wave(text, task_id)
         deps = _task_deps(text, task_id)
         files = _frontmatter_files(text)
@@ -1688,6 +1694,14 @@ def _validate_task_graph(
                 raise HandoffError(f"{task_id} names unknown dependency {dependency}")
             if _task_wave(tasks[dependency], dependency) > wave:
                 raise HandoffError(f"{task_id} depends on later-wave {dependency}")
+            if (
+                _task_scalar(tasks[dependency], dependency, "status") == "withdrawn"
+                and status != "withdrawn"
+            ):
+                raise HandoffError(
+                    f"{task_id} depends on withdrawn {dependency}; "
+                    "re-point the dependency or withdraw this task too"
+                )
 
     # `supersedes` retires the regression Verify of an earlier task: the same overlap rule selects both.
     for task_id, text in tasks.items():
@@ -1775,7 +1789,10 @@ def _owned_by_wave(
 ) -> List[str]:
     owned: Set[str] = set()
     for task_id, text in tasks.items():
-        if _task_wave(text, task_id) == wave:
+        # A withdrawn tombstone owns no criteria to review (#483).
+        if _task_wave(text, task_id) == wave and (
+            _task_scalar(text, task_id, "status") != "withdrawn"
+        ):
             owned.update(assigned[task_id])
     return sorted(owned, key=lambda name: int(name[2:]))
 
@@ -2078,6 +2095,12 @@ def validate_plan(
             raise HandoffError(f"Intent coverage names unknown {criterion}")
         if task_id not in tasks:
             raise HandoffError(f"Intent coverage names unknown {task_id}")
+        if _task_scalar(tasks[task_id], task_id, "status") == "withdrawn":
+            raise HandoffError(
+                f"{criterion} is still owned by withdrawn {task_id}; re-own it "
+                "from a remaining task or remove the criterion through a "
+                "define-phase INTENT Correction"
+            )
         items = _acceptance_items(tasks[task_id], task_id)
         number = int(acceptance[2:])
         if number not in items:
@@ -2273,6 +2296,24 @@ def validate_wave_evidence(
     ]
     if not expected_tasks:
         raise HandoffError(f"PLAN.md has no Wave {wave} tasks")
+    # A withdrawn tombstone produced no live work; the review covers the rest.
+    # But exclusion is earned: an uncited tombstone is a dropped obligation and
+    # fails this gate like every other one (#483).
+    live_tasks: List[str] = []
+    for task_id in expected_tasks:
+        if _task_scalar(tasks[task_id], task_id, "status") == "withdrawn":
+            if not _common.withdrawn_citations(tasks[task_id]):
+                raise HandoffError(
+                    f"{task_id} is withdrawn without an owner citation; append a "
+                    "`- Withdrawn — <YYYY-MM-DD>: <owner ruling verbatim>` Log entry"
+                )
+            continue
+        live_tasks.append(task_id)
+    expected_tasks = live_tasks
+    if not expected_tasks:
+        raise HandoffError(
+            f"Wave {wave} has only withdrawn tasks; it has no live work to review"
+        )
     if wave not in wave_depths:
         raise HandoffError(f"PLAN.md has no Wave {wave}")
     expected_depth = wave_depths[wave]

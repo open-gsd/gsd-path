@@ -67,6 +67,23 @@ VERIFY_LEDGER_PATH = ".project/build/verify-ledger.jsonl"
 VERIFY_RESULTS = ("pass", "fail")
 VERIFY_LEDGER_SCHEMA = "gsd-path/verify-ledger/v2"
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
+# The owner citation a withdrawn task tombstone must carry in its Log (#483).
+# One definition shared by every gate that reads the representation.
+WITHDRAWN_CITATION = re.compile(
+    r"^- Withdrawn — (?P<date>\d{4}-\d{2}-\d{2}): (?P<ruling>.+)$", re.MULTILINE)
+
+
+def withdrawn_citations(task_text: str) -> list[str]:
+    """The owner citations in a withdrawn task's Log, as `date: ruling`.
+
+    The Log is the append-only record of rulings; a Withdrawn line in any
+    other section is not the citation the gates accept (#483).
+    """
+    body = section_body(task_text, "Log")
+    if body is None:
+        return []
+    return [f"{m.group('date')}: {m.group('ruling')}"
+            for m in WITHDRAWN_CITATION.finditer(body)]
 
 REVIEW_BULLET_HEADING_PATTERN = re.compile(r"^#{2,3} ")
 REVIEW_BULLET_FIELD_LABEL_PATTERN = re.compile(r"^- \*\*[^*]+\*\*:")

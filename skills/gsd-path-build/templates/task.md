@@ -3,7 +3,7 @@ id: T001
 title: <imperative, specific>
 wave: 1
 deps: []            # task ids whose output or landed effect this task needs
-status: pending     # orchestrator-owned: pending | in-progress | done | failed | blocked
+status: pending     # orchestrator-owned: pending | in-progress | done | failed | blocked | withdrawn
 agent: null         # orchestrator-owned: set at dispatch
 base: null          # orchestrator-owned: clean layer SHA for isolated Verify
 worktree: null      # orchestrator-owned: isolated task worktree while active
@@ -16,6 +16,9 @@ task_branch: null   # orchestrator-owned: gsd-path-task/<id> while parallel; nul
 # effort: <advertised effort|inherit>
 # repo: <member>    # multi-repo only: the MEMBERS.md member this task changes; omit for the coordinator
 # supersedes: [<task id>]  # only when INTENT requires it: earlier-wave tasks whose behavior this task replaces; retires their Verify
+# Withdrawn — <YYYY-MM-DD>: "<owner ruling verbatim>"  # only in the Log, only
+#   after an owner ruling: status: withdrawn keeps the id in inventory with no
+#   dispatch and no landing; the citation line is mandatory or the gate fails (#483)
 files:              # every file this task may touch — dispatch checks overlap
   - <path>
 ---

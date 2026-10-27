@@ -3681,6 +3681,73 @@ class RecoverTests(unittest.TestCase):
         self.assertEqual(report["tasks"], [])
         self.assertIn("unexpected .project/tasks/T002.md", report["reason"])
 
+    def test_recovery_reports_a_cited_withdrawn_tombstone_as_none(self) -> None:
+        self.write_task(
+            "withdrawn", "null",
+            log='- Withdrawn — 2026-10-26: "owner rules this out of scope"\n',
+        )
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "withdraw T001")
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "none")
+        self.assertEqual(report["reason"], "withdrawn task is a tombstone")
+
+    def test_recovery_reports_a_member_tombstone_as_none(self) -> None:
+        self.write_task(
+            "withdrawn", "null",
+            log='- Withdrawn — 2026-10-26: "owner defers this member work"\n',
+        )
+        path = self.repo / ".project/tasks/T001.md"
+        path.write_bytes(
+            path.read_text(encoding="utf-8")
+            .replace("wave: 1\n", "wave: 1\nrepo: web\n")
+            .encode("utf-8")
+        )
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "withdraw member task")
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "none")
+        self.assertEqual(report["reason"], "withdrawn task is a tombstone")
+
+    def test_recovery_blocks_an_uncited_withdrawn_tombstone(self) -> None:
+        self.write_task("withdrawn", "null")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "withdraw T001")
+
+        report = self.recover()
+
+        self.assertEqual(report["verdict"], "block")
+        self.assertIn("Withdrawn", report["reason"])
+
+    def test_ship_verification_treats_a_cited_tombstone_as_inventory(self) -> None:
+        self.write_task(
+            "withdrawn", "null",
+            log='- Withdrawn — 2026-10-26: "owner rules this out of scope"\n',
+        )
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "withdraw T001")
+        head = git(self.repo, "rev-parse", "HEAD")
+
+        proven = isolation.verify_landed_task_files(
+            self.repo, [self.repo / ".project/tasks/T001.md"], ".project/tasks", head
+        )
+
+        self.assertEqual(proven["tasks"][0]["verdict"], "withdrawn")
+        self.assertEqual(proven["tasks"][0]["reason"], "withdrawn task is a tombstone")
+
+        self.write_task("withdrawn", "null")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "drop the citation")
+        head = git(self.repo, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(isolation.IsolationError, "needs a"):
+            isolation.verify_landed_task_files(
+                self.repo, [self.repo / ".project/tasks/T001.md"], ".project/tasks", head
+            )
+
     def test_clean_filtered_crlf_task_lands_and_recovers(self) -> None:
         git(self.repo, "config", "core.autocrlf", "true")
         self.dispatch()
