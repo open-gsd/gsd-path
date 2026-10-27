@@ -4569,20 +4569,48 @@ def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPE
     runtime = here / "runtime"
     if (here / "runtime.json").exists():
         try:
-            from status_runtime import resolve_runtime
-            runtime = resolve_runtime(here.parent)
-        except (OSError, ValueError):
+            # Option (i) on #468: acceptance is the pinned runtime plus the
+            # validated successors its own hashed manifest names. The walk
+            # comes from the PINNED runtime's own bytes — never the project
+            # launcher's preloaded module, which may be stale or divergent —
+            # and exactly the bytes whose sha256 the pinned manifest names:
+            # read once, hash against the digest-proven manifest, execute
+            # the verified buffer, so no swap between check and exec can
+            # run unproven code.
+            import hashlib
+            import types
+
+            from status_runtime import (
+                declaration, manifest_digest, runtime_home, validate_runtime,
+            )
+            pin = declaration(here.parent)
+            validate_runtime(pin)
+            root = runtime_home() / pin["digest"]
+            manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+            if (not isinstance(manifest, dict)
+                    or manifest_digest(manifest) != pin["digest"]):
+                return False
+            expected = manifest.get("files", {}).get("status_runtime.py")
+            data = (root / "status_runtime.py").read_bytes()
+            if (not isinstance(expected, str)
+                    or hashlib.sha256(data).hexdigest() != expected):
+                return False
+            module = types.ModuleType("gsd_path_pinned_status_runtime")
+            exec(compile(data, str(root / "status_runtime.py"), "exec"), module.__dict__)
+            runtimes = module.accepted_runtime_dirs(here.parent)
+        except (OSError, ValueError, TypeError, ImportError, AttributeError):
             return False
-    elif not runtime.exists():
-        runtime = here
-    runtime = runtime.resolve()
+    else:
+        if not runtime.exists():
+            runtime = here
+        runtimes = {runtime.resolve()}
     for base in working_directories or [os.getcwd()]:
         try:
             # A Git Bash /c/... operand names the C: drive, not a folder named c.
             script = (Path(base) / native_path_text(operand)).resolve()
             if (
                 script.name in helpers
-                and (script.is_relative_to(runtime) or (
+                and (any(script.is_relative_to(runtime_dir) for runtime_dir in runtimes) or (
                     script.name == "status_runtime.py" and script == here / "status_runtime.py"
                 ))
                 and script.is_file()

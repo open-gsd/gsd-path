@@ -128,7 +128,76 @@ def manifest_digest(manifest: dict) -> str:
     return hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def manifest_successors(manifest: dict) -> tuple:
+    """The validated successor digests a runtime's hashed manifest names (#468).
+
+    `successors` is an optional list of unique 64-hex lowercase store digests.
+    It lives inside the manifest, so the runtime's own digest covers it: a
+    runtime can only bless successors its hashed bytes name. A malformed
+    field makes the whole runtime invalid — acceptance never widens on a
+    shape the store cannot prove.
+    """
+    successors = manifest.get("successors", [])
+    if (not isinstance(successors, list)
+            or not all(
+                isinstance(item, str) and len(item) == 64
+                and all(char in "0123456789abcdef" for char in item)
+                for item in successors
+            )
+            or len(set(successors)) != len(successors)):
+        raise ValueError("invalid manifest successors")
+    return tuple(successors)
+
+
+def accepted_runtime_dirs(repo: Path) -> set:
+    """The pinned runtime's directory plus every validated successor (#468).
+
+    Owner-ruled option (i) on #468: acceptance after ship is anchored in the
+    pinned runtime's own hashed manifest. It names successor digests; each
+    hop is validated exactly like the pin and may name further successors.
+    A named entry that is missing or fails validation simply does not widen
+    the set — the pinned runtime keeps working — and a visited set ends
+    blessed cycles. Nothing outside the pin's hashed reach is ever accepted.
+    """
+    pin = declaration(repo)
+    pin_root, pin_manifest = _validated_manifest(pin)
+    accepted = {pin_root.resolve()}
+    seen = {pin["digest"]}
+    pending = list(manifest_successors(pin_manifest))
+    while pending:
+        digest = pending.pop()
+        if digest in seen:
+            continue
+        seen.add(digest)
+        try:
+            # version None: the hop's trust anchor is the digest the pinned
+            # bytes named, never a version claim. The successors followed
+            # come from the same manifest read whose digest was proven —
+            # a mid-walk entry swap cannot smuggle a different list.
+            root, manifest = _validated_manifest(
+                {"schema": RUNTIME_SCHEMA, "version": None, "digest": digest}
+            )
+            named = manifest_successors(manifest)
+        except (OSError, ValueError, TypeError):
+            continue
+        pending.extend(named)
+        accepted.add(root.resolve())
+    return accepted
+
+
 def validate_runtime(data: dict) -> Path:
+    return _validated_manifest(data)[0]
+
+
+def _validated_manifest(data: dict) -> tuple:
+    """validate_runtime, returning the exact manifest whose digest was proven.
+
+    Callers that act on manifest content (the #468 successor walk) must use
+    this returned object, never a second read of manifest.json: a concurrent
+    swap between reads could otherwise validate one manifest while following
+    successors from another. `version` None anchors on the digest alone —
+    used by the walk for hops whose version no declaration supplies.
+    """
     root = runtime_home() / data["digest"]
     hint = (f"Runtime {data['version']} ({data['digest']}) is unavailable or invalid at {root}. "
             "Run gsd-path --runtime-restore --project <project-root> "
@@ -141,7 +210,8 @@ def validate_runtime(data: dict) -> Path:
             raise ValueError("symlinked manifest")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if (not isinstance(manifest, dict) or manifest_digest(manifest) != data["digest"]
-                or manifest.get("version") != data["version"]):
+                or (data["version"] is not None
+                    and manifest.get("version") != data["version"])):
             raise ValueError("manifest identity mismatch")
         files = manifest.get("files")
         if not isinstance(files, dict) or "pipeline_state.py" not in files:
@@ -164,9 +234,10 @@ def validate_runtime(data: dict) -> Path:
             runtime_entries.add(path.name)
         if runtime_entries != set(files) | {"manifest.json"}:
             raise ValueError("unexpected runtime files")
+        manifest_successors(manifest)
     except (OSError, ValueError, TypeError) as error:
         raise ValueError(hint + f" ({error})") from error
-    return root
+    return root, manifest
 
 
 def resolve_runtime(repo: Path) -> Path:
