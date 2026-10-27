@@ -75,7 +75,7 @@ def guard_launcher(name):
             f"    raise SystemExit({2 if name == 'guard_hook.py' else 1})\n")
 
 
-def source_manifest(source):
+def source_manifest(source, successors=()):
     version = json.loads((source / "package.json").read_text(encoding="utf-8"))["version"]
     files = {}
     for name in (*RUNTIME_FILES, *GUARDS, "status_runtime.py"):
@@ -84,6 +84,13 @@ def source_manifest(source):
             raise ValueError(f"symlinked runtime source: {path}")
         files[name] = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest = {"version": version, "files": files}
+    if successors:
+        # #468 option (i): the successors list joins the manifest BEFORE the
+        # digest is taken, so the published runtime's own bytes bless exactly
+        # these successor digests. An unnamed publish keeps the stock
+        # manifest — identical sources still digest identically.
+        manifest["successors"] = list(successors)
+        status_runtime.manifest_successors(manifest)
     pin = {"schema": status_runtime.RUNTIME_SCHEMA, "version": version,
            "digest": status_runtime.manifest_digest(manifest)}
     return manifest, pin
@@ -115,9 +122,33 @@ def publication_lock(parent, digest):
         os.close(descriptor)
 
 
-def publish(source, *, expected=None, dry_run=False, repair=False):
-    manifest, pin = source_manifest(source)
+def _blessed_store_entry(expected, source_manifest_dict) -> bool:
+    """True when the expected runtime is in the store, hash-valid, stamped with
+    successors, and built from the SAME version and files as the supplied
+    source — only the stamp may differ (#468). A wrong package never restores,
+    even for a blessed pin."""
+    try:
+        root = status_runtime.validate_runtime(expected)
+        manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+        return bool(
+            status_runtime.manifest_successors(manifest)
+            and manifest.get("version") == source_manifest_dict.get("version")
+            and manifest.get("files") == source_manifest_dict.get("files")
+        )
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def publish(source, *, expected=None, dry_run=False, repair=False, successors=()):
+    manifest, pin = source_manifest(source, successors)
     if expected is not None and any(pin[key] != expected.get(key) for key in pin):
+        # A blessed pin's digest covers its successors stamp, so an unstamped
+        # source cannot reproduce it. When the blessed entry itself is in the
+        # store, hash-valid, stamped, and built from the same version and
+        # files as this source, restore returns those exact bytes; every
+        # other mismatch stays the caller's error.
+        if _blessed_store_entry(expected, manifest):
+            return expected
         raise ValueError(f"source does not match declared runtime {expected['version']} ({expected['digest']}); use its matching package")
     if dry_run:
         return pin
@@ -360,6 +391,10 @@ def main(argv=None) -> int:
                                 help="compute the identity without writing to the store")
     publish_parser.add_argument("--repair", action="store_true",
                                 help="replace a store entry that fails verification")
+    publish_parser.add_argument("--name-successor", action="append", default=[], metavar="DIGEST",
+                                help="record a successor runtime digest in this runtime's hashed "
+                                     "manifest (#468 option (i)); publish the successor first, then "
+                                     "name its digest here — repeatable for several successors")
     arguments = parser.parse_args(argv)
     source = Path(arguments.source).resolve()
     if (arguments.expected_version is None) != (arguments.expected_digest is None):
@@ -373,7 +408,8 @@ def main(argv=None) -> int:
                     "digest": arguments.expected_digest}
     try:
         pin = publish(source, expected=expected,
-                      dry_run=arguments.dry_run, repair=arguments.repair)
+                      dry_run=arguments.dry_run, repair=arguments.repair,
+                      successors=arguments.name_successor)
         path = None if arguments.dry_run else str(status_runtime.validate_runtime(pin))
     except (ValueError, OSError) as error:
         print(f"publish failed: {error}", file=sys.stderr)

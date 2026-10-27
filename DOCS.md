@@ -412,7 +412,10 @@ A new machine needs the selected runtime installed before status and guards can
 run. `gsd-path --runtime-restore --project /absolute/project --source-root
 /path/to/matching/package` restores that exact version without changing project
 files. The supplied package must match both the version and digest; custom source
-builds may share a release version while having different digests. No command
+builds may share a release version while having different digests. One exception:
+a pin on a runtime that names successors (below) restores from its existing
+stamped store entry when the package has the same version and files, since only
+the successors stamp differs. No command
 silently substitutes a newer runtime, and status/guards never install or download.
 
 To publish a runtime to the shared store without selecting it for any project,
@@ -420,10 +423,23 @@ run `python3 -B <absolute runtime_store.py> publish --source /path/to/package`
 (and optionally `--provenance "hotfix for <issue>"`). It prints the runtime's
 version, digest, and verified store path as JSON. Publication alone neither
 authorizes execution nor changes a project's trusted runtime — a project runs
-the new bytes only after its own pin selects that digest. `--expected-version`
+new bytes only after its own pin selects that digest, or after the pinned
+runtime's own hashed manifest names them (below). `--expected-version`
 with `--expected-digest` refuses a source that does not match, `--dry-run`
 computes the identity without writing, and `--repair` replaces an entry that
 fails verification.
+
+A runtime can bless successors: publish the successor package first, then
+publish its predecessor with `--name-successor <successor digest>` (repeatable).
+The list is recorded inside the predecessor's hashed `manifest.json`, so the
+blessing is covered by the predecessor's own digest — nothing outside its bytes
+can add to it. On a closed milestone, where the pin can no longer change, the
+guard accepts a helper from a successor only when the pinned runtime's hashed
+manifest names it (directly or through a chain of blessed runtimes, each hop
+hash-locked); every unlisted runtime stays refused. Runtimes published before
+successors existed can never name one without changing their digest, so pins
+on those runtimes keep the run-from-another-cwd workaround until an
+owner-approved repin on a legal branch.
 
 For an old `.gsd-path/runtime/`, run `gsd-path --runtime-migrate --project
 /absolute/project --dry-run`, then the same command without `--dry-run` and review

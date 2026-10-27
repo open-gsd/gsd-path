@@ -19,6 +19,94 @@ from tests._platform import posix_only, requires_symlink
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "guard_hook.py"
 
+# The stable launcher surface as it shipped before #468: no successor walk.
+PRE_SUCCESSOR_LAUNCHER = """\
+import hashlib
+import json
+import stat
+import sys
+from pathlib import Path
+
+RUNTIME_SCHEMA = "gsd-path/runtime/v1"
+
+
+def runtime_home():
+    return Path.home() / ".gsd-path" / "runtimes"
+
+
+def declaration(repo):
+    path = repo / ".gsd-path" / "runtime.json"
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError(f"unsafe runtime declaration: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if (not isinstance(data, dict) or data.get("schema") != RUNTIME_SCHEMA
+            or not isinstance(data.get("version"), str)
+            or not isinstance(data.get("digest"), str)
+            or len(data["digest"]) != 64
+            or any(c not in "0123456789abcdef" for c in data["digest"])):
+        raise ValueError(f"invalid runtime declaration: {path}")
+    return data
+
+
+def manifest_digest(manifest):
+    return hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def validate_runtime(data):
+    root = runtime_home() / data["digest"]
+    try:
+        if any(p.is_symlink() for p in (root, root.parent, root.parent.parent)):
+            raise ValueError("symlinked runtime storage")
+        manifest_path = root / "manifest.json"
+        if manifest_path.is_symlink():
+            raise ValueError("symlinked manifest")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (not isinstance(manifest, dict) or manifest_digest(manifest) != data["digest"]
+                or manifest.get("version") != data["version"]):
+            raise ValueError("manifest identity mismatch")
+        files = manifest.get("files")
+        if not isinstance(files, dict) or "pipeline_state.py" not in files:
+            raise ValueError("invalid runtime file inventory")
+        for name, expected in files.items():
+            if Path(name).name != name or not name.endswith(".py"):
+                raise ValueError("invalid runtime file name")
+            path = root / name
+            if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise ValueError(f"runtime file changed: {name}")
+        runtime_entries = set()
+        for path in root.iterdir():
+            if path.name == "__pycache__":
+                if not stat.S_ISDIR(path.lstat().st_mode):
+                    raise ValueError("unexpected runtime files")
+                for cached in path.iterdir():
+                    if cached.suffix != ".pyc" or not stat.S_ISREG(cached.lstat().st_mode):
+                        raise ValueError("unexpected runtime files")
+                continue
+            runtime_entries.add(path.name)
+        if runtime_entries != set(files) | {"manifest.json"}:
+            raise ValueError("unexpected runtime files")
+    except (OSError, ValueError, TypeError) as error:
+        raise ValueError(f"runtime {data['digest']} is unavailable or invalid ({error})") from error
+    return root
+
+
+def resolve_runtime(repo):
+    return validate_runtime(declaration(repo))
+
+
+def run_guard(repo, name):
+    root = resolve_runtime(repo)
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(root))
+    previous_pycache_prefix = sys.pycache_prefix
+    sys.pycache_prefix = str(root / "manifest.json")
+    try:
+        code = compile((root / name).read_bytes(), str(root / name), "exec")
+        exec(code, {"__name__": "__main__", "__file__": str(repo / ".gsd-path" / name)})
+    finally:
+        sys.pycache_prefix = previous_pycache_prefix
+"""
+
 
 def run_guard(payload):
     stdin = payload if isinstance(payload, str) else json.dumps(payload)
@@ -4715,6 +4803,199 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
         status, output, error = run_guard(self.event(
             "git update-ref refs/heads/ordinary-work " + "b" * 40))
         self.assertEqual(status, 0, error + output)
+
+
+class SuccessorRuntimeAcceptanceTests(unittest.TestCase):
+    """#468 option (i): on a closed milestone, helper acceptance follows the
+    pinned runtime's hashed successors list — named runtimes run, everything
+    else stays refused with the closed-milestone reason."""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.home = self.root / "home"
+        self.home.mkdir()
+        environment = mock.patch.dict(
+            os.environ, {"HOME": str(self.home), "USERPROFILE": str(self.home)}
+        )
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.source = Path(__file__).resolve().parents[1]
+        import runtime_store
+
+        self.runtime_store = runtime_store
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "gsd-path/M001", str(self.repo)], check=True)
+        subprocess.run(["git", "config", "user.name", "Guard test"], cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=self.repo, check=True)
+        state = self.repo / ".project" / "STATE.md"
+        state.parent.mkdir()
+        state.write_text(
+            "---\n"
+            "pipeline: gsd-path/v2\n"
+            "project: demo\n"
+            "milestone: demo\n"
+            "phase: shipped\n"
+            "status: done\n"
+            "branch: gsd-path/M001\n"
+            "archive: .project/archive/001-demo\n"
+            "---\n\n# Project State\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "add", ".project/STATE.md"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "ship: M001 — demo"], cwd=self.repo, check=True)
+
+    def package(self, name: str, version: str) -> Path:
+        """This package with its own version and a real byte difference."""
+        package = self.root / name
+        shutil.copytree(
+            self.source / "scripts", package / "scripts",
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+        shutil.copy2(self.source / "package.json", package / "package.json")
+        data = json.loads((package / "package.json").read_text(encoding="utf-8"))
+        data["version"] = version
+        (package / "package.json").write_text(
+            json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        helper = package / "scripts" / "pipeline_state.py"
+        helper.write_bytes(helper.read_bytes() + f"# {name}\n".encode("utf-8"))
+        return package
+
+    def publish(self, package: Path, successors=()):
+        return self.runtime_store.publish(package, successors=successors)
+
+    def pin_repo(self, pin) -> None:
+        guard_directory = self.repo / ".gsd-path"
+        guard_directory.mkdir(exist_ok=True)
+        (guard_directory / "runtime.json").write_text(
+            self.runtime_store.pin_text(pin), encoding="utf-8"
+        )
+        for name in self.runtime_store.GUARDS:
+            (guard_directory / name).write_text(
+                self.runtime_store.guard_launcher(name), encoding="utf-8"
+            )
+        shutil.copyfile(
+            self.source / "scripts" / "status_runtime.py",
+            guard_directory / "status_runtime.py",
+        )
+
+    def guard(self, helper: Path):
+        command = (
+            f"python3 -B {shlex.quote(helper.as_posix())} "
+            f"status --repo {shlex.quote(self.repo.as_posix())}"
+        )
+        payload = {"tool_name": "Bash", "tool_input": {"command": command, "cwd": str(self.repo)}}
+        return subprocess.run(
+            [sys.executable, "-B", str(self.repo / ".gsd-path" / "guard_hook.py")],
+            cwd=self.repo, input=json.dumps(payload),
+            encoding="utf-8", errors="replace", capture_output=True,
+        )
+
+    def helper(self, pin) -> Path:
+        return (
+            self.home / ".gsd-path" / "runtimes" / pin["digest"] / "pipeline_state.py"
+        )
+
+    def test_closed_milestone_accepts_only_hashed_successors(self) -> None:
+        successor = self.publish(self.package("newer", "2.0.0"))
+        unlisted = self.publish(self.package("unlisted", "3.0.0"))
+        pin = self.publish(self.source, successors=(successor["digest"],))
+        self.pin_repo(pin)
+
+        for name, expected in (
+            ("pinned", 0),
+            ("named successor", 0),
+            ("unlisted runtime", 2),
+        ):
+            with self.subTest(runtime=name):
+                helper = {
+                    "pinned": self.helper(pin),
+                    "named successor": self.helper(successor),
+                    "unlisted runtime": self.helper(unlisted),
+                }[name]
+                result = self.guard(helper)
+                self.assertEqual(result.returncode, expected, result.stderr + result.stdout)
+
+        denial = self.guard(self.helper(unlisted))
+        self.assertIn("closed milestone", denial.stderr + denial.stdout)
+
+    def test_successor_chains_walk_only_while_blessed_bytes_name_them(self) -> None:
+        third = self.publish(self.package("third", "3.0.0"))
+        second = self.publish(
+            self.package("second", "2.0.0"), successors=(third["digest"],)
+        )
+        outsider = self.publish(self.package("outsider", "9.0.0"))
+        pin = self.publish(self.source, successors=(second["digest"],))
+        self.pin_repo(pin)
+
+        for name, expected in (
+            ("pinned", 0),
+            ("first successor", 0),
+            ("second successor", 0),
+            ("unblessed runtime", 2),
+        ):
+            with self.subTest(runtime=name):
+                helper = {
+                    "pinned": self.helper(pin),
+                    "first successor": self.helper(second),
+                    "second successor": self.helper(third),
+                    "unblessed runtime": self.helper(outsider),
+                }[name]
+                result = self.guard(helper)
+                self.assertEqual(result.returncode, expected, result.stderr + result.stdout)
+
+    def test_a_broken_named_successor_never_widens_or_breaks_the_pin(self) -> None:
+        corrupt = self.publish(self.package("corrupt", "2.0.0"))
+        missing = "a" * 64
+        pin = self.publish(
+            self.source, successors=(corrupt["digest"], missing)
+        )
+        # Break the named successor's bytes after publication.
+        victim = self.home / ".gsd-path" / "runtimes" / corrupt["digest"] / "pipeline_state.py"
+        victim.write_bytes(victim.read_bytes() + b"# tampered\n")
+        self.pin_repo(pin)
+
+        self.assertEqual(self.guard(self.helper(pin)).returncode, 0)
+        self.assertEqual(self.guard(self.helper(corrupt)).returncode, 2)
+
+    def test_a_divergent_launcher_cannot_widen_acceptance(self) -> None:
+        successor = self.publish(self.package("divergent-newer", "2.0.0"))
+        unlisted = self.publish(self.package("divergent-outsider", "3.0.0"))
+        pin = self.publish(self.source, successors=(successor["digest"],))
+        self.pin_repo(pin)
+        # A drifted project launcher that accepts every store entry: the
+        # walk must come from the pinned runtime's own bytes, not the
+        # launcher's preloaded module (#468 review finding).
+        launcher = self.repo / ".gsd-path" / "status_runtime.py"
+        launcher.write_bytes(
+            launcher.read_bytes()
+            + b"\n\ndef accepted_runtime_dirs(repo):\n"
+            b"    from pathlib import Path\n"
+            b"    return {Path.home() / '.gsd-path' / 'runtimes'}\n"
+        )
+
+        self.assertEqual(self.guard(self.helper(pin)).returncode, 0)
+        self.assertEqual(self.guard(self.helper(successor)).returncode, 0)
+        denial = self.guard(self.helper(unlisted))
+        self.assertEqual(denial.returncode, 2, denial.stderr + denial.stdout)
+        self.assertIn("closed milestone", denial.stderr + denial.stdout)
+
+    def test_a_stale_launcher_still_accepts_the_pinned_successors(self) -> None:
+        successor = self.publish(self.package("stale-newer", "2.0.0"))
+        unlisted = self.publish(self.package("stale-outsider", "3.0.0"))
+        pin = self.publish(self.source, successors=(successor["digest"],))
+        self.pin_repo(pin)
+        # The project launcher predates successors: no walk of its own. The
+        # guard loads the walk from the pinned runtime's bytes regardless.
+        (self.repo / ".gsd-path" / "status_runtime.py").write_text(
+            PRE_SUCCESSOR_LAUNCHER, encoding="utf-8")
+
+        self.assertEqual(self.guard(self.helper(pin)).returncode, 0)
+        self.assertEqual(self.guard(self.helper(successor)).returncode, 0)
+        self.assertEqual(self.guard(self.helper(unlisted)).returncode, 2)
 
 
 if __name__ == "__main__":

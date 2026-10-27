@@ -829,6 +829,102 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         self.assertIsNone(payload["provenance"])
         self.assertFalse((self.home / ".gsd-path" / "runtimes").exists())
 
+    def test_publish_blesses_successors_into_the_hashed_manifest(self) -> None:
+        newer = self.root / "newer-source"
+        shutil.copytree(SOURCE / "scripts", newer / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copy2(SOURCE / "package.json", newer / "package.json")
+        package = json.loads((newer / "package.json").read_text(encoding="utf-8"))
+        package["version"] = "99.0.0"
+        (newer / "package.json").write_text(json.dumps(package, indent=2) + "\n", encoding="utf-8")
+        successor_helper = newer / "scripts/pipeline_state.py"
+        successor_helper.write_bytes(successor_helper.read_bytes() + b"# newer runtime\n")
+        successor = install.runtime_store.publish(newer)
+
+        stock = install.runtime_store.source_manifest(SOURCE)[1]["digest"]
+        # An unnamed publish stays byte-identical to the stock identity.
+        self.assertEqual(install.runtime_store.publish(SOURCE)["digest"], stock)
+
+        blessed = install.runtime_store.publish(
+            SOURCE, successors=(successor["digest"],))
+        self.assertNotEqual(blessed["digest"], stock)
+        manifest = json.loads(
+            (self.home / ".gsd-path" / "runtimes" / blessed["digest"]
+             / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest.get("successors"), [successor["digest"]])
+        self.assertEqual(install.status_runtime.manifest_digest(manifest), blessed["digest"])
+
+        # The CLI stamps the same blessing, and the walk reaches the successor.
+        cli_digest = "b" * 64
+        result = self.publish_command("--name-successor", cli_digest, "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        expected = install.runtime_store.source_manifest(SOURCE, (cli_digest,))[1]["digest"]
+        self.assertEqual(json.loads(result.stdout)["digest"], expected)
+        malformed = self.publish_command("--name-successor", "not-a-digest")
+        self.assertNotEqual(malformed.returncode, 0)
+        self.assertIn("successors", malformed.stderr)
+
+        (self.repo / ".gsd-path").mkdir(exist_ok=True)
+        (self.repo / ".gsd-path" / "runtime.json").write_text(
+            install.runtime_store.pin_text(blessed), encoding="utf-8")
+        accepted = install.status_runtime.accepted_runtime_dirs(self.repo)
+        self.assertEqual(
+            {path.name for path in accepted},
+            {blessed["digest"], successor["digest"]},
+        )
+
+        # A blessed pin restores from its stamped store entry when the source
+        # matches in version and files — only the stamp may differ (#468);
+        # --dry-run previews the same outcome without writing...
+        pin_bytes = (self.repo / ".gsd-path" / "runtime.json").read_bytes()
+        result = self.runtime_command("--runtime-restore", extra=("--dry-run",))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(blessed["digest"], result.stdout)
+        self.assertEqual((self.repo / ".gsd-path" / "runtime.json").read_bytes(), pin_bytes)
+        result = self.runtime_command("--runtime-restore")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.pin()["digest"], blessed["digest"])
+
+        # ...and a genuinely wrong package never restores, blessed or not.
+        wrong = self.root / "wrong-source"
+        shutil.copytree(SOURCE / "scripts", wrong / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copy2(SOURCE / "package.json", wrong / "package.json")
+        wrong_helper = wrong / "scripts/pipeline_state.py"
+        wrong_helper.write_bytes(wrong_helper.read_bytes() + b"# wrong package\n")
+        result = self.runtime_command("--runtime-restore", source=wrong)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match declared runtime", result.stderr)
+        self.assertEqual(self.pin()["digest"], blessed["digest"])
+
+    def test_a_malformed_successors_field_invalidates_the_runtime(self) -> None:
+        # A digest-consistent manifest whose successors field has a bad shape:
+        # internal consistency is not enough — the store never widens on a
+        # shape it cannot prove (#468).
+        import hashlib
+        runtime = self.home / ".gsd-path" / "runtimes"
+        runtime.mkdir(parents=True)
+        helper = runtime / "pipeline_state.py"
+        helper.write_bytes(b"print('forged')\n")
+        manifest = {
+            "version": "1.0.0",
+            "files": {"pipeline_state.py": hashlib.sha256(helper.read_bytes()).hexdigest()},
+            "successors": ["not-a-digest"],
+        }
+        digest = install.status_runtime.manifest_digest(manifest)
+        (runtime / digest).mkdir()
+        (runtime / digest / "pipeline_state.py").write_bytes(helper.read_bytes())
+        (runtime / digest / "manifest.json").write_text(
+            json.dumps(manifest), encoding="utf-8")
+
+        pin = {"schema": install.status_runtime.RUNTIME_SCHEMA,
+               "version": "1.0.0", "digest": digest}
+        (self.repo / ".gsd-path").mkdir(exist_ok=True)
+        (self.repo / ".gsd-path" / "runtime.json").write_text(
+            install.runtime_store.pin_text(pin), encoding="utf-8")
+        with self.assertRaises(ValueError):
+            install.status_runtime.validate_runtime(pin)
+        with self.assertRaises(ValueError):
+            install.status_runtime.accepted_runtime_dirs(self.repo)
+
     def test_reupgrade_without_provenance_flags_preserves_provenance(self):
         self.provision()
         result = self.runtime_command("--runtime-upgrade", extra=[
