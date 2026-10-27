@@ -255,6 +255,10 @@ See [UPDATE.md](UPDATE.md).
   tilde paths are denied even when quoted. This also applies to
   `find -delete` and supported destructive aliases
 - destructive Git commands nested in supported shell and command wrappers
+- the operator-only `isolation.py runtime-hotfix` recovery, and every Git
+  command with a word that contains `refs/gsd-path/` or `runtime-hotfix`;
+  see [runtime selection](skills/gsd-path/references/runtime-selection.md)
+  for the receipt, the covered spellings, and the limits
 - Git arguments that contain a shell parameter. Only plain `$name` and
   `${name}` expansions pass, and only inside plain double-quoted spans of
   read-only subcommands (`status`, `log`, `diff`, `show`, and the other
@@ -365,7 +369,11 @@ such as `rm -rf scratch` passes the archive check; other guard rules still apply
   `files:`, and a `Files:` list of exactly the staged paths. Outside build the
   reviewed HEAD is frozen; product fixes reopen through the patch plan.
   The validated integration merge is allowed to complete before publication
-  proof exists; an ordinary commit with an integration subject is not exempt
+  proof exists; an ordinary commit with an integration subject is not exempt.
+  A landing commit may also stage `.gsd-path/runtime.json` only when a
+  runtime-hotfix receipt exists for that task and base and the staged pin
+  names exactly the receipt's runtime; see
+  [runtime selection](skills/gsd-path/references/runtime-selection.md)
 - deleting the recorded branch or switching to another branch while carrying
   unfinished state does not release product commit protection
 - pushes (to any remote) that move a `gsd-path/M###` ref anywhere but its

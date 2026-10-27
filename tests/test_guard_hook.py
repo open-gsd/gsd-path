@@ -4602,5 +4602,120 @@ class DestructiveScopeTests(unittest.TestCase):
         self.assert_allowed(self.inside_closed(repo, f"rm {(self.scratch / 'file.txt').as_posix()}"))
 
 
+class RuntimeHotfixRefGuardTests(unittest.TestCase):
+    """Agent writes under refs/gsd-path/ forge the trust those refs prove (#480)."""
+
+    def setUp(self) -> None:
+        import tempfile
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.repo = Path(self.temporary.name) / "repo"
+        subprocess.run(("git", "init", "-q", "-b", "gsd-path/M001", str(self.repo)), check=True)
+        (self.repo / ".project").mkdir()
+        (self.repo / ".project" / "STATE.md").write_text(
+            "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: demo\nphase: build\n"
+            "status: active\nbranch: gsd-path/M001\narchive: null\n---\n\n# Project State\n",
+            encoding="utf-8",
+        )
+        subprocess.run(("git", "add", ".project/STATE.md"), cwd=self.repo, check=True, capture_output=True)
+        subprocess.run(
+            ("git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"),
+            cwd=self.repo, check=True, capture_output=True)
+
+    def event(self, command: str):
+        return {"tool_name": "Bash", "tool_input": {"command": command, "cwd": str(self.repo)}}
+
+    def test_agent_cannot_create_a_runtime_hotfix_ref(self) -> None:
+        status, output, error = run_guard(self.event(
+            f"git update-ref refs/gsd-path/runtime-hotfix/T001-{'a' * 40} {'b' * 40}"))
+        self.assertEqual(status, 2, error)
+        self.assertIn("refs/gsd-path/", output)
+
+    def test_agent_cannot_run_runtime_hotfix_in_any_command_shape(self) -> None:
+        tail = f"runtime-hotfix --repo . --task-id T001 --runtime {'1' * 64} --authorized-by x"
+        for command in (
+            f"python3 scripts/isolation.py {tail}",
+            f"py -3 scripts/isolation.py {tail}",
+            f"python3 -I -B scripts/isolation.py {tail}",
+            f"cd scripts && python3 isolation.py {tail}",
+            f"true; python3 scripts/isolation.py {tail}",
+            f"env A=1 python3 scripts/isolation.py {tail}",
+            f"sh -c 'python3 scripts/isolation.py {tail}'",
+            f"py -3 -B scripts/isolation.py {tail}",
+            f"cd scripts && python3 -m isolation {tail}",
+            f"python3 -B -m scripts.isolation {tail}",
+            f"python3 - {tail} < scripts/isolation.py",
+            f"python3 -Bm isolation {tail}",
+            f"python3 -Im isolation {tail}",
+            f"python3 -misolation {tail}",
+            f"python3 --check-hash-based-pycs never scripts/isolation.py {tail}",
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertEqual(status, 2, error + output)
+                self.assertIn("operator-only", output)
+
+    def test_read_only_mentions_of_runtime_hotfix_stay_allowed(self) -> None:
+        for command in (
+            "rg isolation.py -e runtime-hotfix",
+            "python3 scripts/isolation.py --help runtime-hotfix",
+            "python3 scripts/isolation.py preflight --task-id runtime-hotfix",
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertEqual(status, 0, error + output)
+
+    def test_git_mentions_of_runtime_hotfix_are_deliberately_denied(self) -> None:
+        for command in (
+            "git log --grep isolation.py --grep runtime-hotfix",
+            'git commit -m "docs: explain runtime-hotfix"',
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertEqual(status, 2, error + output)
+                self.assertIn("refs/gsd-path/", output)
+
+    def test_agent_cannot_push_or_fetch_into_path_owned_refs(self) -> None:
+        ref = f"refs/gsd-path/runtime-hotfix/T001-{'a' * 40}"
+        for command in (
+            f"git push . {'b' * 40}:{ref}",
+            f"git fetch . {'b' * 40}:{ref}",
+            f"git fetch origin +refs/gsd-path/*:refs/gsd-path/*",
+            f"git fetch --refmap=+refs/tags/*:refs/gsd-path/runtime-hotfix/* . refs/tags/T001",
+            f"git symbolic-ref {ref} refs/tags/fake",
+            f"git send-pack . {'b' * 40}:{ref}",
+            "git log refs/gsd-path/checkpoint",
+            f"git -c remote.self.url=. -c remote.self.push=refs/tags/fake:{ref} push self",
+            f"REF={ref} git push . HEAD:refs/heads/ordinary",
+            "git push . b:refs/{gsd-path,zz}/runtime-hotfix/T001-x",
+            "git update-ref r{e,}fs/gs{d,}-path/runtime-hotfix/T001-x b",
+            "git push . b:refs/gsd-pat[h]/runtime-hotfix/T001-x",
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertEqual(status, 2, error + output)
+                self.assertIn("refs/gsd-path/", output)
+
+    def test_agent_can_still_push_ordinary_refspecs(self) -> None:
+        for command in (
+            "git push origin HEAD:refs/heads/ordinary-work",
+            "git log -1 HEAD@{1}",
+            "git push origin 'refs/heads/{a,b}'",
+            "git add src/{a,b}.py",
+            "git diff HEAD -- tests/test_{a,b}.py",
+            "git checkout -- {a,b}.py",
+            "git log HEAD~{1..3}",
+            "git commit -m fix,{a,b}",
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertEqual(status, 0, error + output)
+
+    def test_agent_can_still_update_ordinary_refs(self) -> None:
+        status, output, error = run_guard(self.event(
+            "git update-ref refs/heads/ordinary-work " + "b" * 40))
+        self.assertEqual(status, 0, error + output)
+
+
 if __name__ == "__main__":
     unittest.main()

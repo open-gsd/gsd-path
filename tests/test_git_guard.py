@@ -12,6 +12,7 @@ import git_guard
 from tests._platform import can_symlink
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "git_guard.py"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TASK_FILE = (
     "---\nid: T001\ntitle: Demo task\nwave: 1\ndeps: []\nstatus: in-progress\n"
     "agent: coder\nbase: null\nworktree: active\ntask_branch: active\n"
@@ -789,6 +790,84 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
         retitled = self.run_guard("T001: Other title", self.landing_body(head, "app.py", "extra.py"))
         self.assertIn("expected 'T001: Demo task'", retitled.stderr)
+
+    def test_runtime_hotfix_receipt_admits_the_pin_path(self) -> None:
+        # With a dual-record receipt (Log line + blob behind the guard-owned
+        # ref) whose staged pin names exactly the receipt's published
+        # replacement runtime, the landing commit carries
+        # .gsd-path/runtime.json clean through commit-msg; missing any one of
+        # the proofs — no record, a different digest, or a pin the loader
+        # would refuse — the commit is refused (#480).
+        import shutil
+        from unittest import mock as _mock
+        import runtime_store
+        with tempfile.TemporaryDirectory() as scratch:
+            home = Path(scratch) / "home"
+            home.mkdir()
+            environment = _mock.patch.dict(
+                os.environ, {"HOME": str(home), "USERPROFILE": str(home)})
+            environment.start()
+            self.addCleanup(environment.stop)
+            source = Path(scratch) / "pkg"
+            (source / "scripts").mkdir(parents=True)
+            (source / "package.json").write_text(
+                '{"version": "9.9.9"}\n', encoding="utf-8")
+            for name in (*runtime_store.RUNTIME_FILES, *runtime_store.GUARDS,
+                         "status_runtime.py"):
+                shutil.copyfile(PROJECT_ROOT / "scripts" / name, source / "scripts" / name)
+            pin = runtime_store.publish(source)
+
+            head = self.enter_build()
+            self.stage_product_change()
+            self.stamp_task(head)
+            receipt = (
+                f"- 2026-10-26 — runtime-hotfix: task T001 base {head} "
+                f"runtime {'0' * 64} -> {pin['digest']} "
+                "authorized by owner ruling 2026-10-26"
+            )
+            task = self.repo / ".project" / "tasks" / "T001-demo.md"
+            task.write_bytes(
+                (task.read_text(encoding="utf-8") + receipt + "\n").encode("utf-8"))
+            self.git("add", "--", ".project/tasks/T001-demo.md")
+
+            pin_file = self.repo / ".gsd-path" / "runtime.json"
+            pin_file.parent.mkdir(exist_ok=True)
+
+            def stage_pin(**overrides):
+                declaration = {"schema": pin["schema"], "version": pin["version"],
+                               "digest": pin["digest"], **overrides}
+                pin_file.write_text(json.dumps(declaration) + "\n", encoding="utf-8")
+                self.git("add", "--", ".gsd-path/runtime.json")
+
+            stage_pin()
+            body = self.landing_body(head, "app.py", ".gsd-path/runtime.json")
+
+            # No receipt record at all: the pin path is undeclared.
+            refused = self.run_guard("T001: Demo task", body)
+            self.assertEqual(1, refused.returncode, refused.stderr)
+            self.assertIn("undeclared paths: .gsd-path/runtime.json", refused.stderr)
+
+            # The Log line alone proves nothing; the ref blob completes it.
+            blob = subprocess.run(
+                ("git", "-C", str(self.repo), "hash-object", "-w", "--stdin"),
+                input=receipt[2:], encoding="utf-8", capture_output=True, check=True,
+            ).stdout.strip()
+            self.git("update-ref", f"refs/gsd-path/runtime-hotfix/T001-{head}", blob)
+            allowed = self.run_guard("T001: Demo task", body)
+            self.assertEqual(0, allowed.returncode, allowed.stderr)
+
+            # A staged pin with a different digest admits nothing.
+            stage_pin(digest="2" * 64)
+            mismatch = self.run_guard("T001: Demo task", body)
+            self.assertEqual(1, mismatch.returncode, mismatch.stderr)
+            self.assertIn("undeclared paths: .gsd-path/runtime.json", mismatch.stderr)
+
+            # A digest match without the published version is a pin the
+            # loader would refuse — not admitted either.
+            stage_pin(version="0.0.0")
+            unloadable = self.run_guard("T001: Demo task", body)
+            self.assertEqual(1, unloadable.returncode, unloadable.stderr)
+            self.assertIn("undeclared paths: .gsd-path/runtime.json", unloadable.stderr)
 
     def test_build_active_allows_landing_and_bookkeeping_commits(self):
         head = self.enter_build()

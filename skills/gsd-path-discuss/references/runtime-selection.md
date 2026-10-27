@@ -20,6 +20,34 @@ references to bundled copies of those helpers. Other skill helpers, templates,
 and role briefs remain in the installed skill bundle. Pass `-B` to Python helper
 invocations so execution does not create bytecode in the runtime store.
 
+When the runtime enforcing an active task cannot finish it, one narrowly
+authorized recovery exists:
+`python3 -B <absolute isolation.py> runtime-hotfix --repo <absolute primary>
+--task-id <id> --runtime <64-hex runtime digest printed by runtime_store.py publish>
+--authorized-by <the owner ruling>` validates the replacement runtime,
+re-runs that task's Verify in a fresh sidecar at the recorded base under the
+replacement pin, and records the receipt twice: a Log line in the task file
+naming the task, base, and both runtime digests, and an identical blob behind
+the local ref `refs/gsd-path/runtime-hotfix/<task>-<base>`. Only a Log line
+whose exact twin that ref holds later admits `.gsd-path/runtime.json` into that
+task's landing, and only when the pin names exactly the receipt's runtime; any
+other task, base, a Log line alone, or a bare mention authorizes nothing, and a
+failing re-run refuses the hotfix. Limits: the command serves only a serial
+task working in the primary and refuses parallel or member tasks; the ref is
+local repository state, so a clone without it cannot land the pin and the
+proof fails closed. The guard applies two rules to agent shell commands. It
+denies any command where `runtime-hotfix` directly follows `isolation.py`, stdin
+`-`, or an `isolation` module operand (`-m isolation`, `-Bm isolation`,
+`-misolation`). It also denies every Git command with a word, including global
+`-c` options and inline variable assignments, that contains `refs/gsd-path/` or
+`runtime-hotfix`. This deliberately blocks read-only uses such as
+`git log refs/gsd-path/<ref>` or `git log --grep runtime-hotfix`, and commit
+messages or branch names that contain `runtime-hotfix`. Limits: it cannot see a copied or renamed
+`isolation.py`, a refspec stored in a Git config file, a ref write made from
+inside another program, a direct edit of files under `.git/`, or shell
+expansion that splits both protected words, such as
+`refs/gs{d,}-path/task-authorizations/<task>`.
+
 Publishing a runtime to the shared store is project-free:
 `python3 -B <absolute runtime_store.py> publish --source <absolute package root>`
 verifies and publishes the content-addressed runtime, printing its version,

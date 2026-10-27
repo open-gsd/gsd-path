@@ -424,6 +424,10 @@ GIT_REASONS = {
         "(STATE.branch); create a new branch instead"
     ),
     "update-ref": "git update-ref deletion destroys refs the recovery protocol inspects",
+    "owned-refspec": (
+        "git commands naming refs/gsd-path/ or runtime-hotfix are denied: that "
+        "namespace holds orchestrator-owned authorizations an agent must not create or move"
+    ),
     "worktree": (
         "git worktree remove --force discards uncommitted task work the recovery "
         "protocol needs; commit or stash it, then remove without --force"
@@ -4341,6 +4345,12 @@ def destructive_git_reason(
         if invocation is None:
             continue
         command, arguments, git_options = invocation
+        if any(
+            protected in word.casefold()
+            for word in words
+            for protected in ("refs/gsd-path/", "runtime-hotfix")
+        ):
+            return GIT_REASONS["owned-refspec"]
         # Git matches its own commands by exact case, but alias names in any case.
         built_in = (
             command_invocation(words)[1][-len(arguments) - 1] in GIT_BUILT_IN_COMMANDS
@@ -4939,6 +4949,35 @@ def closed_shell_execution_reason(
     return None
 
 
+def runtime_hotfix_invocation(tokens):
+    """True when any simple command, prefixed or wrapped, names isolation.py then runtime-hotfix."""
+    for segment in command_segments(tokens):
+        for index, (token, following) in enumerate(zip(segment, [*segment[1:], ""])):
+            if following != "runtime-hotfix":
+                continue
+            clustered = re.fullmatch(r"-[A-Za-ln-z]*m(.+)", token)
+            if clustered:
+                module = clustered.group(1)
+            elif any(
+                earlier.startswith("-") and not earlier.startswith("--") and "m" in earlier
+                for earlier in segment[:index]
+            ):
+                module = token
+            else:
+                module = None
+            if token == "-" or token.replace("\\", "/").rsplit("/", 1)[-1] == "isolation.py" or (
+                module is not None and module.rsplit(".", 1)[-1] == "isolation"
+            ):
+                return True
+        try:
+            wrapped = wrapped_command_tokens(segment, expand_parameters=False)
+        except ValueError:  # the shape checks below refuse what cannot be unwrapped
+            continue
+        if wrapped is not None and runtime_hotfix_invocation(wrapped):
+            return True
+    return False
+
+
 def command_denial(command, working_directories, allow_destructive=True):
     """Return why a shell command is denied, or None when it may run."""
     working_directories = working_directories or [os.getcwd()]
@@ -4952,6 +4991,16 @@ def command_denial(command, working_directories, allow_destructive=True):
         ):
             return None
         bundled_helper = bundled_helper_invocation(command, tokens, working_directories)
+        # runtime-hotfix is an operator-only recovery (#480): its receipt is
+        # the owner authorization a landing later trusts, so an agent running
+        # the command self-authorizes. Deny by subcommand name regardless of
+        # the script's path.
+        if runtime_hotfix_invocation(tokens):
+            return (
+                "isolation.py runtime-hotfix records the owner authorization a "
+                "landing trusts; it is operator-only — request the hotfix from "
+                "the orchestrator instead of running it"
+            )
         destructive = list(destructive_shell_invocations(tokens))
         if destructive and (
             not allow_destructive
