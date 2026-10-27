@@ -4444,9 +4444,7 @@ def destructive_git_reason(
             if force_option or force_refspec:
                 return GIT_REASONS[command]
         if command in {"push", "fetch"} and any(
-            not argument.startswith("-") and ":" in argument
-            and argument.rpartition(":")[2].casefold().startswith("refs/gsd-path/")
-            for argument in arguments
+            "refs/gsd-path/" in argument.casefold() for argument in arguments
         ):
             return GIT_REASONS["owned-refspec"]
         if command == "branch":
@@ -4996,10 +4994,20 @@ def runtime_hotfix_invocation(tokens):
                 r"py|python(?:3(?:\.\d+)?)?", executable.removesuffix(".exe")) else None
             while arguments and arguments[0].startswith("-") and arguments[0] not in ("-c", "-m", "-"):
                 arguments = arguments[2:] if arguments[0] in ("-X", "-W") else arguments[1:]
-            if arguments and len(arguments) > 1 and arguments[1] == "runtime-hotfix" and (
-                arguments[0].replace("\\", "/").rsplit("/", 1)[-1] == "isolation.py"
-            ):
-                return True
+            if arguments and arguments[0] == "-m":
+                module = arguments[1] if len(arguments) > 1 else ""
+                target = "isolation.py" if module.rsplit(".", 1)[-1] == "isolation" else None
+                arguments = arguments[1:]
+            elif arguments and arguments[0] == "-":
+                target = "isolation.py"
+            else:
+                target = arguments[0].replace("\\", "/").rsplit("/", 1)[-1] if arguments else None
+            if target == "isolation.py":
+                rest = arguments[1:]
+                while rest and rest[0].startswith("-") and rest[0] not in ("-h", "--help"):
+                    rest = rest[1:]
+                if rest[:1] == ["runtime-hotfix"]:
+                    return True
         if wrapped is not None and runtime_hotfix_invocation(wrapped):
             return True
     return False

@@ -4641,6 +4641,10 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
             f"true; python3 scripts/isolation.py {tail}",
             f"env A=1 python3 scripts/isolation.py {tail}",
             f"sh -c 'python3 scripts/isolation.py {tail}'",
+            f"py -3 -B scripts/isolation.py {tail}",
+            f"cd scripts && python3 -m isolation {tail}",
+            f"python3 -B -m scripts.isolation {tail}",
+            f"python3 - {tail} < scripts/isolation.py",
         ):
             with self.subTest(command=command):
                 status, output, error = run_guard(self.event(command))
@@ -4664,6 +4668,7 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
             f"git push . {'b' * 40}:{ref}",
             f"git fetch . {'b' * 40}:{ref}",
             f"git fetch origin +refs/gsd-path/*:refs/gsd-path/*",
+            f"git fetch --refmap=+refs/tags/*:refs/gsd-path/runtime-hotfix/* . refs/tags/T001",
         ):
             with self.subTest(command=command):
                 status, output, error = run_guard(self.event(command))
