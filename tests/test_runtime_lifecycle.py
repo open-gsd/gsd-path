@@ -873,7 +873,13 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         )
 
         # A blessed pin restores from its stamped store entry when the source
-        # matches in version and files — only the stamp may differ (#468)...
+        # matches in version and files — only the stamp may differ (#468);
+        # --dry-run previews the same outcome without writing...
+        pin_bytes = (self.repo / ".gsd-path" / "runtime.json").read_bytes()
+        result = self.runtime_command("--runtime-restore", extra=("--dry-run",))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(blessed["digest"], result.stdout)
+        self.assertEqual((self.repo / ".gsd-path" / "runtime.json").read_bytes(), pin_bytes)
         result = self.runtime_command("--runtime-restore")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.pin()["digest"], blessed["digest"])

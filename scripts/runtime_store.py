@@ -147,7 +147,7 @@ def publish(source, *, expected=None, dry_run=False, repair=False, successors=()
         # store, hash-valid, stamped, and built from the same version and
         # files as this source, restore returns those exact bytes; every
         # other mismatch stays the caller's error.
-        if not dry_run and _blessed_store_entry(expected, manifest):
+        if _blessed_store_entry(expected, manifest):
             return expected
         raise ValueError(f"source does not match declared runtime {expected['version']} ({expected['digest']}); use its matching package")
     if dry_run:
