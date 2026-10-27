@@ -412,7 +412,10 @@ A new machine needs the selected runtime installed before status and guards can
 run. `gsd-path --runtime-restore --project /absolute/project --source-root
 /path/to/matching/package` restores that exact version without changing project
 files. The supplied package must match both the version and digest; custom source
-builds may share a release version while having different digests. No command
+builds may share a release version while having different digests. One exception:
+a pin on a runtime that names successors (below) restores from its existing
+stamped store entry when the package has the same version and files, since only
+the successors stamp differs. No command
 silently substitutes a newer runtime, and status/guards never install or download.
 
 To publish a runtime to the shared store without selecting it for any project,
