@@ -1674,8 +1674,8 @@ def _validate_task_graph(
         task_repos[task_id] = str(_strict_frontmatter(text, task_id).get("repo") or "")
         # Patch mode reopens planning beside landed tasks; only new tasks start clean.
         status = _task_scalar(text, task_id, "status")
-        landed = status == "done"
-        _require_task_structure(task_id, text, initial=initial and not landed)
+        settled = status in ("done", "withdrawn")
+        _require_task_structure(task_id, text, initial=initial and not settled)
         if status == "withdrawn" and not _common.withdrawn_citations(text):
             raise HandoffError(
                 f"{task_id} is withdrawn without an owner citation; append a "
@@ -1696,7 +1696,7 @@ def _validate_task_graph(
                 raise HandoffError(f"{task_id} depends on later-wave {dependency}")
             if (
                 _task_scalar(tasks[dependency], dependency, "status") == "withdrawn"
-                and status != "withdrawn"
+                and status not in ("done", "withdrawn")
             ):
                 raise HandoffError(
                     f"{task_id} depends on withdrawn {dependency}; "
@@ -2083,7 +2083,10 @@ def validate_plan(
     integrated = _integrated_members(root, state)
     for task_id, text in tasks.items():
         repo = str(_strict_frontmatter(text, task_id).get("repo") or "")
-        if repo in integrated and _task_scalar(text, task_id, "status") != "done":
+        if repo in integrated and _task_scalar(text, task_id, "status") not in (
+            "done",
+            "withdrawn",
+        ):
             raise HandoffError(
                 f"{task_id} changes member {repo}, which is already integrated in this milestone; "
                 "plan that change in a new milestone"

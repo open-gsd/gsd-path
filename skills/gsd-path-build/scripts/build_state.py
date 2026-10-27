@@ -274,7 +274,10 @@ def _validate_graph(tasks: Sequence[Task]) -> None:
                     f"{task.task_id} depends on later-wave {dependency}",
                     {"task": task.task_id, "dependency": dependency},
                 )
-            if by_id[dependency].status == "withdrawn" and task.status != "withdrawn":
+            if by_id[dependency].status == "withdrawn" and task.status not in (
+                "done",
+                "withdrawn",
+            ):
                 raise BuildStateError(
                     "withdrawn-dependency",
                     f"{task.task_id} depends on withdrawn {dependency}; re-point "
@@ -502,7 +505,10 @@ def _validate_ready_metadata(project: Project) -> Dict[str, Mapping[str, object]
                 _invalid_state(task, f"worktree is also owned by {previous}")
             continue
         if task.status == "done":
-            if any(by_id[dependency].status != "done" for dependency in task.deps):
+            if any(
+                by_id[dependency].status not in ("done", "withdrawn")
+                for dependency in task.deps
+            ):
                 _invalid_state(task, "done task has an incomplete dependency")
             if task.agent is None or task.base is None:
                 _invalid_state(task, "done task is missing agent or base")

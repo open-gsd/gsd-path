@@ -1421,6 +1421,45 @@ The task implements the demo.
 
             self.assertEqual(result["tasks"], 2)
 
+    def test_plan_phase_accepts_a_cited_withdrawn_tombstone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_state(root, "plan", "active")
+            self.withdraw_t001(root, keep_owns=False)
+            self.write_plan_coverage(
+                root, rows="| SC1 | T002 | AC1 |\n| SC2 | T002 | AC1 |\n"
+            )
+            self.write_coverage_task(root, "T002", "- SC1\n- SC2")
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["tasks"], 2)
+
+    def test_only_unlanded_tasks_may_not_depend_on_a_withdrawn_task(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_state(root, "build", "active")
+            self.withdraw_t001(root, keep_owns=False)
+            self.write_plan_coverage(
+                root, rows="| SC1 | T002 | AC1 |\n| SC2 | T002 | AC1 |\n"
+            )
+            self.write_coverage_task(root, "T002", "- SC1\n- SC2", deps="[T001]")
+
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "T002 depends on withdrawn T001"
+            ):
+                check_handoffs.validate_plan(root)
+
+            task = root / ".project/tasks/T002-demo.md"
+            task.write_bytes(
+                task.read_text(encoding="utf-8")
+                .replace("status: pending", "status: done")
+                .encode("utf-8")
+            )
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+
     def test_withdrawn_citation_must_live_in_the_log(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

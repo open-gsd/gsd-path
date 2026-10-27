@@ -660,6 +660,44 @@ archive: null
         self.assertEqual(result.returncode, 1)
         self.assertEqual(payload["error"]["code"], "withdrawn-dependency")
 
+    def test_landed_task_may_depend_on_a_withdrawn_task(self) -> None:
+        _, task_file = self.prepare_in_progress_task()
+        self.land_task(task_file, 1)
+        self.write_plan(
+            (
+                (("T001", "Implement feature", (), ("app.py",)),),
+                (("T002", "Second", ("T001",), ("two.py",)),),
+            )
+        )
+        self.write_task(
+            "T002", task_text("T002", "Second", 2, ("T001",), ("two.py",))
+        )
+        base = self.commit_all("add second task")
+        second = ".project/tasks/T002-task.md"
+        self.write_task(
+            "T002",
+            task_text(
+                "T002", "Second", 2, ("T001",), ("two.py",),
+                status="in-progress", agent="builder", base=base,
+                worktree=str(self.repo),
+            ),
+        )
+        (self.repo / "two.py").write_bytes(b"value = 2\n")
+        isolation.land(self.repo, self.repo, base, "T002", "Second", second, ["two.py"])
+        # The owner later withdraws the landed dependency; its dependent stays valid.
+        current = (self.repo / task_file).read_text(encoding="utf-8")
+        (self.repo / task_file).write_bytes(
+            current.replace("status: done", "status: withdrawn")
+            .replace("## Log", '## Log\n\n- Withdrawn — 2026-10-26: "owner ruling"')
+            .encode("utf-8")
+        )
+        self.commit_all("withdraw T001")
+
+        result, payload = self.cli("ready")
+
+        self.assertEqual(result.returncode, 0, payload)
+        self.assertEqual(payload["ready"], [])
+
     def test_withdrawn_only_wave_is_not_stalled_inventory(self) -> None:
         _, task_file = self.prepare_in_progress_task()
         self.withdraw_task(task_file, "owner ruling")
