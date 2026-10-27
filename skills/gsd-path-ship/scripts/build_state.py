@@ -21,6 +21,7 @@ if __package__:
         IsolationError,
         recover as recover_isolation,
         verify_landed_task_files,
+        withdrawn_citations,
     )
     from .pipeline_git import task_commit_subject
     from .pipeline_state import PipelineStateError, load_state
@@ -33,6 +34,7 @@ else:
             IsolationError,
             recover as recover_isolation,
             verify_landed_task_files,
+            withdrawn_citations,
         )
         from pipeline_git import task_commit_subject
         from pipeline_state import PipelineStateError, load_state
@@ -45,6 +47,7 @@ else:
             IsolationError,
             recover as recover_isolation,
             verify_landed_task_files,
+            withdrawn_citations,
         )
         from scripts.pipeline_git import task_commit_subject
         from scripts.pipeline_state import PipelineStateError, load_state
@@ -63,7 +66,7 @@ REVIEW_VERDICT_RE = re.compile(
 )
 REVIEW_FINDINGS_HEADING = "Review findings"
 VERIFY_HEAVY_RE = re.compile(r"(?m)^Heavy:\s*(?P<value>yes|no)\s*(?:<!--.*-->)?\s*$")
-VALID_TASK_STATUSES = {"pending", "in-progress", "done", "failed", "blocked"}
+VALID_TASK_STATUSES = {"pending", "in-progress", "done", "failed", "blocked", "withdrawn"}
 VERIFY_RESULTS = _common.VERIFY_RESULTS
 
 
@@ -271,6 +274,16 @@ def _validate_graph(tasks: Sequence[Task]) -> None:
                     f"{task.task_id} depends on later-wave {dependency}",
                     {"task": task.task_id, "dependency": dependency},
                 )
+            if by_id[dependency].status == "withdrawn" and task.status not in (
+                "done",
+                "withdrawn",
+            ):
+                raise BuildStateError(
+                    "withdrawn-dependency",
+                    f"{task.task_id} depends on withdrawn {dependency}; re-point "
+                    "the dependency or withdraw this task too (#483)",
+                    {"task": task.task_id, "dependency": dependency},
+                )
 
     visiting: List[str] = []
     visited = set()
@@ -341,6 +354,15 @@ def _load_tasks(
             raise BuildStateError(
                 "plan-task-mismatch",
                 f"{task.task_id} names missing PLAN.md Wave {task.wave}",
+            )
+        if task.status == "withdrawn" and not withdrawn_citations(
+                path.read_text(encoding="utf-8")):
+            raise BuildStateError(
+                "uncited-withdrawn",
+                f"{task.task_id} is withdrawn without an owner citation; append "
+                "a `- Withdrawn — <YYYY-MM-DD>: <owner ruling verbatim>` Log "
+                "entry (#483)",
+                {"task": task.task_id},
             )
         parsed.append(task)
     missing_waves = sorted(set(plan_waves) - {task.wave for task in parsed})
@@ -431,6 +453,10 @@ def _validate_ready_metadata(project: Project) -> Dict[str, Mapping[str, object]
     seen_worktrees: Dict[str, str] = {}
     seen_branches: Dict[str, str] = {}
     for task in project.tasks:
+        if task.status == "withdrawn":
+            # A tombstone is inventory, not work: no dispatch metadata is
+            # expected and recovery reports it as none (#483).
+            continue
         if task.status == "pending":
             if any(
                 value is not None
@@ -479,7 +505,10 @@ def _validate_ready_metadata(project: Project) -> Dict[str, Mapping[str, object]
                 _invalid_state(task, f"worktree is also owned by {previous}")
             continue
         if task.status == "done":
-            if any(by_id[dependency].status != "done" for dependency in task.deps):
+            if any(
+                by_id[dependency].status not in ("done", "withdrawn")
+                for dependency in task.deps
+            ):
                 _invalid_state(task, "done task has an incomplete dependency")
             if task.agent is None or task.base is None:
                 _invalid_state(task, "done task is missing agent or base")
@@ -679,7 +708,11 @@ def _unreviewed_waves(project: Project, waves: Sequence[int]) -> List[int]:
     review_dir = project.tasks_dir.parent / "review"
     reviewed = {
         wave for wave in waves
-        if all(task.review_findings for task in project.tasks if task.wave == wave)
+        if all(
+            task.review_findings
+            for task in project.tasks
+            if task.wave == wave and task.status != "withdrawn"
+        )
     }
     if review_dir.is_dir() and not review_dir.is_symlink():
         for path in review_dir.iterdir():
@@ -696,7 +729,12 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
     project = _load_project(repo, project_dir, ("active", "done") if allow_done else ("active",))
     reports = _validate_ready_metadata(project)
     by_id = {task.task_id: task for task in project.tasks}
-    unfinished_waves = sorted({task.wave for task in project.tasks if task.status != "done"})
+    # A withdrawn tombstone carries no obligation: its wave is finished
+    # unless live work remains in it (#483).
+    unfinished_waves = sorted({
+        task.wave for task in project.tasks
+        if task.status != "done" and task.status != "withdrawn"
+    })
     current_wave = unfinished_waves[0] if unfinished_waves else None
     blocked_reviews = _blocked_wave_reviews(project)
     blocked_wave = min(
@@ -705,7 +743,10 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
             for wave in blocked_reviews
             if (current_wave is None or wave < current_wave)
             and any(task.wave == wave for task in project.tasks)
-            and all(task.status == "done" for task in project.tasks if task.wave == wave)
+            and all(
+                task.status in ("done", "withdrawn")
+                for task in project.tasks if task.wave == wave
+            )
         ),
         default=None,
     )
@@ -716,7 +757,7 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
         repairs = [
             task
             for task in project.tasks
-            if task.status != "done"
+            if task.status != "done" and task.status != "withdrawn"
             and task.wave > blocked_wave
             and task.review_findings
             and source_ids.intersection(task.deps)
@@ -785,7 +826,8 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
                 ],
             }
             for task in project.tasks
-            if task.wave == current_wave and task.status != "done"
+            if task.wave == current_wave
+            and task.status != "done" and task.status != "withdrawn"
         ]
         raise BuildStateError(
             "dependency-deadlock",
@@ -946,6 +988,8 @@ def verify_landed_tasks(
         canonical_project_dir=canonical_dir,
     )
     for task in tasks:
+        if task.status == "withdrawn":
+            continue  # A cited tombstone ships without a landing (#483)
         if task.status != "done":
             _invalid_state(task, "task must have status: done before shipping")
     try:
@@ -965,6 +1009,8 @@ def verify_landed_tasks(
     }
     evidence = []
     for task in tasks:
+        if task.status == "withdrawn":
+            continue  # A cited tombstone has no landing to prove (#483)
         report = reports.get(task.task_id)
         if report is None or report.get("verdict") not in LANDED_VERDICTS:
             _invalid_state(task, "task landing is not canonical")
@@ -1194,7 +1240,8 @@ def evidence_manifest(
     Verify pass and the landing is proven, but no reusable row exists), `rejected`
     (the Log records a failed Verify, or a ledger row at the landing failed), and
     `superseded` / `missing` (a plan-approved supersedes retired the Verify, or no
-    durable evidence exists at this head). A pass is never inferred from a Log label
+    durable evidence exists at this head), plus `withdrawn` (a cited owner-approved
+    tombstone that never owed a landing — distinct from every completed state). A pass is never inferred from a Log label
     alone: done tasks require a proven first-parent landing, and member rows must
     match the recorded member landing. The project section reports the member
     milestone project Verify only when the project Verify gap (final-gap-1.md)
@@ -1248,6 +1295,12 @@ def evidence_manifest(
             "superseded_by": superseded_by.get(task.task_id),
         }
         manifest.append(entry)
+        if task.status == "withdrawn":
+            # The tombstone stays distinct from completed acceptance: the
+            # manifest records the withdrawal and its owner citations (#483).
+            entry["state"] = "withdrawn"
+            entry["reason"] = "; ".join(withdrawn_citations(text))
+            continue
         if task.status != "done":
             entry["state"] = "rejected" if "fail" in results else "missing"
             entry["reason"] = "verify failed" if "fail" in results else "task never landed"

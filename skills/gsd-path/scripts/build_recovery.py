@@ -144,7 +144,13 @@ def settled_tasks(repo: Path) -> dict[str, tuple[str, dict]]:
             raise state.PipelineStateError(f"invalid recovery task path: {path.name}")
         text = state._read_real_file(path, path.name)
         fields = task_fields(text, path.name)
-        if fields.get("status") not in {"pending", "done"}:
+        if fields.get("status") == "withdrawn":
+            # A cited tombstone is settled inventory; recovery skips it (#483).
+            if not state._common.withdrawn_citations(text):
+                raise state.PipelineStateError(
+                    f"withdrawn task lacks an owner citation: {path.name}"
+                )
+        elif fields.get("status") not in {"pending", "done"}:
             raise state.PipelineStateError(f"settle task ownership before recovery: {path.name}")
         if fields["status"] == "pending" and any(
             fields.get(key) != "null" for key in ("agent", "base", "worktree", "task_branch")

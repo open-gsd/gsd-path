@@ -76,6 +76,8 @@ DISCUSSION_PATHS = frozenset(
 VERIFY_LEDGER_PATH = _common.VERIFY_LEDGER_PATH
 # recover verdicts that count as a landed task
 LANDED_VERDICTS = frozenset({"recovered", "attested"})
+# The withdrawn-tombstone citation rule is shared through _common (#483).
+withdrawn_citations = _common.withdrawn_citations
 # Orchestrator bookkeeping that may stay uncommitted in the primary while a
 # parallel task lands; the next `.project` checkpoint commits it.
 BOOKKEEPING_PATHS = DISCUSSION_PATHS | {
@@ -3888,6 +3890,18 @@ def _recover_task(
         return result("block", reason=str(error))
     except IsolationError as exc:
         return result("block", reason=str(exc))
+    if status == "withdrawn":
+        # A cited tombstone is inventory, not recoverable work: no isolate,
+        # no landing, nothing to resume — coordinator or member alike (#483).
+        # Without the owner citation the tombstone is an obligation someone
+        # dropped: block it.
+        if not withdrawn_citations(task_text):
+            return result(
+                "block",
+                reason="withdrawn task lacks a `- Withdrawn — <YYYY-MM-DD>: "
+                       "<owner ruling verbatim>` Log citation",
+            )
+        return result("none", reason="withdrawn task is a tombstone")
     if fields.get("repo"):
         # Only the landing record proves member task completion.
         if status in ("pending", "in-progress"):
@@ -3916,7 +3930,7 @@ def _recover_task(
             return leftover(landed["commit"], landed["base"])
         return result("block", reason=worktree_error)
 
-    valid_statuses = {"pending", "in-progress", "done", "failed", "blocked"}
+    valid_statuses = {"pending", "in-progress", "done", "failed", "blocked", "withdrawn"}
     if status not in valid_statuses:
         return result("block", reason=f"unknown task status: {status!r}")
 
@@ -4405,6 +4419,22 @@ def _verify_landed_all(
         fields, error = task_frontmatter(task_text)
         if error or fields is None:
             raise IsolationError(error or f"unreadable task frontmatter: {path.name}")
+        if fields.get("status") == "withdrawn":
+            # A cited tombstone is shippable inventory with no landing to
+            # prove; an uncited one is an obligation someone dropped (#483).
+            if not withdrawn_citations(task_text):
+                raise IsolationError(
+                    f"{fields.get('id', path.name)}: withdrawn task needs a "
+                    "`- Withdrawn — <YYYY-MM-DD>: <owner ruling verbatim>` Log citation"
+                )
+            tasks.append({
+                "task": canonical,
+                "task_id": str(fields.get("id", "")),
+                "status": "withdrawn",
+                "verdict": "withdrawn",
+                "reason": "withdrawn task is a tombstone",
+            })
+            continue
         if fields.get("status") != "done":
             raise IsolationError(
                 f"{fields.get('id', path.name)}: task must have status: done"
@@ -4420,7 +4450,10 @@ def _verify_landed_all(
                 canonical,
             )
         )
-    blocked = [task for task in tasks if task["verdict"] not in LANDED_VERDICTS]
+    blocked = [
+        task for task in tasks
+        if task["verdict"] not in LANDED_VERDICTS and task["verdict"] != "withdrawn"
+    ]
     if blocked:
         def failure_reason(task: Dict[str, object]) -> str:
             rejected = task.get("rejected")

@@ -1366,6 +1366,116 @@ The task implements the demo.
                 check_handoffs.validate_plan(root)
             self.assertIn("omits SC2", str(failure.exception))
 
+    def withdraw_t001(self, root: Path, *, citation: bool = True,
+                      keep_owns: bool = True, section: str = "## Log") -> None:
+        task = root / ".project/tasks/T001-demo.md"
+        text = task.read_text(encoding="utf-8")
+        text = text.replace("status: pending", "status: withdrawn")
+        if not keep_owns:
+            text = text.replace(
+                "## Intent coverage\n\n- SC1", "## Intent coverage\n\n- None"
+            )
+        if citation:
+            text = text.replace(
+                section,
+                f'{section}\n\n- Withdrawn — 2026-10-26: "owner rules this out of scope"',
+            )
+        task.write_bytes(text.encode("utf-8"))
+
+    def test_plan_blocks_an_uncited_withdrawn_tombstone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_state(root, "build", "active")
+            self.withdraw_t001(root, citation=False)
+
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "withdrawn without an owner citation"
+            ):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_rejects_a_criterion_still_owned_by_a_withdrawn_task(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_state(root, "build", "active")
+            self.withdraw_t001(root)
+
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "still owned by withdrawn T001"
+            ):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_accepts_a_withdrawn_task_once_its_criterion_is_re_owned(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_state(root, "build", "active")
+            self.withdraw_t001(root, keep_owns=False)
+            self.write_plan_coverage(
+                root, rows="| SC1 | T002 | AC1 |\n| SC2 | T002 | AC1 |\n"
+            )
+            self.write_coverage_task(root, "T002", "- SC1\n- SC2")
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["tasks"], 2)
+
+    def test_plan_phase_accepts_a_cited_withdrawn_tombstone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_state(root, "plan", "active")
+            self.withdraw_t001(root, keep_owns=False)
+            self.write_plan_coverage(
+                root, rows="| SC1 | T002 | AC1 |\n| SC2 | T002 | AC1 |\n"
+            )
+            self.write_coverage_task(root, "T002", "- SC1\n- SC2")
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["tasks"], 2)
+
+    def test_only_unlanded_tasks_may_not_depend_on_a_withdrawn_task(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_state(root, "build", "active")
+            self.withdraw_t001(root, keep_owns=False)
+            self.write_plan_coverage(
+                root, rows="| SC1 | T002 | AC1 |\n| SC2 | T002 | AC1 |\n"
+            )
+            self.write_coverage_task(root, "T002", "- SC1\n- SC2", deps="[T001]")
+
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "T002 depends on withdrawn T001"
+            ):
+                check_handoffs.validate_plan(root)
+
+            task = root / ".project/tasks/T002-demo.md"
+            task.write_bytes(
+                task.read_text(encoding="utf-8")
+                .replace("status: pending", "status: done")
+                .encode("utf-8")
+            )
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+
+    def test_withdrawn_citation_must_live_in_the_log(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_state(root, "build", "active")
+            self.withdraw_t001(root, keep_owns=False, section="## Context")
+            self.write_plan_coverage(
+                root, rows="| SC1 | T002 | AC1 |\n| SC2 | T002 | AC1 |\n"
+            )
+            self.write_coverage_task(root, "T002", "- SC1\n- SC2")
+
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "withdrawn without an owner citation"
+            ):
+                check_handoffs.validate_plan(root)
+
     def test_plan_rejects_a_noncanonical_task_filename(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2634,6 +2744,54 @@ Tasks reviewed: 2
 
             self.assertEqual(result["owned"], ["SC1", "SC2"])
             self.assertEqual(result["verdict"], "pass")
+
+    def test_wave_review_skips_a_withdrawn_tombstone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.withdraw_t001(root)
+            relative = self.write_wave_review(root)
+            review = root / relative
+            original = review.read_text(encoding="utf-8")
+            # Only the live task is reviewed; the withdrawn owner's criterion
+            # is no longer this wave's to judge (#483).
+            trimmed = original.replace(
+                "Tasks reviewed: 2", "Tasks reviewed: 1"
+            ).replace(
+                "## T001 — Demo task T001: pass\n\n"
+                "- ✅ The demo command prints hello. — ran hello.py\n\n",
+                "",
+            ).replace(
+                "### SC1 — The demo command prints hello.: pass\n"
+                "- ✅ hello.py output\n",
+                "",
+            )
+            review.write_bytes(trimmed.encode("utf-8"))
+
+            result = check_handoffs.validate_wave(root, review=relative)
+
+            self.assertEqual(result["verdict"], "pass")
+            self.assertEqual(result["owned"], ["SC2"])
+
+            # A review that still lists the tombstone no longer matches the wave.
+            review.write_bytes(original.encode("utf-8"))
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "Tasks reviewed does not match Wave 1"
+            ):
+                check_handoffs.validate_wave(root, review=relative)
+
+            # Exclusion is earned: dropping the citation fails the wave gate too.
+            task = root / ".project/tasks/T001-demo.md"
+            task.write_bytes(
+                task.read_text(encoding="utf-8").replace(
+                    '\n- Withdrawn — 2026-10-26: "owner rules this out of scope"', ""
+                ).encode("utf-8")
+            )
+            review.write_bytes(trimmed.encode("utf-8"))
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "withdrawn without an owner citation"
+            ):
+                check_handoffs.validate_wave(root, review=relative)
 
     def test_reviews_bind_the_full_wrapped_intent_criterion(self) -> None:
         for phase in ("wave", "final"):

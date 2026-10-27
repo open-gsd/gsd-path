@@ -114,6 +114,11 @@ as stated in Lookahead mode.
      `worktree: null`, and `task_branch: null` values on every new task.
      In patch mode, tasks already `done` keep their landed metadata; only
      the appended patch tasks must start clean.
+   - A `status: withdrawn` task is an owner-ruled tombstone: its file and id
+     stay in place, it is never dispatched, and its Log must carry a
+     `Withdrawn — <date>: <owner ruling verbatim>` entry. Reject an uncited
+     tombstone, a dependent that is not `done` or withdrawn, and an SC it
+     still owns; re-own or remove that SC through a Define INTENT Correction.
    - Require every dependency id to exist, forbid later-wave dependencies,
      detect cycles, and forbid unordered file overlap between planned tasks
      in the same wave. Same-wave tasks may share files only when one
