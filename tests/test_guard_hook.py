@@ -19,6 +19,94 @@ from tests._platform import posix_only, requires_symlink
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "guard_hook.py"
 
+# The stable launcher surface as it shipped before #468: no successor walk.
+PRE_SUCCESSOR_LAUNCHER = """\
+import hashlib
+import json
+import stat
+import sys
+from pathlib import Path
+
+RUNTIME_SCHEMA = "gsd-path/runtime/v1"
+
+
+def runtime_home():
+    return Path.home() / ".gsd-path" / "runtimes"
+
+
+def declaration(repo):
+    path = repo / ".gsd-path" / "runtime.json"
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError(f"unsafe runtime declaration: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if (not isinstance(data, dict) or data.get("schema") != RUNTIME_SCHEMA
+            or not isinstance(data.get("version"), str)
+            or not isinstance(data.get("digest"), str)
+            or len(data["digest"]) != 64
+            or any(c not in "0123456789abcdef" for c in data["digest"])):
+        raise ValueError(f"invalid runtime declaration: {path}")
+    return data
+
+
+def manifest_digest(manifest):
+    return hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def validate_runtime(data):
+    root = runtime_home() / data["digest"]
+    try:
+        if any(p.is_symlink() for p in (root, root.parent, root.parent.parent)):
+            raise ValueError("symlinked runtime storage")
+        manifest_path = root / "manifest.json"
+        if manifest_path.is_symlink():
+            raise ValueError("symlinked manifest")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (not isinstance(manifest, dict) or manifest_digest(manifest) != data["digest"]
+                or manifest.get("version") != data["version"]):
+            raise ValueError("manifest identity mismatch")
+        files = manifest.get("files")
+        if not isinstance(files, dict) or "pipeline_state.py" not in files:
+            raise ValueError("invalid runtime file inventory")
+        for name, expected in files.items():
+            if Path(name).name != name or not name.endswith(".py"):
+                raise ValueError("invalid runtime file name")
+            path = root / name
+            if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise ValueError(f"runtime file changed: {name}")
+        runtime_entries = set()
+        for path in root.iterdir():
+            if path.name == "__pycache__":
+                if not stat.S_ISDIR(path.lstat().st_mode):
+                    raise ValueError("unexpected runtime files")
+                for cached in path.iterdir():
+                    if cached.suffix != ".pyc" or not stat.S_ISREG(cached.lstat().st_mode):
+                        raise ValueError("unexpected runtime files")
+                continue
+            runtime_entries.add(path.name)
+        if runtime_entries != set(files) | {"manifest.json"}:
+            raise ValueError("unexpected runtime files")
+    except (OSError, ValueError, TypeError) as error:
+        raise ValueError(f"runtime {data['digest']} is unavailable or invalid ({error})") from error
+    return root
+
+
+def resolve_runtime(repo):
+    return validate_runtime(declaration(repo))
+
+
+def run_guard(repo, name):
+    root = resolve_runtime(repo)
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(root))
+    previous_pycache_prefix = sys.pycache_prefix
+    sys.pycache_prefix = str(root / "manifest.json")
+    try:
+        code = compile((root / name).read_bytes(), str(root / name), "exec")
+        exec(code, {"__name__": "__main__", "__file__": str(repo / ".gsd-path" / name)})
+    finally:
+        sys.pycache_prefix = previous_pycache_prefix
+"""
+
 
 def run_guard(payload):
     stdin = payload if isinstance(payload, str) else json.dumps(payload)
@@ -4902,12 +4990,8 @@ class SuccessorRuntimeAcceptanceTests(unittest.TestCase):
         self.pin_repo(pin)
         # The project launcher predates successors: no walk of its own. The
         # guard loads the walk from the pinned runtime's bytes regardless.
-        stale = subprocess.run(
-            ["git", "-C", str(self.source), "show", "origin/main:scripts/status_runtime.py"],
-            capture_output=True, encoding="utf-8", errors="replace", check=True,
-        ).stdout
-        self.assertNotIn("accepted_runtime_dirs", stale)
-        (self.repo / ".gsd-path" / "status_runtime.py").write_text(stale, encoding="utf-8")
+        (self.repo / ".gsd-path" / "status_runtime.py").write_text(
+            PRE_SUCCESSOR_LAUNCHER, encoding="utf-8")
 
         self.assertEqual(self.guard(self.helper(pin)).returncode, 0)
         self.assertEqual(self.guard(self.helper(successor)).returncode, 0)
