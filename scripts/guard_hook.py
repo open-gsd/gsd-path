@@ -428,8 +428,8 @@ GIT_REASONS = {
         "recovery protocol inspects"
     ),
     "owned-refspec": (
-        "git push or fetch into refs/gsd-path/ forges the orchestrator-owned "
-        "authorizations those refs prove"
+        "git commands naming refs/gsd-path/ are denied: that namespace holds "
+        "orchestrator-owned authorizations an agent must not create or move"
     ),
     "worktree": (
         "git worktree remove --force discards uncommitted task work the recovery "
@@ -4443,9 +4443,7 @@ def destructive_git_reason(
             )
             if force_option or force_refspec:
                 return GIT_REASONS[command]
-        if command in {"push", "fetch"} and any(
-            "refs/gsd-path/" in argument.casefold() for argument in arguments
-        ):
+        if any("refs/gsd-path/" in argument.casefold() for argument in arguments):
             return GIT_REASONS["owned-refspec"]
         if command == "branch":
             # Git accepts each unique prefix of a long option (--del, --forc).
@@ -4981,33 +4979,26 @@ def closed_shell_execution_reason(
 
 
 def runtime_hotfix_invocation(tokens):
-    """True when any simple command, prefixed or wrapped, runs isolation.py runtime-hotfix."""
+    """True when any simple command, prefixed or wrapped, names isolation.py then runtime-hotfix."""
     for segment in command_segments(tokens):
+        for previous, token, following in zip(["", *segment], segment, [*segment[1:], ""]):
+            if following != "runtime-hotfix":
+                continue
+            clustered = re.fullmatch(r"-[A-Za-ln-z]*m(.+)", token)
+            if clustered:
+                module = clustered.group(1)
+            elif previous.startswith("-") and not previous.startswith("--") and "m" in previous:
+                module = token
+            else:
+                module = None
+            if token == "-" or token.replace("\\", "/").rsplit("/", 1)[-1] == "isolation.py" or (
+                module is not None and module.rsplit(".", 1)[-1] == "isolation"
+            ):
+                return True
         try:
-            invocation = command_invocation(segment)
             wrapped = wrapped_command_tokens(segment, expand_parameters=False)
         except ValueError:  # the shape checks below refuse what cannot be unwrapped
             continue
-        if invocation is not None:
-            executable, arguments = invocation
-            arguments = list(arguments) if re.fullmatch(
-                r"py|python(?:3(?:\.\d+)?)?", executable.removesuffix(".exe")) else None
-            while arguments and arguments[0].startswith("-") and arguments[0] not in ("-c", "-m", "-"):
-                arguments = arguments[2:] if arguments[0] in ("-X", "-W") else arguments[1:]
-            if arguments and arguments[0] == "-m":
-                module = arguments[1] if len(arguments) > 1 else ""
-                target = "isolation.py" if module.rsplit(".", 1)[-1] == "isolation" else None
-                arguments = arguments[1:]
-            elif arguments and arguments[0] == "-":
-                target = "isolation.py"
-            else:
-                target = arguments[0].replace("\\", "/").rsplit("/", 1)[-1] if arguments else None
-            if target == "isolation.py":
-                rest = arguments[1:]
-                while rest and rest[0].startswith("-") and rest[0] not in ("-h", "--help"):
-                    rest = rest[1:]
-                if rest[:1] == ["runtime-hotfix"]:
-                    return True
         if wrapped is not None and runtime_hotfix_invocation(wrapped):
             return True
     return False

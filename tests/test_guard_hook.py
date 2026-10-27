@@ -4629,7 +4629,7 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
         status, output, error = run_guard(self.event(
             f"git update-ref refs/gsd-path/runtime-hotfix/T001-{'a' * 40} {'b' * 40}"))
         self.assertEqual(status, 2, error)
-        self.assertIn("Path-owned ref", output)
+        self.assertIn("refs/gsd-path/", output)
 
     def test_agent_cannot_run_runtime_hotfix_in_any_command_shape(self) -> None:
         tail = f"runtime-hotfix --repo . --task-id T001 --runtime {'1' * 64} --authorized-by x"
@@ -4645,6 +4645,10 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
             f"cd scripts && python3 -m isolation {tail}",
             f"python3 -B -m scripts.isolation {tail}",
             f"python3 - {tail} < scripts/isolation.py",
+            f"python3 -Bm isolation {tail}",
+            f"python3 -Im isolation {tail}",
+            f"python3 -misolation {tail}",
+            f"python3 --check-hash-based-pycs never scripts/isolation.py {tail}",
         ):
             with self.subTest(command=command):
                 status, output, error = run_guard(self.event(command))
@@ -4669,6 +4673,9 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
             f"git fetch . {'b' * 40}:{ref}",
             f"git fetch origin +refs/gsd-path/*:refs/gsd-path/*",
             f"git fetch --refmap=+refs/tags/*:refs/gsd-path/runtime-hotfix/* . refs/tags/T001",
+            f"git symbolic-ref {ref} refs/tags/fake",
+            f"git send-pack . {'b' * 40}:{ref}",
+            "git log refs/gsd-path/checkpoint",
         ):
             with self.subTest(command=command):
                 status, output, error = run_guard(self.event(command))

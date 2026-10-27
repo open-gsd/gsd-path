@@ -35,11 +35,12 @@ other task, base, a Log line alone, or a bare mention authorizes nothing, and a
 failing re-run refuses the hotfix. Limits: the command serves only a serial
 task working in the primary and refuses parallel or member tasks; the ref is
 local repository state, so a clone without it cannot land the pin and the
-proof fails closed. The guard denies an agent shell command that launches
-Python on `isolation.py` (as a script path, `-m isolation`, or stdin `-`) with
-the `runtime-hotfix` subcommand, and any `git update-ref`, `git push`, or
-`git fetch` whose arguments name `refs/gsd-path/`. Limits: it cannot see a
-copied or renamed `isolation.py`, a refspec configured in Git config, a ref
+proof fails closed. The guard applies two rules to agent shell commands. It
+denies any command where `runtime-hotfix` directly follows `isolation.py`, a
+`-m isolation` module operand, or stdin `-`. It also denies every Git command
+with an argument that names `refs/gsd-path/`; this deliberately blocks
+read-only uses such as `git log refs/gsd-path/<ref>` too. Limits: it cannot see
+a copied or renamed `isolation.py`, a refspec configured in Git config, a ref
 write made from inside another program, or a direct edit of files under
 `.git/`.
 
