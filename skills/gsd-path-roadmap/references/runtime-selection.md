@@ -40,10 +40,12 @@ denies any command where `runtime-hotfix` directly follows `isolation.py`, stdin
 `-`, or an `isolation` module operand (`-m isolation`, `-Bm isolation`,
 `-misolation`). It also denies every Git command whose words, including global
 `-c` options and shell variables set earlier in the command, contain
-`refs/gsd-path/`; this deliberately blocks read-only uses such as
+`refs/gsd-path/`, an unquoted shell brace list or range, or an unquoted glob in
+a word naming `refs/`; this deliberately blocks read-only uses such as
 `git log refs/gsd-path/<ref>` too. Limits: it cannot see a copied or renamed
 `isolation.py`, a refspec stored in a Git config file, a ref write made from
-inside another program, or a direct edit of files under `.git/`.
+inside another program, a direct edit of files under `.git/`, or other shell
+expansion that assembles the ref name at run time.
 
 Publishing a runtime to the shared store is project-free:
 `python3 -B <absolute runtime_store.py> publish --source <absolute package root>`

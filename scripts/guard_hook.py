@@ -324,6 +324,7 @@ GIT_CONFIG_EDIT_SHORT_OPTION = re.compile(r"-[A-Za-z]*e[A-Za-z]*")
 PLAIN_QUOTED_SEGMENT = re.compile(r"'[^']*'|\"[^\"]*\"")
 ANSI_QUOTE_START = re.compile(r"\$['\"]")
 GIT_CONFIG_EXPANDING_WORD = re.compile(r"[*?\[]|\{.*(?:,|\.\.)")
+SHELL_BRACE_EXPANSION = re.compile(r"\{[^}]*(?:,|\.\.)")
 
 
 def denied_git_config_argument(arguments):
@@ -4371,6 +4372,12 @@ def destructive_git_reason(
         if any(
             "refs/gsd-path/" in str(word).casefold()
             for word in [*words, *(assignments or {}).values()]
+        ) or any(
+            getattr(word, "literal", "bare") == "bare" and (
+                SHELL_BRACE_EXPANSION.search(word)
+                or ("refs/" in word and GIT_CONFIG_EXPANDING_WORD.search(word))
+            )
+            for word in words
         ):
             return GIT_REASONS["owned-refspec"]
         # Git matches its own commands by exact case, but alias names in any case.

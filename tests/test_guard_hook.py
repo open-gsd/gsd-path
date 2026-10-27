@@ -4678,6 +4678,9 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
             "git log refs/gsd-path/checkpoint",
             f"git -c remote.self.url=. -c remote.self.push=refs/tags/fake:{ref} push self",
             f"REF={ref} git push . HEAD:refs/heads/ordinary",
+            "git push . b:refs/{gsd-path,zz}/runtime-hotfix/T001-x",
+            "git update-ref r{e,}fs/gs{d,}-path/runtime-hotfix/T001-x b",
+            "git push . b:refs/gsd-pat[h]/runtime-hotfix/T001-x",
         ):
             with self.subTest(command=command):
                 status, output, error = run_guard(self.event(command))
@@ -4685,9 +4688,14 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
                 self.assertIn("refs/gsd-path/", output)
 
     def test_agent_can_still_push_ordinary_refspecs(self) -> None:
-        status, output, error = run_guard(self.event(
-            "git push origin HEAD:refs/heads/ordinary-work"))
-        self.assertNotIn("refs/gsd-path/", output + error)
+        for command in (
+            "git push origin HEAD:refs/heads/ordinary-work",
+            "git log -1 HEAD@{1}",
+            "git push origin 'refs/heads/{a,b}'",
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertNotIn("refs/gsd-path/", output + error)
 
     def test_agent_can_still_update_ordinary_refs(self) -> None:
         status, output, error = run_guard(self.event(
