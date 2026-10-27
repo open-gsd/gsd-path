@@ -578,6 +578,28 @@ class IsolationTests(unittest.TestCase):
                     ".project/tasks/T001.md", ["src/app.py"],
                 )
 
+    def test_task_commit_deleting_the_runtime_pin_reports_an_undeclared_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            self.write(repo, ".gsd-path/runtime.json", '{"digest": "' + "0" * 64 + '"}\n')
+            git(repo, "add", ".gsd-path/runtime.json")
+            git(repo, "commit", "-q", "-m", "pin runtime")
+            base = git(repo, "rev-parse", "HEAD")
+            self.write(repo, ".project/tasks/T001.md",
+                       TASK_FILE.replace("base: null", f"base: {base}"))
+            git(repo, "add", ".project/tasks/T001.md")
+            git(repo, "rm", "-q", ".gsd-path/runtime.json")
+            git(repo, "commit", "-q", "-m", "add greeting")
+            sha = git(repo, "rev-parse", "HEAD")
+
+            proved, reason = isolation._prove_task_commit(
+                repo, sha, f"Base: {base}\n", ".project/tasks/T001.md", base, None)
+
+            self.assertIsNone(proved)
+            self.assertIn("undeclared paths: .gsd-path/runtime.json", reason)
+
     def test_serial_land_stages_a_file_and_directory_swap(self) -> None:
         # One `git add` for each path fails here: the first call drops the
         # other path from the index, and then its pathspec matches no file.

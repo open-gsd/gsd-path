@@ -4658,13 +4658,22 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
     def test_read_only_mentions_of_runtime_hotfix_stay_allowed(self) -> None:
         for command in (
             "rg isolation.py -e runtime-hotfix",
-            "git log --grep isolation.py --grep runtime-hotfix",
             "python3 scripts/isolation.py --help runtime-hotfix",
             "python3 scripts/isolation.py preflight --task-id runtime-hotfix",
         ):
             with self.subTest(command=command):
                 status, output, error = run_guard(self.event(command))
-                self.assertNotIn("operator-only", output + error)
+                self.assertEqual(status, 0, error + output)
+
+    def test_git_mentions_of_runtime_hotfix_are_deliberately_denied(self) -> None:
+        for command in (
+            "git log --grep isolation.py --grep runtime-hotfix",
+            'git commit -m "docs: explain runtime-hotfix"',
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertEqual(status, 2, error + output)
+                self.assertIn("refs/gsd-path/", output)
 
     def test_agent_cannot_push_or_fetch_into_path_owned_refs(self) -> None:
         ref = f"refs/gsd-path/runtime-hotfix/T001-{'a' * 40}"
@@ -4700,7 +4709,7 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 status, output, error = run_guard(self.event(command))
-                self.assertNotIn("refs/gsd-path/", output + error)
+                self.assertEqual(status, 0, error + output)
 
     def test_agent_can_still_update_ordinary_refs(self) -> None:
         status, output, error = run_guard(self.event(

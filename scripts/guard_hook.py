@@ -423,10 +423,7 @@ GIT_REASONS = {
         "git branch -m renames a branch the pipeline resumes by name "
         "(STATE.branch); create a new branch instead"
     ),
-    "update-ref": (
-        "git update-ref on a Path-owned ref destroys or forges the trust the "
-        "recovery protocol inspects"
-    ),
+    "update-ref": "git update-ref deletion destroys refs the recovery protocol inspects",
     "owned-refspec": (
         "git commands naming refs/gsd-path/ or runtime-hotfix are denied: that "
         "namespace holds orchestrator-owned authorizations an agent must not create or move"
@@ -3333,26 +3330,6 @@ def git_alias(command, git_options, working_directories=None):
     return next(iter(aliases), None)
 
 
-def _update_ref_operands(arguments):
-    """The (first ref operand, options) of an update-ref command, or (None, ...)."""
-    operands, options = [], set()
-    index = 0
-    while index < len(arguments):
-        argument = arguments[index]
-        if argument == "-m":  # its value is not an option, also when it is -d
-            index += 2
-            continue
-        if argument.startswith("-"):
-            options.add(argument)
-            index += 1
-            continue
-        operands.append(argument)
-        index += 1
-    if not operands or not _literal_target(operands[0]):
-        return None, options
-    return operands[0], options
-
-
 def update_ref_deletes(arguments):
     operands = []
     index = 0
@@ -4499,16 +4476,6 @@ def destructive_git_reason(
                 )
                 if reason is not None:
                     return reason
-            else:
-                # Creating or rewriting a ref under a Path-owned namespace is
-                # as destructive as deleting one: refs/gsd-path/ holds
-                # orchestrator-owned authorizations (member task bases, runtime
-                # hotfixes), so an agent writing there forges the trust those
-                # refs prove (#480). Deny by the ref name alone — creation
-                # needs no repository state to resolve.
-                created, _options = _update_ref_operands(arguments)
-                if created is not None and ref_is_path_owned(created, set()):
-                    return GIT_REASONS["update-ref"]
         if command == "worktree" and arguments[:1] == ["remove"]:
             if any(
                 git_option_in(argument, {"--force"}) for argument in arguments

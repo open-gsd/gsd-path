@@ -2608,11 +2608,7 @@ def _hotfix_snapshot_tree(primary: Path) -> str:
 
 def _hotfix_task_file(primary: Path, task_id: str) -> str:
     tasks_dir = primary / ".project" / "tasks"
-    matches = sorted(
-        path for path in (
-            tasks_dir.glob(f"{task_id}-*.md"),
-        ) for path in path
-    ) if tasks_dir.is_dir() else []
+    matches = sorted(tasks_dir.glob(f"{task_id}-*.md")) if tasks_dir.is_dir() else []
     exact = tasks_dir / f"{task_id}.md"
     if exact.is_file() and not exact.is_symlink():
         matches = [exact]
@@ -2701,7 +2697,6 @@ def runtime_hotfix(
     old_digest = str(declaration.get("digest", ""))
     if old_digest == new_digest:
         raise IsolationError("runtime-hotfix requires a different runtime than the pinned one")
-    task_file = _hotfix_task_file(primary, task_id)
     sidecar = ensure_verify_sidecar(
         primary, recorded_base, verify_branch_name(f"runtime-hotfix-{task_id}")
     )
@@ -3458,7 +3453,8 @@ def _prove_task_commit(
         return None, "commit does not touch the task file"
     committed_pin = None
     if RUNTIME_PIN in changed:
-        committed_pin = git_text(repo, "show", f"{sha}:{RUNTIME_PIN}")
+        shown = run_git(repo, "show", f"{sha}:{RUNTIME_PIN}")
+        committed_pin = shown.stdout if shown.returncode == 0 else ""
     stray = undeclared_paths(
         repo, base, changed,
         contract_paths | runtime_hotfix_allowed_paths(

@@ -41,7 +41,8 @@ denies any command where `runtime-hotfix` directly follows `isolation.py`, stdin
 `-misolation`). It also denies every Git command with a word, including global
 `-c` options and inline variable assignments, that contains `refs/gsd-path/` or
 `runtime-hotfix`. This deliberately blocks read-only uses such as
-`git log refs/gsd-path/<ref>`. Limits: it cannot see a copied or renamed
+`git log refs/gsd-path/<ref>` or `git log --grep runtime-hotfix`, and commit
+messages or branch names that contain `runtime-hotfix`. Limits: it cannot see a copied or renamed
 `isolation.py`, a refspec stored in a Git config file, a ref write made from
 inside another program, a direct edit of files under `.git/`, or shell
 expansion that splits both protected words, such as
