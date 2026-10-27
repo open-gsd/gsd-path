@@ -427,6 +427,10 @@ GIT_REASONS = {
         "git update-ref on a Path-owned ref destroys or forges the trust the "
         "recovery protocol inspects"
     ),
+    "owned-refspec": (
+        "git push or fetch into refs/gsd-path/ forges the orchestrator-owned "
+        "authorizations those refs prove"
+    ),
     "worktree": (
         "git worktree remove --force discards uncommitted task work the recovery "
         "protocol needs; commit or stash it, then remove without --force"
@@ -4439,6 +4443,12 @@ def destructive_git_reason(
             )
             if force_option or force_refspec:
                 return GIT_REASONS[command]
+        if command in {"push", "fetch"} and any(
+            not argument.startswith("-") and ":" in argument
+            and argument.rpartition(":")[2].casefold().startswith("refs/gsd-path/")
+            for argument in arguments
+        ):
+            return GIT_REASONS["owned-refspec"]
         if command == "branch":
             # Git accepts each unique prefix of a long option (--del, --forc).
             deletes = (
@@ -4975,13 +4985,21 @@ def closed_shell_execution_reason(
 def runtime_hotfix_invocation(tokens):
     """True when any simple command, prefixed or wrapped, runs isolation.py runtime-hotfix."""
     for segment in command_segments(tokens):
-        names = [token.replace("\\", "/").rsplit("/", 1)[-1] for token in segment]
-        if "isolation.py" in names and "runtime-hotfix" in names[names.index("isolation.py") + 1:]:
-            return True
         try:
+            invocation = command_invocation(segment)
             wrapped = wrapped_command_tokens(segment, expand_parameters=False)
         except ValueError:  # the shape checks below refuse what cannot be unwrapped
             continue
+        if invocation is not None:
+            executable, arguments = invocation
+            arguments = list(arguments) if re.fullmatch(
+                r"py|python(?:3(?:\.\d+)?)?", executable.removesuffix(".exe")) else None
+            while arguments and arguments[0].startswith("-") and arguments[0] not in ("-c", "-m", "-"):
+                arguments = arguments[2:] if arguments[0] in ("-X", "-W") else arguments[1:]
+            if arguments and len(arguments) > 1 and arguments[1] == "runtime-hotfix" and (
+                arguments[0].replace("\\", "/").rsplit("/", 1)[-1] == "isolation.py"
+            ):
+                return True
         if wrapped is not None and runtime_hotfix_invocation(wrapped):
             return True
     return False

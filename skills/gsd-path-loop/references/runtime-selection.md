@@ -35,7 +35,10 @@ other task, base, a Log line alone, or a bare mention authorizes nothing, and a
 failing re-run refuses the hotfix. Limits: the command serves only a serial
 task working in the primary and refuses parallel or member tasks; the ref is
 local repository state, so a clone without it cannot land the pin and the
-proof fails closed.
+proof fails closed. The guard denies agent shell commands that run
+`runtime-hotfix` or write `refs/gsd-path/` through `git update-ref`, `git push`,
+or `git fetch`; it cannot see ref writes made from inside another program or by
+editing files under `.git/` directly.
 
 Publishing a runtime to the shared store is project-free:
 `python3 -B <absolute runtime_store.py> publish --source <absolute package root>`

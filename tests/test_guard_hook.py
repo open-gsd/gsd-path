@@ -4647,6 +4647,34 @@ class RuntimeHotfixRefGuardTests(unittest.TestCase):
                 self.assertEqual(status, 2, error + output)
                 self.assertIn("operator-only", output)
 
+    def test_read_only_mentions_of_runtime_hotfix_stay_allowed(self) -> None:
+        for command in (
+            "rg isolation.py -e runtime-hotfix",
+            "git log --grep isolation.py --grep runtime-hotfix",
+            "python3 scripts/isolation.py --help runtime-hotfix",
+            "python3 scripts/isolation.py preflight --task-id runtime-hotfix",
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertNotIn("operator-only", output + error)
+
+    def test_agent_cannot_push_or_fetch_into_path_owned_refs(self) -> None:
+        ref = f"refs/gsd-path/runtime-hotfix/T001-{'a' * 40}"
+        for command in (
+            f"git push . {'b' * 40}:{ref}",
+            f"git fetch . {'b' * 40}:{ref}",
+            f"git fetch origin +refs/gsd-path/*:refs/gsd-path/*",
+        ):
+            with self.subTest(command=command):
+                status, output, error = run_guard(self.event(command))
+                self.assertEqual(status, 2, error + output)
+                self.assertIn("refs/gsd-path/", output)
+
+    def test_agent_can_still_push_ordinary_refspecs(self) -> None:
+        status, output, error = run_guard(self.event(
+            "git push origin HEAD:refs/heads/ordinary-work"))
+        self.assertNotIn("refs/gsd-path/", output + error)
+
     def test_agent_can_still_update_ordinary_refs(self) -> None:
         status, output, error = run_guard(self.event(
             "git update-ref refs/heads/ordinary-work " + "b" * 40))
