@@ -4884,8 +4884,8 @@ class SuccessorRuntimeAcceptanceTests(unittest.TestCase):
 
     def guard(self, helper: Path):
         command = (
-            f"python3 -B {shlex.quote(str(helper))} "
-            f"status --repo {shlex.quote(str(self.repo))}"
+            f"python3 -B {shlex.quote(helper.as_posix())} "
+            f"status --repo {shlex.quote(self.repo.as_posix())}"
         )
         payload = {"tool_name": "Bash", "tool_input": {"command": command, "cwd": str(self.repo)}}
         return subprocess.run(
