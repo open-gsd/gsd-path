@@ -116,7 +116,7 @@ export function PathTab({ status }: { status: Status | null }) {
         <div className="set-setting">
           <div>
             <b>{t("path.reviewPanel")}</b>
-            <div className="sub">{t("path.panelSub1")} <span className="mono">off</span>, <span className="mono">detected</span>,
+            <div className="sub">{t("path.panelSub1")}<span className="mono">off</span>, <span className="mono">detected</span>,
               {t("path.panelSub2")}</div>
             {data.approved_review_panel && (
               <div className="sub">{t("path.recordedPanel", { value: data.approved_review_panel.value, source: data.approved_review_panel.source})}.

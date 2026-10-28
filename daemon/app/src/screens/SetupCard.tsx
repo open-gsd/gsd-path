@@ -169,7 +169,7 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
           </div>
         ))}
         <div className="setup-foot-note">
-          <span className="grow">{t("setupCard.joiningNote1")} <span className="mono">/path</span> {t("setupCard.joiningNote2")} <span className="mono">members add</span>{t("setupCard.joiningNote3")}</span>
+          <span className="grow">{t("setupCard.joiningNote1")}<span className="mono">/path</span>{t("setupCard.joiningNote2")}<span className="mono">members add</span>{t("setupCard.joiningNote3")}</span>
           <CopyButton text="/path" label={t("trayPop.copyPath")} className="btn tiny" />
         </div>
       </div>
