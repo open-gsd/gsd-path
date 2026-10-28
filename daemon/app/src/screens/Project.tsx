@@ -160,7 +160,7 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
           {!tiles || !sp ? <p className="note">{t("projectPage.noSessions")} <a href={statsHash(idOf(p))}>{t("projectPage.seeCharts")} ›</a></p> : <>
             <dl className="tiles">{tiles.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>
             <a className="see-charts" href={statsHash(idOf(p))}>{t("projectPage.seeCharts")} ›</a>
-            <h2>{t("settings.model")}</h2>
+            <h2>{t("projectPage.models")}</h2>
             <Table head={[t("settings.model"), t("projectPage.host"), t("usage.turns"), t("projectPage.tokens"), t("usage.cost")]} num={[2, 3, 4]} rows={(sp.models ?? []).map((m) => [
               <span className="mono">{m.model}</span>, m.host, int(m.turns), tokens(m.tokens), money(m.cost)])} />
             <h2>{t("setupWizard.agents")}</h2>

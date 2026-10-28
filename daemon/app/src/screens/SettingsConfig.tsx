@@ -158,7 +158,7 @@ export function UsageTab({ form }: { form: Form }) {
         <form className="set-new" onSubmit={(event) => { event.preventDefault(); addPattern(); }}>
           <input className="set-input mono" aria-label={t("settings.sessionFolderLabel")} placeholder="~/.codex/sessions" value={pattern}
             disabled={busy} onChange={(event) => setPattern(event.target.value)} />
-          <button className="btn small" disabled={busy || !pattern.trim()}>{t("settings.addFolder")}</button>
+          <button className="btn small" disabled={busy || !pattern.trim()}>{t("settings.addFolderButton")}</button>
         </form>
       </div>
       {form.bar}
