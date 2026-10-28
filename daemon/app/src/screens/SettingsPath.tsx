@@ -134,7 +134,7 @@ export function PathTab({ status }: { status: Status | null }) {
           <div className="line">
             <div className="grow">
               <b>{t("path.modelsAndEffort")}</b>
-              <div className="sub">{t("path.modelsSub1")} <span className="mono">inherit</span>.
+              <div className="sub">{t("path.modelsSub1")}<span className="mono">inherit</span>.
                 {t("path.modelsSub2")}</div>
             </div>
             <select className="set-input" aria-label={t("path.agent")} value={host} disabled={busy} onChange={(event) => setHost(event.target.value)}>
