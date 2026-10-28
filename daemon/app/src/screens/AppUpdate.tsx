@@ -1,5 +1,6 @@
 // The app's own update: the "ready" dialog, the refused state, and the row in Settings → Updates.
 import { useState } from "react";
+import { t } from "../i18n";
 import { appUpdateRow, refusedText } from "../appUpdate";
 import { checkUpdate, installUpdate } from "../shell";
 import type { Shell } from "../shell";
@@ -19,21 +20,21 @@ export function AppUpdateDialog({ shell, onClose }: { shell: Shell; onClose: () 
       <div className="modal-card">
         {row.state === "refused" ? (
           <>
-            <b id="update-title">Update {shell.update.version} was not installed</b>
+            <b id="update-title">{t("appUpdateDialog.notInstalled", { version: shell.update.version })}</b>
             <span>{refusedText(shell)}</span>
             <div className="modal-actions">
-              <CopyButton text={refusedText(shell)} label="Copy details" />
-              <button className="btn" onClick={onClose}>Close</button>
-              <button className="btn primary" disabled={busy} onClick={install}>{busy ? "Trying…" : "Try again"}</button>
+              <CopyButton text={refusedText(shell)} label={t("appUpdateDialog.copyDetails")} />
+              <button className="btn" onClick={onClose}>{t("updates.close")}</button>
+              <button className="btn primary" disabled={busy} onClick={install}>{busy ? t("appUpdateDialog.trying") : t("common.tryAgain")}</button>
             </div>
           </>
         ) : (
           <>
-            <b id="update-title">OpenGSD Path {shell.update.version} is ready</b>
-            <span>The app restarts to finish. Running projects and agents are not affected.{row.notes ? ` ${row.notes}` : ""}</span>
+            <b id="update-title">{t("appUpdateDialog.ready", { version: shell.update.version })}</b>
+            <span>{t("appUpdateDialog.restartNote")}{row.notes ? ` ${row.notes}` : ""}</span>
             <div className="modal-actions">
-              <button className="btn" disabled={busy} onClick={onClose}>Later</button>
-              <button className="btn primary" disabled={busy} onClick={install}>{busy ? "Updating…" : "Restart and update"}</button>
+              <button className="btn" disabled={busy} onClick={onClose}>{t("appUpdateDialog.later")}</button>
+              <button className="btn primary" disabled={busy} onClick={install}>{busy ? t("appUpdateDialog.updating") : t("appUpdateDialog.restartAndUpdate")}</button>
             </div>
           </>
         )}
@@ -51,17 +52,17 @@ export function AppUpdateRow({ shell }: { shell: Shell }) {
   return (
     <div className="card app-update">
       <div className="set-update">
-        <div><b>OpenGSD Path app</b>
+        <div><b>{t("appUpdateDialog.appRow")}</b>
           <div className="set-path">
-            {row?.state === "check-failed" ? `The update check failed: ${shell.update_error}`
+            {row?.state === "check-failed" ? t("appUpdateDialog.checkFailed", { error: shell.update_error })
               : row?.state === "refused" ? refusedText(shell)
-              : checked && !row ? "This is the newest version." : "Updates are signed; the app refuses one that does not match."}
+              : checked && !row ? t("appUpdateDialog.newest") : t("appUpdateDialog.signed")}
           </div>
         </div>
         <span className="set-version">{row?.text ?? shell.version}</span>
         {row && row.state !== "check-failed"
-          ? <button className="btn small primary" onClick={() => dispatchEvent(new Event(SHOW_UPDATE))}>{row.state === "refused" ? "Details" : "Update…"}</button>
-          : <button className="btn small" disabled={checking} onClick={check}>{checking ? "Checking…" : "Check for updates"}</button>}
+          ? <button className="btn small primary" onClick={() => dispatchEvent(new Event(SHOW_UPDATE))}>{row.state === "refused" ? t("appUpdateDialog.details") : t("appUpdateDialog.updateEllipsis")}</button>
+          : <button className="btn small" disabled={checking} onClick={check}>{checking ? t("appUpdateDialog.checking") : t("skillsPage.checkForUpdates")}</button>}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 // Skills in each agent: the installed version, the release to install, and the install actions.
 import { useState } from "react";
+import { t } from "../i18n";
 import { api } from "../shell";
 import { failure, notDetected, sharedRoots, skillRows, targetVersion } from "../skills";
 import type { Failure, SkillRow, UninstallPlan } from "../skills";
@@ -36,39 +37,40 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
     setBusy(null);
     reload();
   };
-  const verb = (row: SkillRow) => (row.status === "Update available" || row.status === "No version stamp" ? "updated" : "installed");
+  // Stable, not the translated status text: an update waits, or the version is unknown.
+  const verb = (row: SkillRow) => (row.stale || row.version === "—" ? "updated" : "installed");
 
-  const preview = (row: SkillRow) => run(row, `Reading the plan for ${row.label}…`, verb(row), async () => {
+  const preview = (row: SkillRow) => run(row, t("skillsPage.readingPlanFor", { label: row.label }), verb(row), async () => {
     const result = await installSkills(row.ids, true);
-    if (!result.ok) throw new Error(result.error || "The dry run failed.");
+    if (!result.ok) throw new Error(result.error || t("skillsOp.dryRunFailed"));
     return { kind: "preview", row, text: result.stdout_tail ?? "" };
   });
-  const install = (row: SkillRow) => run(row, `Installing ${target} in ${row.label}…`, verb(row), async () => {
+  const install = (row: SkillRow) => run(row, t("skillsPage.installingIn", { version: target ?? "", label: row.label }), verb(row), async () => {
     const result = await installSkills(row.ids, false);
     if (!result.ok) {
-      return { kind: "failed", row, failure: failure(verb(row), [row.label], result.error || "The installer failed."),
+      return { kind: "failed", row, failure: failure(verb(row), [row.label], result.error || t("updates.installerFailed")),
         output: result.stdout_tail ?? "", retry: () => install(row) };
     }
-    return { kind: "done", text: `Installed ${target} in ${row.label}.`, output: result.stdout_tail ?? "" };
+    return { kind: "done", text: t("skillsPage.installedIn", { version: target ?? "", label: row.label }), output: result.stdout_tail ?? "" };
   });
-  const plan = (row: SkillRow) => run(row, `Reading the removal plan for ${row.label}…`, "removed", async () =>
+  const plan = (row: SkillRow) => run(row, t("skillsPage.readingRemovalFor", { label: row.label }), "removed", async () =>
     ({ kind: "plan", row, plan: (await planUninstall({ scope: "global", hosts: row.ids })).plan }));
-  const remove = (row: SkillRow) => run(row, `Removing skills from ${row.label}…`, "removed", async () => {
+  const remove = (row: SkillRow) => run(row, t("skillsPage.removingFrom", { label: row.label }), "removed", async () => {
     const result = await applyUninstall({ scope: "global", hosts: row.ids });
-    if (!result.ok) throw new Error(result.errors.map((item) => `${item.path}: ${item.error}`).join("\n") || "The removal failed.");
-    return { kind: "done", text: `Removed Path skills from ${row.label}.`, output: result.applied.join("\n") };
+    if (!result.ok) throw new Error(result.errors.map((item) => `${item.path}: ${item.error}`).join("\n") || t("skillsPage.removalFailed"));
+    return { kind: "done", text: t("skillsPage.removedFrom", { label: row.label }), output: result.applied.join("\n") };
   });
 
   const checkNow = async () => {
-    setBusy("Checking for updates…");
+    setBusy(t("skillsPage.checking"));
     setCheck(null);
     setFrameworkErrors({});
     try {
       const result = await api<{ ok: boolean; error: string | null; latest: string | null; framework_errors?: Record<string, string | null> }>(
         "POST", "/api/plugin/check", {});
       setFrameworkErrors(result.framework_errors ?? {});
-      setCheck(result.ok ? { text: result.latest ? `Checked. The latest release is ${result.latest}.` : "Checked. No release is published.", bad: false }
-        : { text: result.error || "The check failed.", bad: true });
+      setCheck(result.ok ? { text: result.latest ? t("skillsPage.checkedLatest", { version: result.latest }) : t("skillsPage.checkedNoRelease"), bad: false }
+        : { text: result.error || t("skillsPage.checkFailed"), bad: true });
     } catch (failed) {
       setCheck({ text: message(failed), bad: true });
     }
@@ -77,20 +79,20 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
   };
 
   return (
-    <main className="page skills" aria-label="Skills">
+    <main className="page skills" aria-label={t("nav.skills")}>
       <div className="skills-head">
-        <div><h1 className="title">Skills</h1><p>Path skills in each coding agent's global skills folder.</p></div>
+        <div><h1 className="title">{t("nav.skills")}</h1><p>{t("skillsPage.lead")}</p></div>
         <span className="grow" />
         <ReleasePicker releases={plugin?.releases} disabled={!!busy} onChanged={() => { setPanel(null); reload(); }} />
-        <button className="btn" disabled={!!busy} onClick={checkNow}>Check for updates</button>
+        <button className="btn" disabled={!!busy} onClick={checkNow}>{t("skillsPage.checkForUpdates")}</button>
       </div>
       {check && <p className={check.bad ? "error" : "note skills-check"} role={check.bad ? "alert" : "status"}>{check.text}</p>}
-      {error && <p className="error" role="alert">{error} <button className="link" onClick={reload}>Try again</button></p>}
+      {error && <p className="error" role="alert">{error} <button className="link" onClick={reload}>{t("common.tryAgain")}</button></p>}
 
       {rows.length ? (
         <div className="card scroll-x">
           <div className="skills-table">
-            <div className="skills-th"><span>Agent</span><span>Skills folder</span><span>Version</span><span>Status</span><span /></div>
+            <div className="skills-th"><span>{t("path.agent")}</span><span>{t("skillsPage.skillsFolder")}</span><span>{t("skillsPage.version")}</span><span>{t("board.col.status")}</span><span /></div>
             {rows.map((row) => (
               <div key={row.path} className="skills-row">
                 <b>{row.label}</b>
@@ -99,22 +101,22 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
                 <span><span className={`pill ${row.tone}`}>{row.status}</span></span>
                 <span className="skills-actions">
                   {row.primary && <button className="btn small primary" disabled={!!busy} onClick={() => preview(row)}>{row.primary}</button>}
-                  {row.preview && <button className="btn small" disabled={!!busy} onClick={() => preview(row)}>Preview</button>}
-                  {row.uninstall && <button className="btn small sk-danger-text" disabled={!!busy} onClick={() => plan(row)}>Uninstall</button>}
+                  {row.preview && <button className="btn small" disabled={!!busy} onClick={() => preview(row)}>{t("skillsPage.preview")}</button>}
+                  {row.uninstall && <button className="btn small sk-danger-text" disabled={!!busy} onClick={() => plan(row)}>{t("skillsPage.uninstall")}</button>}
                 </span>
               </div>
             ))}
           </div>
         </div>
-      ) : !error && <div className="empty">{plugin ? "No coding agent was found on this computer." : "Loading skills…"}</div>}
+      ) : !error && <div className="empty">{plugin ? t("skillsPage.noAgentFound") : t("skillsPage.loading")}</div>}
 
       {busy && <div className="sk-progress" role="status"><div className="bar busy"><i /></div><div className="sub">{busy}</div></div>}
       {!busy && panel?.kind === "preview" && (
         <div className="sk-panel">
           <Output text={panel.text} />
           <div className="actions">
-            <button className="btn small primary" onClick={() => install(panel.row)}>{panel.row.primary ?? "Install"} in {panel.row.label}</button>
-            <button className="btn small" onClick={() => setPanel(null)}>Cancel</button>
+            <button className="btn small primary" onClick={() => install(panel.row)}>{t("skillsPage.installInLabel", { label: panel.row.primary ?? t("skill.install"), agent: panel.row.label })}</button>
+            <button className="btn small" onClick={() => setPanel(null)}>{t("updates.cancel")}</button>
           </div>
         </div>
       )}
@@ -129,7 +131,7 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
       )}
       {!busy && panel?.kind === "plan" && (
         <div className="sk-panel">
-          <PlanBox plan={panel.plan} confirm={`Uninstall from ${panel.row.label}`} busy={false}
+          <PlanBox plan={panel.plan} confirm={t("skillsPage.uninstallFrom", { label: panel.row.label })} busy={false}
             onConfirm={() => remove(panel.row)} onCancel={() => setPanel(null)} />
         </div>
       )}
@@ -139,9 +141,9 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
       {plugin && (
         <p className="note">
           {sharedRoots(hosts).map((shared) => (
-            <span key={shared.path}>{shared.names} share <span className="mono">{shared.path}</span>, so installing for one covers both. </span>
+            <span key={shared.path}>{t("skillsPage.shareNote", { names: shared.names, path: shared.path })} </span>
           ))}
-          {missing.length > 0 && `${missing.length} more ${missing.length === 1 ? "agent is" : "agents are"} not detected on this computer: ${missing.join(", ")}.`}
+          {missing.length > 0 && t("skillsPage.notDetected", { n: missing.length, list: missing.join(t("list.separator")) })}
         </p>
       )}
     </main>

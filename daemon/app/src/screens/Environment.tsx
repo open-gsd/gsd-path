@@ -1,5 +1,6 @@
 // The .env editor of one project. Values stay masked until Show; a save shows its diff first.
 import { useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 import { buildChanges, diffLines, ENV_FILES, fileNote, gitPill, hide, isDirty, JEV, jevOn, jevPlan, MASK, needsValue, newRow, refusal, rowErrors, rowsFrom, valueView } from "../env";
 import type { Change, DiffItem, EnvFile, EnvRow, Listing } from "../env";
 import { projectHash } from "../route";
@@ -97,7 +98,7 @@ export function Environment({ project }: { project: Project }) {
 
   const previewSave = async () => {
     setChecked(true); setPreview(null); setNote(null);
-    if (Object.keys(errors).length) return setNote({ text: "Correct the names marked above, then save again.", bad: true });
+    if (Object.keys(errors).length) return setNote({ text: t("envPage.correctNames"), bad: true });
     const mine = turn.current;
     setBusy(true);
     try {
@@ -108,7 +109,7 @@ export function Environment({ project }: { project: Project }) {
       const result = await save(file, changes, true);
       if (mine !== turn.current) return;
       if (result.diff.length) setPreview({ changes, diff: result.diff });
-      else setNote({ text: `No change: ${file} already holds these values.` });
+      else setNote({ text: t("envPage.noChange", { file }) });
     } catch (error) {
       if (mine === turn.current) setNote({ text: message(error), bad: true });
     } finally {
@@ -121,7 +122,7 @@ export function Environment({ project }: { project: Project }) {
     try {
       await save(file, preview.changes, false);
       await load(file);
-      setNote({ text: `Saved ${file}.` });
+      setNote({ text: t("envPage.savedFile", { file }) });
     } catch (error) {
       setNote({ text: message(error), bad: true });
     } finally {
@@ -170,25 +171,25 @@ export function Environment({ project }: { project: Project }) {
   const pill = listing && gitPill(listing.git);
 
   return (
-    <main className="page env" aria-label="Environment">
+    <main className="page env" aria-label={t("setup.environment")}>
       <a className="crumb" href={projectHash(root)}>‹ {nameOf(project)}</a>
       <div className="env-head">
-        <h1 className="title">Environment</h1>
-        <p>Variables stored in this project's env files. Values stay on this computer. They are never shown on the board, in logs or in reports.</p>
+        <h1 className="title">{t("setup.environment")}</h1>
+        <p>{t("envPage.lead")}</p>
       </div>
 
-      {!loaded ? <div className="empty" role="status">Reading the env files…</div> : refused ? (
+      {!loaded ? <div className="empty" role="status">{t("envPage.reading")}</div> : refused ? (
         <div className="env-refused" role="alert">
-          <b>The monitor refuses to open env files.</b>
+          <b>{t("envPage.refuses")}</b>
           <span>{refused}</span>
           <div className="actions">
-            <button className="btn primary" onClick={restart} disabled={busy}>Restart monitor</button>
+            <button className="btn primary" onClick={restart} disabled={busy}>{t("envPage.restartMonitor")}</button>
             {note?.bad && <span className="env-note bad">{note.text}</span>}
           </div>
         </div>
       ) : <>
         <div className="env-bar">
-          <div className="env-seg" role="group" aria-label="Env file">
+          <div className="env-seg" role="group" aria-label={t("envPage.envFile")}>
             {ENV_FILES.map((name) => <button key={name} aria-pressed={file === name} disabled={busy} onClick={() => open(name)}>{name}</button>)}
           </div>
           {pill && <span className={`pill ${pill.tone}`}>{pill.label}</span>}
@@ -196,69 +197,69 @@ export function Environment({ project }: { project: Project }) {
         {listing ? <>
           <div className="env-file-note">{fileNote(listing)}</div>
           <div className="env-table">
-            <div className="env-th"><span>Name</span><span>Value</span><span /></div>
+            <div className="env-th"><span>{t("envPage.name")}</span><span>{t("envPage.value")}</span><span /></div>
             {rows.map((row) => {
               const value = valueView(row);
               const error = (checked && errors[row.key]) || rowNotes[row.key];
               return (
                 <div key={row.key} className={row.removed ? "env-row removed" : "env-row"}>
                   <div>
-                    <input className="env-name" aria-label="Name" value={row.name} disabled={row.removed} spellCheck={false}
+                    <input className="env-name" aria-label={t("envPage.name")} value={row.name} disabled={row.removed} spellCheck={false}
                       placeholder="NEW_VARIABLE" aria-invalid={checked && !!errors[row.key]} autoFocus={row.original === null}
                       onChange={(event) => patch(row.key, { name: event.target.value })} />
                     {error && <div className="env-error" role="alert">{error}</div>}
                   </div>
                   <div>
-                    {row.removed ? <span className="env-quiet">Removed when you save</span>
-                      : value === null ? <span className="env-mask" aria-label="Hidden value">{MASK}</span>
-                      : value.includes("\n") ? <span className="env-multi">{value}<small>A value with more than one line: edit it in the file.</small></span>
-                      : <input className="env-value" aria-label={`Value of ${row.name || "the new variable"}`} value={value} spellCheck={false}
-                          autoComplete="off" placeholder="Empty" onChange={(event) => patch(row.key, { draft: event.target.value, shown: true })} />}
+                    {row.removed ? <span className="env-quiet">{t("envPage.removedWhenSave")}</span>
+                      : value === null ? <span className="env-mask" aria-label={t("envPage.hiddenValue")}>{MASK}</span>
+                      : value.includes("\n") ? <span className="env-multi">{value}<small>{t("envPage.multiLine")}</small></span>
+                      : <input className="env-value" aria-label={t("envPage.valueOf", { name: row.name || t("envPage.newVariable") })} value={value} spellCheck={false}
+                          autoComplete="off" placeholder={t("envPage.empty")} onChange={(event) => patch(row.key, { draft: event.target.value, shown: true })} />}
                   </div>
                   <span className="env-actions">
-                    {row.removed ? <button className="btn small" onClick={() => patch(row.key, { removed: false })}>Undo</button> : <>
+                    {row.removed ? <button className="btn small" onClick={() => patch(row.key, { removed: false })}>{t("envPage.undo")}</button> : <>
                       {value !== "" && (row.shown && value !== null
-                        ? <button className="btn small" onClick={() => setRows((list) => list.map((item) => (item.key === row.key ? hide(item) : item)))}>Hide</button>
-                        : <button className="btn small" onClick={() => show(row)}>Show</button>)}
-                      <button className="btn small danger" onClick={() => remove(row)}>Remove</button>
+                        ? <button className="btn small" onClick={() => setRows((list) => list.map((item) => (item.key === row.key ? hide(item) : item)))}>{t("updates.hide")}</button>
+                        : <button className="btn small" onClick={() => show(row)}>{t("envPage.show")}</button>)}
+                      <button className="btn small danger" onClick={() => remove(row)}>{t("settings.remove")}</button>
                     </>}
                   </span>
                 </div>
               );
             })}
-            {!rows.length && <div className="env-row"><span className="env-quiet">{listing.exists ? `${file} has no variables.` : `${file} does not exist yet.`}</span></div>}
-            <div className="env-add"><button className="btn small" onClick={() => edit((list) => [...list, newRow(list)])}>Add variable</button></div>
+            {!rows.length && <div className="env-row"><span className="env-quiet">{listing.exists ? t("envPage.noVariables", { file }) : t("envPage.notExist", { file })}</span></div>}
+            <div className="env-add"><button className="btn small" onClick={() => edit((list) => [...list, newRow(list)])}>{t("envPage.addVariable")}</button></div>
           </div>
-        </> : <p className="error" role="alert">Cannot open {file}: {loaded.errors[file]}</p>}
+        </> : <p className="error" role="alert">{t("envPage.cannotOpen", { file, error: loaded.errors[file] })}</p>}
 
         <div className="env-jev">
           <div className="env-jev-row">
             <div className="grow">
-              <b id="jev-label">Jev screening</b>
-              <div className="sub">Optional advisory screening of evidence. Off by default. Turning it on adds <span className="mono">GSD_PATH_JEV=1</span> to the file chosen below. The key, <span className="mono">TYPESAFE_API_KEY</span>, belongs in .env.local.</div>
+              <b id="jev-label">{t("envPage.jevTitle")}</b>
+              <div className="sub">{t("envPage.jevSub1")} <span className="mono">GSD_PATH_JEV=1</span> {t("envPage.jevSub2")} <span className="mono">TYPESAFE_API_KEY</span>{t("envPage.jevSub3")}</div>
             </div>
             <button className="env-toggle" role="switch" aria-checked={on.length > 0} aria-labelledby="jev-label"
               disabled={busy || dirty || !!jevPreview} onClick={previewJev}><i /></button>
           </div>
           <div className="env-jev-target">
-            <label htmlFor="jev-file">Write the flag to</label>
+            <label htmlFor="jev-file">{t("envPage.writeFlagTo")}</label>
             <select id="jev-file" value={on[0] ?? jevTarget} disabled={on.length > 0 || !!jevPreview}
               onChange={(event) => setJevTarget(event.target.value as EnvFile)}>
               {ENV_FILES.map((name) => <option key={name}>{name}</option>)}
             </select>
-            <span>{on.length ? `On in ${on.join(", ")}. Turn it off to choose another file.` : dirty ? `Save or discard the changes in ${file} first.` : ""}</span>
+            <span>{on.length ? t("envPage.onIn", { files: on.join(t("list.separator")) }) : dirty ? t("envPage.saveOrDiscardFirst", { file }) : ""}</span>
           </div>
           {jevPreview && (
             <div className="env-preview">
-              <b>{jevPreview.on ? "Turn Jev screening on" : "Turn Jev screening off"}</b>
+              <b>{jevPreview.on ? t("envPage.turnJevOn") : t("envPage.turnJevOff")}</b>
               {jevPreview.items.map((item) => (
                 <div key={item.file}><span className="mono">{item.file}</span>
-                  <ul>{item.diff.length ? diffLines(item.diff).map((line) => <li key={line} className="mono">{line}</li>) : <li>No change: the flag is already set.</li>}</ul>
+                  <ul>{item.diff.length ? diffLines(item.diff).map((line) => <li key={line} className="mono">{line}</li>) : <li>{t("envPage.flagAlreadySet")}</li>}</ul>
                 </div>
               ))}
               <div className="actions">
-                <button className="btn primary" onClick={confirmJev} disabled={busy}>Confirm</button>
-                <button className="btn" onClick={() => setJevPreview(null)} disabled={busy}>Cancel</button>
+                <button className="btn primary" onClick={confirmJev} disabled={busy}>{t("envPage.confirm")}</button>
+                <button className="btn" onClick={() => setJevPreview(null)} disabled={busy}>{t("updates.cancel")}</button>
               </div>
             </div>
           )}
@@ -267,20 +268,20 @@ export function Environment({ project }: { project: Project }) {
 
         {preview && (
           <div className="env-preview">
-            <b>Changes to {file}</b>
+            <b>{t("envPage.changesTo", { file })}</b>
             <ul>{diffLines(preview.diff).map((line) => <li key={line} className="mono">{line}</li>)}</ul>
-            <div className="sub">Only {file} is rewritten. Every other line of the file stays as it is.</div>
+            <div className="sub">{t("envPage.onlyRewritten", { file })}</div>
             <div className="actions">
-              <button className="btn primary" onClick={confirmSave} disabled={busy}>Confirm</button>
-              <button className="btn" onClick={() => setPreview(null)} disabled={busy}>Cancel</button>
+              <button className="btn primary" onClick={confirmSave} disabled={busy}>{t("envPage.confirm")}</button>
+              <button className="btn" onClick={() => setPreview(null)} disabled={busy}>{t("updates.cancel")}</button>
             </div>
           </div>
         )}
         <div className="env-foot">
-          <button className="btn primary" onClick={previewSave} disabled={busy || !listing || !dirty || !!preview}>Save {file}</button>
-          <button className="btn" onClick={() => reset(listing)} disabled={busy || !dirty}>Discard</button>
+          <button className="btn primary" onClick={previewSave} disabled={busy || !listing || !dirty || !!preview}>{t("envPage.saveFile", { file })}</button>
+          <button className="btn" onClick={() => reset(listing)} disabled={busy || !dirty}>{t("settings.discard")}</button>
           <span className={note?.bad ? "env-note bad" : "env-note"} role={note?.bad ? "alert" : "status"}>
-            {note ? note.text : dirty ? "Unsaved changes. Opening another file discards them." : "Saving rewrites only the file shown. A diff is shown first."}
+            {note ? note.text : dirty ? t("envPage.unsavedChanges") : t("envPage.savingNote")}
           </span>
         </div>
       </>}

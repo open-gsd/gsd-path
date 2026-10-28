@@ -1,5 +1,6 @@
 // Settings → Path settings: the form over GET/POST /api/path-config (daemon/gsd_daemon/path_settings.py).
 // The daemon takes one key per request; Save sends one request per changed key.
+import { t } from "./i18n";
 import { flavorOf } from "./status";
 import type { Project } from "./status";
 
@@ -43,17 +44,21 @@ export const lockOf = (data: PathData, key: string): string | null =>
 export const canReset = (data: PathData, key: string, root: string): boolean =>
   !lockOf(data, key) && (isSetting(key) ? !(key === "integration" && root) : key in data.models);
 
-const MODES: [string, string][] = [["direct", "Direct merge"], ["pull-request", "Pull request"]];
+const MODES = (): [string, string][] => [["direct", t("path.directMerge")], ["pull-request", t("path.pullRequest")]];
 /** The modes the dashboard offers, plus the configured one when it is another mode. */
-export const integrationOptions = (value: string): [string, string][] =>
-  MODES.some(([mode]) => mode === value) ? MODES
-    : [...MODES, [value, value === "external-landing" ? "External landing" : value]];
+export const integrationOptions = (value: string): [string, string][] => {
+  const modes = MODES();
+  return modes.some(([mode]) => mode === value) ? modes
+    : [...modes, [value, value === "external-landing" ? t("path.externalLanding") : value]];
+};
 
 function labelOf(key: string): string {
-  if (key === "integration") return "Shipping mode";
-  if (key === "review_panel") return "Review panel";
+  if (key === "integration") return t("path.shippingMode");
+  if (key === "review_panel") return t("path.reviewPanel");
   const bits = key.split(".");
-  return bits[1] === "hosts" ? `${bits[3]} ${bits[4]} on ${bits[2]}` : `${bits[2]} ${bits[3]}`;
+  return bits[1] === "hosts"
+    ? t("path.modelOnHost", { field: `${bits[3]} ${bits[4]}`, host: bits[2] })
+    : `${bits[2]} ${bits[3]}`;
 }
 
 /** The requests Save sends, in draft order, and the same list as text for the user to check first. */
@@ -66,14 +71,14 @@ export function pathChanges(data: PathData, drafts: PathDrafts): { requests: Pat
     const label = labelOf(key), before = configured(data, key);
     if (draft === null) {
       requests.push({ action: "reset", key });
-      summary.push(`${label}: reset (now ${before})`);
+      summary.push(t("path.summaryReset", { label, before }));
     } else if (!draft.trim()) {
-      errors.push(`${label} needs a value. Use Reset to remove it.`);
+      errors.push(t("path.needsValue", { label }));
     } else if (key === "review_panel" && /\s/.test(draft)) {
-      errors.push("Review panel: use off, detected, or comma-separated families without spaces.");
+      errors.push(t("path.panelSpaces"));
     } else if (draft.trim() !== before) {
       requests.push({ action: "set", key, value: draft.trim() });
-      summary.push(`${label}: ${before} → ${draft.trim()}`);
+      summary.push(t("path.summarySet", { label, before, after: draft.trim() }));
     }
   }
   return errors.length ? { requests: [], errors, summary: [] } : { requests, errors, summary };
@@ -82,8 +87,8 @@ export function pathChanges(data: PathData, drafts: PathDrafts): { requests: Pat
 /** When the saved settings take effect: the same texts as the daemon dashboard. */
 export function savedNote(keys: string[], root: string): string {
   const notes = keys.map((key) => (key === "integration"
-    ? (root ? "Project shipping default updated." : "Applies to newly initialized projects.")
-    : key === "review_panel" ? "Applies when preparing future review approvals."
-    : "Applies to new assignments; running assignments keep their selection."));
-  return ["Saved.", ...new Set(notes)].join(" ");
+    ? (root ? t("path.noteProjectUpdated") : t("path.noteNewProjects"))
+    : key === "review_panel" ? t("path.notePanel")
+    : t("path.noteAssignments")));
+  return [t("settings.saved"), ...new Set(notes)].join(" ");
 }

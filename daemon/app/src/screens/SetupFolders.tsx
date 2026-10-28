@@ -1,5 +1,6 @@
 // Setup, step 4: the folders the monitor watches.
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { api, pickFolder } from "../shell";
 import { message } from "../skillsApi";
 import type { Status } from "../status";
@@ -35,40 +36,40 @@ export function SetupFolders() {
     try {
       const folder = await pickFolder();
       if (!folder || !parents) return;
-      if (parents.includes(folder)) return setError(`${folder} is already watched.`);
-      setAsk({ parents: [...parents, folder], text: `Watch ${folder}? The monitor looks for Git repositories under it.`, label: "Watch folder", danger: false });
+      if (parents.includes(folder)) return setError(t("setupFolders.alreadyWatched", { folder }));
+      setAsk({ parents: [...parents, folder], text: t("setupFolders.watchAsk", { folder }), label: t("setupFolders.watchFolder"), danger: false });
     } catch (failed) { setError(message(failed)); }
   };
   const stop = (folder: string) => { setError(null); setAsk({
-    parents: parents!.filter((item) => item !== folder), label: "Stop watching", danger: true,
-    text: `Stop watching ${folder}? Its projects leave the board. No file is changed in them.`,
+    parents: parents!.filter((item) => item !== folder), label: t("settings.stopWatching"), danger: true,
+    text: t("setupFolders.stopAsk", { folder }),
   }); };
 
   return <>
-    <h1 className="title">Folders to watch</h1>
-    <p className="lead setup-lead">The app looks for Git repositories under these folders and shows the ones that use Path on the board.</p>
+    <h1 className="title">{t("setupFolders.title")}</h1>
+    <p className="lead setup-lead">{t("setupFolders.lead")}</p>
     <div className="card sk-folders">
-      {parents === null && !error && <div className="sk-folder sub">Loading folders…</div>}
-      {parents?.length === 0 && <div className="sk-folder sub">No folder is watched yet.</div>}
+      {parents === null && !error && <div className="sk-folder sub">{t("setupFolders.loading")}</div>}
+      {parents?.length === 0 && <div className="sk-folder sub">{t("setupFolders.noneYet")}</div>}
       {parents?.map((folder) => (
         <div key={folder} className="sk-folder">
           <span className="mono grow">{folder}</span>
-          <button className="btn small sk-danger" disabled={busy} onClick={() => stop(folder)}>Stop watching</button>
+          <button className="btn small sk-danger" disabled={busy} onClick={() => stop(folder)}>{t("settings.stopWatching")}</button>
         </div>
       ))}
-      <div className="sk-folder"><button className="btn" disabled={busy || parents === null} onClick={add}>Add folder…</button></div>
+      <div className="sk-folder"><button className="btn" disabled={busy || parents === null} onClick={add}>{t("settings.addFolder")}</button></div>
     </div>
     {ask && (
       <div className="sk-ask-box">
         <span className="grow">{ask.text}</span>
         <button className={ask.danger ? "btn small sk-danger" : "btn small primary"} disabled={busy} onClick={() => save(ask)}>{ask.label}</button>
-        <button className="btn small" disabled={busy} onClick={() => setAsk(null)}>Cancel</button>
+        <button className="btn small" disabled={busy} onClick={() => setAsk(null)}>{t("updates.cancel")}</button>
       </div>
     )}
     {error && <p className="error" role="alert">{error}</p>}
     {projects != null && (
-      <div className="card sk-folder-count"><b>{projects}</b><span>{projects === 1 ? "project already uses Path" : "projects already use Path"}</span></div>
+      <div className="card sk-folder-count"><b>{projects}</b><span>{projects === 1 ? t("setupFolders.oneUsesPath") : t("setupFolders.manyUsePath", { n: projects })}</span></div>
     )}
-    <p className="note">Excluded folders and scan depth are in Settings → Monitoring.</p>
+    <p className="note">{t("setupFolders.settingsNote")}</p>
   </>;
 }

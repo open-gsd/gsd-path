@@ -1,14 +1,15 @@
 // Setup, step 2: the agents that get Path skills.
+import { t } from "../i18n";
 import { agentCards } from "../setup";
 import type { HostInfo } from "../skills";
 
 export function SetupAgents({ hosts, selected, onToggle }: { hosts: HostInfo[]; selected: string[]; onToggle: (id: string) => void }) {
   const cards = agentCards(hosts, selected);
   return <>
-    <h1 className="title">Your coding agents</h1>
+    <h1 className="title">{t("setupAgents.title")}</h1>
     <p className="lead setup-lead">
-      Found {cards.filter((card) => card.found).length} of {cards.length} supported agents. Path skills go into each agent you select.
-      Path does not install the agents themselves.
+      {t("setupAgents.lead", { found: cards.filter((card) => card.found).length, total: cards.length })}
+      {t("setupAgents.lead2")}
     </p>
     <div className="sk-agents">
       {cards.map((card) => (
@@ -18,6 +19,6 @@ export function SetupAgents({ hosts, selected, onToggle }: { hosts: HostInfo[]; 
         </label>
       ))}
     </div>
-    <p className="note">Agents that are not found can still be selected.</p>
+    <p className="note">{t("setupAgents.notFoundNote")}</p>
   </>;
 }

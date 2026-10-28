@@ -1,5 +1,6 @@
 // Pieces the Skills page, the project Setup card and the setup wizard share.
 import { useState } from "react";
+import { t } from "../i18n";
 import { api } from "../shell";
 import { releaseOptions } from "../skills";
 import type { Failure, Releases, UninstallPlan } from "../skills";
@@ -8,7 +9,7 @@ import { CopyButton } from "../ui";
 
 /** Installer output, as the daemon sent it. */
 export function Output({ text }: { text: string }) {
-  return <pre className="sk-out">{text || "The installer printed nothing."}</pre>;
+  return <pre className="sk-out">{text || t("updates.noPreview")}</pre>;
 }
 
 /** Latest plus the older releases. Hidden when the daemon installs from a git clone. */
@@ -29,7 +30,7 @@ export function ReleasePicker({ releases, disabled, onChanged }: { releases: Rel
     setBusy(false);
   };
   return (
-    <label className="sk-field">Release
+    <label className="sk-field">{t("skillsPage.release")}
       <select value={releases!.selected ?? ""} disabled={disabled || busy} onChange={(event) => choose(event.target.value)}>
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
@@ -45,15 +46,15 @@ export function FailureCard({ failure, output, busy, onRetry, onClose }: {
   const [open, setOpen] = useState(false);
   return (
     <div className="sk-fail" role="alert">
-      <div className="line"><b>{failure.title}</b><span className="pill bad">Failed</span></div>
+      <div className="line"><b>{failure.title}</b><span className="pill bad">{t("skillsPage.failed")}</span></div>
       <span className="sk-fail-text">{failure.text.split("`").map((part, index) => (index % 2 ? <code key={index} className="mono">{part}</code> : part))}
         {failure.unchanged && <> {failure.unchanged}</>}</span>
       {failure.fix && <div className="code">{failure.fix}</div>}
       <div className="actions">
-        {failure.fix && <CopyButton text={failure.fix} label="Copy fix" className="btn small" />}
-        <button className="btn small primary" disabled={busy} onClick={onRetry}>Try again</button>
-        <button className="link" aria-expanded={open} onClick={() => setOpen(!open)}>Installer output</button>
-        {onClose && <button className="link" onClick={onClose}>Close</button>}
+        {failure.fix && <CopyButton text={failure.fix} label={t("skillsPage.copyFix")} className="btn small" />}
+        <button className="btn small primary" disabled={busy} onClick={onRetry}>{t("common.tryAgain")}</button>
+        <button className="link" aria-expanded={open} onClick={() => setOpen(!open)}>{t("skillsPage.installerOutput")}</button>
+        {onClose && <button className="link" onClick={onClose}>{t("updates.close")}</button>}
       </div>
       {open && <Output text={output} />}
     </div>
@@ -66,18 +67,18 @@ export function PlanBox({ plan, confirm, busy, onConfirm, onCancel }: {
 }) {
   return (
     <div className="sk-plan">
-      <b>Plan</b>
+      <b>{t("skillsPage.plan")}</b>
       {plan.plan.length ? (
         <ul>{plan.plan.map((entry) => <li key={entry.path}><span className="mono">{entry.path}</span><small>{entry.reason}</small></li>)}</ul>
-      ) : <div className="sub">Nothing to remove. No file here is managed by Path.</div>}
+      ) : <div className="sub">{t("skillsPage.nothingToRemove")}</div>}
       {plan.skipped.length > 0 && <>
-        <b>Kept</b>
+        <b>{t("skillsPage.kept")}</b>
         <ul>{plan.skipped.map((entry) => <li key={entry.path}><span className="mono">{entry.path}</span><small>{entry.reason}</small></li>)}</ul>
       </>}
-      <div className="sub">Nothing under <span className="mono">.project/</span> is touched.</div>
+      <div className="sub">{t("skillsPage.projectUntouched", { dir: ".project/" })}</div>
       <div className="actions">
-        {plan.plan.length > 0 && <button className="btn small sk-danger" disabled={busy} onClick={onConfirm}>{busy ? "Removing…" : confirm}</button>}
-        <button className="btn small" disabled={busy} onClick={onCancel}>Cancel</button>
+        {plan.plan.length > 0 && <button className="btn small sk-danger" disabled={busy} onClick={onConfirm}>{busy ? t("skillsPage.removing") : confirm}</button>}
+        <button className="btn small" disabled={busy} onClick={onCancel}>{t("updates.cancel")}</button>
       </div>
     </div>
   );
