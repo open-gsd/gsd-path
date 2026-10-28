@@ -1,6 +1,7 @@
 // Small shared pieces. Screens build on these and on the classes in app.css.
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { t } from "./i18n";
 import { openUrl } from "./shell";
 import type { RowAction } from "./screen";
 import type { Cell } from "./status";
@@ -27,7 +28,7 @@ export function CopyButton({ text, label, primary, className = "btn" }: { text: 
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
-  return <button className={primary ? "btn primary" : className} onClick={copy}>{copied ? "Copied" : label}</button>;
+  return <button className={primary ? "btn primary" : className} onClick={copy}>{copied ? t("ui.copied") : label}</button>;
 }
 
 export function ActionButton({ action, primary = true }: { action: RowAction; primary?: boolean }) {

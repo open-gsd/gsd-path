@@ -1,4 +1,5 @@
 // The app's own update (Tauri updater): what Settings → Updates, the dialog, and the tray show.
+import { t } from "./i18n";
 import type { Shell } from "./shell";
 
 export type AppUpdateRow = {
@@ -18,13 +19,13 @@ export function appUpdateRow(shell: Shell): AppUpdateRow | null {
 
 /** A refused update changed nothing; say so with the updater's reason. */
 export const refusedText = (shell: Shell) =>
-  `The update was not installed: ${shell.update_error}. You are still on ${shell.version} and nothing was changed.`;
+  t("appUpdate.refused", { reason: shell.update_error, version: shell.version });
 
 /** The tray strip: the app update first, then how many other updates wait. */
 export function readyLine(shell: Shell, others: number): string | null {
   if (!shell.update || shell.update_error) return null;
-  const more = others > 0 ? ` · ${others} more update${others === 1 ? "" : "s"}` : "";
-  return `App ${shell.update.version} is ready${more}`;
+  const more = others > 0 ? " · " + (others === 1 ? t("appUpdate.oneMore") : t("appUpdate.moreUpdates", { n: others })) : "";
+  return t("appUpdate.ready", { version: shell.update.version }) + more;
 }
 
 /** The tray strip's Review: an app update opens its dialog; a skills update opens the dashboard. */

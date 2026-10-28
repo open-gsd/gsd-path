@@ -1,5 +1,6 @@
 // The setup wizard: Requirements, Agents, Skills, Watch folders. Steps 2 to 4 need the monitor.
 import { useState } from "react";
+import { t } from "../i18n";
 import { requirementRows } from "../screen";
 import { footer, preselected, stepGate, STEPS } from "../setup";
 import type { Shell } from "../shell";
@@ -30,20 +31,20 @@ export function Requirements({ shell, onRetry, onDone }: { shell: Shell; onRetry
     <div className="setup">
       <aside className="rail">
         <Logo size={20} />
-        {STEPS.map((label, index) => (
+        {STEPS().map((label, index) => (
           <button key={label} className={`step${index === step ? " current" : index < step ? " done" : ""}`}
             aria-current={index === step ? "step" : undefined} disabled={index > step || installing} onClick={() => setStep(index)}>
             <span className="step-mark">{index < step ? "✓" : index + 1}</span>{label}
           </button>
         ))}
-        <div className="rail-foot">Nothing is installed or written until you click it. Every step can be redone from Settings.</div>
+        <div className="rail-foot">{t("setupWizard.railFoot")}</div>
       </aside>
       <div className="setup-main">
         <div className="setup-body">
-          <div className="eyebrow">Step {step + 1} of {STEPS.length}</div>
+          <div className="eyebrow">{t("setupWizard.stepOf", { n: step + 1, total: STEPS().length })}</div>
           {step === 0 && <>
-            <h1 className="title">What this computer needs</h1>
-            <p className="lead setup-lead">Path runs on Python and Git. The app checks for both and offers a fix when one is missing.</p>
+            <h1 className="title">{t("setupWizard.needsTitle")}</h1>
+            <p className="lead setup-lead">{t("setupWizard.needsLead")}</p>
             <div className="card">
               {rows.map((row) => (
                 <div className="req" key={row.id}>
@@ -61,21 +62,21 @@ export function Requirements({ shell, onRetry, onDone }: { shell: Shell; onRetry
               ))}
             </div>
             {shell.os === "windows" && (
-              <p className="note">The app window also needs the WebView2 runtime. The installer adds it when missing, so there is nothing to do here.</p>
+              <p className="note">{t("setupWizard.webview2")}</p>
             )}
-            {blocked && <p className="note danger">Install the required items, then choose Check again.</p>}
+            {blocked && <p className="note danger">{t("setupWizard.installThenCheck")}</p>}
           </>}
-          {step > 0 && error && <p className="error" role="alert">{error} <button className="link" onClick={reload}>Try again</button></p>}
+          {step > 0 && error && <p className="error" role="alert">{error} <button className="link" onClick={reload}>{t("common.tryAgain")}</button></p>}
           {step === 1 && <SetupAgents hosts={hosts} selected={selected} onToggle={toggle} />}
           {step === 2 && <SetupSkills hosts={hosts} selected={selected} plugin={plugin} reload={reload} onBusy={setInstalling} />}
           {step === 3 && <SetupFolders />}
         </div>
         <div className="setup-foot">
-          {foot.back && <button className="btn" onClick={() => setStep(step - 1)}>Back</button>}
+          {foot.back && <button className="btn" onClick={() => setStep(step - 1)}>{t("common.back")}</button>}
           <span style={{ marginLeft: "auto" }} />
-          {step === 0 && <button className="btn" onClick={onRetry}>Check again</button>}
-          {foot.skip && <button className="btn quiet" onClick={onDone}>Skip for now</button>}
-          <button className="btn primary" disabled={!foot.canNext} onClick={() => (step === STEPS.length - 1 ? onDone() : setStep(step + 1))}>{foot.next}</button>
+          {step === 0 && <button className="btn" onClick={onRetry}>{t("common.checkAgain")}</button>}
+          {foot.skip && <button className="btn quiet" onClick={onDone}>{t("setupWizard.skipForNow")}</button>}
+          <button className="btn primary" disabled={!foot.canNext} onClick={() => (step === STEPS().length - 1 ? onDone() : setStep(step + 1))}>{foot.next}</button>
         </div>
       </div>
     </div>

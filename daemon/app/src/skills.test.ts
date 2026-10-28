@@ -56,7 +56,7 @@ describe("skillRows", () => {
     expect(rows.map((row) => row.label)).toEqual(["Codex and Zed", "Claude Code", "Cursor"]);
     expect(rows[0]).toEqual({
       ids: ["codex", "zed"], label: "Codex and Zed", path: "/Users/me/.agents/skills", version: "1.4.0",
-      tone: "ok", status: "Installed", primary: null, preview: false, uninstall: true,
+      tone: "ok", status: "Installed", stale: false, primary: null, preview: false, uninstall: true,
     });
   });
   it("offers the update and a preview when the installed version is older", () => {

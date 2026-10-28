@@ -1,4 +1,5 @@
 // States where no monitor runs: Python missing, port taken, or another blocking problem.
+import { t } from "../i18n";
 import { heldByDaemon, pythonFix } from "../screen";
 import type { Problem, Shell } from "../shell";
 import { ActionButton, CopyButton, FixText, firstCommand } from "../ui";
@@ -12,11 +13,11 @@ export function PythonMissing({ shell, onRetry }: { shell: Shell; onRetry: () =>
   return (
     <Page>
       <div className="problem">
-        <b>Python 3.9 or newer is needed</b>
-        <span>OpenGSD Path runs its background monitor on Python. Nothing has been started or changed.</span>
+        <b>{t("problems.pythonTitle")}</b>
+        <span>{t("problems.pythonText")}</span>
         {"copy" in fix && <div className="code">{fix.copy}</div>}
         <div className="actions">
-          <button className="btn primary" onClick={onRetry}>Check again</button>
+          <button className="btn primary" onClick={onRetry}>{t("common.checkAgain")}</button>
           <ActionButton action={fix} primary={false} />
         </div>
       </div>
@@ -32,11 +33,11 @@ export function PortInUse({ shell, problem, onRetry, onUsePort }: {
     return (
       <Page>
         <div className="problem">
-          <b>Port {shell.port} is already in use</b>
+          <b>{t("problems.portInUse", { port: shell.port })}</b>
           <span>{problem.message} <FixText text={problem.fix} /></span>
           <div className="actions">
-            <button className="btn primary" onClick={onRetry}>Check again</button>
-            <button className="btn" onClick={() => onUsePort(shell.port + 1)}>Use port {shell.port + 1}</button>
+            <button className="btn primary" onClick={onRetry}>{t("common.checkAgain")}</button>
+            <button className="btn" onClick={() => onUsePort(shell.port + 1)}>{t("problems.usePort", { port: shell.port + 1 })}</button>
           </div>
         </div>
       </Page>
@@ -45,16 +46,16 @@ export function PortInUse({ shell, problem, onRetry, onUsePort }: {
   return (
     <Page>
       <div className="problem">
-        <b>Port {shell.port} is already in use</b>
+        <b>{t("problems.portInUse", { port: shell.port })}</b>
         <span>
           {name
-            ? <>A program named <span className="mono">{name}</span>{pid ? ` (pid ${pid})` : ""} is listening there. </>
-            : "Another program is listening there. "}
-          It is not a GSD Path monitor, so the app leaves it running.
+            ? <>{t("problems.namedProgram", { name })}{pid ? t("problems.pid", { pid }) : ""} </>
+            : t("problems.anotherProgram")}
+          {t("problems.leaveRunning")}
         </span>
         <div className="actions">
-          <button className="btn primary" onClick={() => onUsePort(shell.port + 1)}>Use port {shell.port + 1}</button>
-          <button className="btn" onClick={onRetry}>Check again</button>
+          <button className="btn primary" onClick={() => onUsePort(shell.port + 1)}>{t("problems.usePort", { port: shell.port + 1 })}</button>
+          <button className="btn" onClick={onRetry}>{t("common.checkAgain")}</button>
         </div>
       </div>
     </Page>
@@ -64,7 +65,7 @@ export function PortInUse({ shell, problem, onRetry, onUsePort }: {
 export function BlockingProblems({ shell, onRetry }: { shell: Shell; onRetry: () => void }) {
   const problems: Problem[] = shell.launch?.problems.filter((problem) => problem.blocking) ?? [];
   if (!problems.length) {
-    problems.push({ kind: "launch", message: "The setup check failed.", fix: shell.error ?? "Choose Check again.", blocking: true });
+    problems.push({ kind: "launch", message: t("problems.setupFailed"), fix: shell.error ?? t("common.checkAgain") + ".", blocking: true });
   }
   return (
     <Page>
@@ -73,10 +74,10 @@ export function BlockingProblems({ shell, onRetry }: { shell: Shell; onRetry: ()
         return (
           <div className="problem" key={problem.kind + problem.message}>
             <b>{problem.message}</b>
-            <span><FixText text={problem.fix} /> No monitor was started.</span>
+            <span><FixText text={problem.fix} /> {t("problems.noMonitor")}</span>
             <div className="actions">
-              <button className="btn primary" onClick={onRetry}>Check again</button>
-              {command && <CopyButton text={command} label="Copy command" />}
+              <button className="btn primary" onClick={onRetry}>{t("common.checkAgain")}</button>
+              {command && <CopyButton text={command} label={t("req.copyCommand")} />}
             </div>
           </div>
         );

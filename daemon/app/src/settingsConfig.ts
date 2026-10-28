@@ -1,5 +1,6 @@
 // Settings → Monitoring and Usage and prices: the form over GET/POST /api/config.
 // The daemon checks every value again (settings_api.py); these checks give the message before the request.
+import { t } from "./i18n";
 import type { Status } from "./status";
 
 export const PRICE_KEYS = ["input", "cached", "output"] as const;
@@ -26,7 +27,7 @@ export const unpricedModels = (status: Status | null): string[] =>
 export function parseWhole(text: string, label: string): { value: number } | { error: string } {
   const clean = text.trim();
   return /^\d+$/.test(clean) && Number(clean) >= 1 ? { value: Number(clean) }
-    : { error: `${label} must be a whole number of 1 or more.` };
+    : { error: t("settings.wholeNumber", { label }) };
 }
 
 const text = (amount: number | undefined) => (amount == null ? "" : String(amount));
@@ -59,15 +60,15 @@ export function toPrices(rows: PriceRow[]): { prices: Record<string, Price> } | 
   for (const row of rows) {
     if (isEmpty(row)) continue;
     const model = row.model.trim();
-    if (!model) { errors.push("Type a model name for the new price row."); continue; }
-    if (model in prices) { errors.push(`${model} is listed twice.`); continue; }
+    if (!model) { errors.push(t("settings.typeModelName")); continue; }
+    if (model in prices) { errors.push(t("settings.listedTwice", { model })); continue; }
     prices[model] = {};
     for (const key of PRICE_KEYS) {
       const clean = row[key].trim();
       if (!clean) continue;
       const amount = Number(clean);
       if (Number.isFinite(amount) && amount >= 0) prices[model][key] = amount;
-      else errors.push(`The ${key} price for ${model} must be a number of 0 or more.`);
+      else errors.push(t("settings.priceNumber", { key, model }));
     }
   }
   return errors.length ? { errors } : { prices };
@@ -84,7 +85,7 @@ export const addUnique = (list: string[], item: string | null): string[] => {
   return clean && !list.includes(clean) ? [...list, clean] : list;
 };
 
-const onOff = (flag: boolean) => (flag ? "on" : "off");
+const onOff = (flag: boolean) => (flag ? t("settings.on") : t("settings.off"));
 const same = (a: Price | undefined, b: Price | undefined) => PRICE_KEYS.every((key) => a?.[key] === b?.[key]);
 
 /** What Save sends: only the keys that changed. With an error, nothing is sent. */
@@ -111,22 +112,22 @@ export function configChanges(config: Config, draft: Draft): { payload: Partial<
     summary.push(`${label}: ${onOff(config[key])} → ${onOff(draft[key])}`);
   };
 
-  folders("parents", "Watch", "Stop watching");
-  folders("excludes", "Exclude", "Stop excluding");
-  whole("max_depth", "Scan depth");
-  whole("poll_seconds", "Refresh interval");
-  flag("notify", "Desktop notifications");
-  flag("history", "Activity history");
-  folders("session_dirs", "Add session folder", "Remove session folder");
+  folders("parents", t("settings.watch"), t("settings.stopWatching"));
+  folders("excludes", t("settings.exclude"), t("settings.stopExcluding"));
+  whole("max_depth", t("settings.scanDepth"));
+  whole("poll_seconds", t("settings.refreshInterval"));
+  flag("notify", t("settings.desktopNotifications"));
+  flag("history", t("settings.activityHistory"));
+  folders("session_dirs", t("settings.addSessionFolder"), t("settings.removeSessionFolder"));
 
   const result = toPrices(draft.prices);
   if ("errors" in result) errors.push(...result.errors);
   else {
     const before = config.prices, after = result.prices;
     const lines = [
-      ...Object.keys(before).filter((model) => !(model in after)).map((model) => `Remove the price for ${model}`),
+      ...Object.keys(before).filter((model) => !(model in after)).map((model) => t("settings.removePriceFor", { model })),
       ...Object.keys(after).filter((model) => !same(before[model], after[model]))
-        .map((model) => `${model in before ? "Change" : "Set"} the price for ${model}`),
+        .map((model) => t(model in before ? "settings.changePriceFor" : "settings.setPriceFor", { model })),
     ];
     if (lines.length) { payload.prices = after; summary.push(...lines); }
   }
