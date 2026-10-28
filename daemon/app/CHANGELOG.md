@@ -28,6 +28,12 @@ The app has its own version and `app-v<version>` tags, separate from the
   them too (a failed check shows its error next to the framework), the update
   banner names any that are behind, and **Update…** shows
   the commands and then runs each framework's own update.
+- Settings → App has a **Language** choice next to Appearance: System,
+  English, or Simplified Chinese. System follows the OS language (zh, zh-CN,
+  zh-SG, zh-MY, and zh-Hans pick Simplified Chinese; zh-TW and zh-HK stay
+  English). The tray popover follows the choice. Project content (artifact
+  text, phase names, file paths, command output), the native tray menu, and
+  the browser dashboard at :8765 stay in English.
 
 ### Fixed
 - When the installer refuses a request (exit 2), the failure card says
