@@ -37,8 +37,7 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
     setBusy(null);
     reload();
   };
-  // Stable, not the translated status text: an update waits, or the version is unknown.
-  const verb = (row: SkillRow) => (row.stale || row.version === "—" ? "updated" : "installed");
+  const verb = (row: SkillRow) => (row.stateKey === "stale" || row.stateKey === "no-stamp" ? "updated" : "installed");
 
   const preview = (row: SkillRow) => run(row, t("skillsPage.readingPlanFor", { label: row.label }), verb(row), async () => {
     const result = await installSkills(row.ids, true);
@@ -141,9 +140,9 @@ export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
       {plugin && (
         <p className="note">
           {sharedRoots(hosts).map((shared) => (
-            <span key={shared.path}>{t("skillsPage.shareNote", { names: shared.names, path: shared.path })} </span>
+            <span key={shared.path}>{t("skillsPage.shareNote1", { names: shared.names })}<span className="mono">{shared.path}</span>{t("skillsPage.shareNote2")} </span>
           ))}
-          {missing.length > 0 && t("skillsPage.notDetected", { n: missing.length, list: missing.join(t("list.separator")) })}
+          {missing.length > 0 && t(missing.length === 1 ? "skillsPage.notDetectedOne" : "skillsPage.notDetectedMany", { n: missing.length, list: missing.join(t("list.separator")) })}
         </p>
       )}
     </main>

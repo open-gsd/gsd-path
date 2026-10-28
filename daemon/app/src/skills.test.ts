@@ -56,16 +56,16 @@ describe("skillRows", () => {
     expect(rows.map((row) => row.label)).toEqual(["Codex and Zed", "Claude Code", "Cursor"]);
     expect(rows[0]).toEqual({
       ids: ["codex", "zed"], label: "Codex and Zed", path: "/Users/me/.agents/skills", version: "1.4.0",
-      tone: "ok", status: "Installed", stale: false, primary: null, preview: false, uninstall: true,
+      tone: "ok", status: "Installed", stateKey: "current", primary: null, preview: false, uninstall: true,
     });
   });
   it("offers the update and a preview when the installed version is older", () => {
     expect(skillRows(HOSTS, plugin())[1]).toMatchObject({
-      version: "1.3.2", tone: "warn", status: "Update available", primary: "Update to 1.4.0", preview: true, uninstall: false });
+      version: "1.3.2", tone: "warn", status: "Update available", stateKey: "stale", primary: "Update to 1.4.0", preview: true, uninstall: false });
   });
   it("offers Install for a found agent without skills and shows no version", () => {
     expect(skillRows(HOSTS, plugin())[2]).toMatchObject({
-      ids: ["cursor"], version: "—", tone: "mute", status: "Not installed", primary: "Install", preview: true, uninstall: false });
+      ids: ["cursor"], version: "—", tone: "mute", status: "Not installed", stateKey: "missing", primary: "Install", preview: true, uninstall: false });
   });
   it("lists an agent that is not found when its skills are installed", () => {
     const rows = skillRows(HOSTS, plugin({ hosts: { ...plugin().hosts, grok: { installed: true, version: "1.4.0" } } }));
@@ -79,7 +79,7 @@ describe("skillRows", () => {
   });
   it("says when an install has no version stamp", () => {
     const row = skillRows(HOSTS, plugin({ hosts: { ...plugin().hosts, claude: { installed: true, version: null } } }))[1];
-    expect(row).toMatchObject({ version: "—", status: "No version stamp", tone: "warn", primary: "Update to 1.4.0", preview: true });
+    expect(row).toMatchObject({ version: "—", status: "No version stamp", stateKey: "no-stamp", tone: "warn", primary: "Update to 1.4.0", preview: true });
   });
   it("offers no update when the latest release is not known", () => {
     const row = skillRows(HOSTS, plugin({ latest: null, releases: undefined }))[1];

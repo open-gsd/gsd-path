@@ -49,7 +49,7 @@ export function PortInUse({ shell, problem, onRetry, onUsePort }: {
         <b>{t("problems.portInUse", { port: shell.port })}</b>
         <span>
           {name
-            ? <>{t("problems.namedProgram", { name })}{pid ? t("problems.pid", { pid }) : ""} </>
+            ? <>{t("problems.namedProgram")}<span className="mono">{name}</span>{pid ? t("problems.pid", { pid }) : ""}{t("problems.listening")} </>
             : t("problems.anotherProgram")}
           {t("problems.leaveRunning")}
         </span>

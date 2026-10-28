@@ -96,7 +96,7 @@ export function MonitoringTab({ form }: { form: Form }) {
         <Field name={t("settings.desktopNotifications")} hint={t("settings.notificationsHint")}>
           <Toggle on={draft.notify} label={t("settings.desktopNotifications")} disabled={busy} onChange={(notify) => set({ notify })} />
         </Field>
-        <Field name={t("settings.activityHistory")} hint={<>Keep a record of changes in <span className="mono">history.jsonl</span>.</>}>
+        <Field name={t("settings.activityHistory")} hint={<>{t("settings.activityHistoryHint1")}<span className="mono">history.jsonl</span>{t("settings.activityHistoryHint2")}</>}>
           <Toggle on={draft.history} label={t("settings.activityHistory")} disabled={busy} onChange={(history) => set({ history })} />
         </Field>
       </div>

@@ -64,8 +64,8 @@ const shown = (group: HostInfo[], plugin: PluginStatus) => group.some((host) => 
 
 export type SkillRow = {
   ids: string[]; label: string; path: string; version: string; tone: "ok" | "warn" | "mute"; status: string;
-  /** Stable flag behind the status text: the banner counts updates by it, never by translated words. */
-  stale: boolean;
+  /** Stable state behind the status text: logic reads it, never the translated words. */
+  stateKey: "missing" | "no-stamp" | "stale" | "current";
   /** The label of the install button, or null when there is nothing to install. */
   primary: string | null; preview: boolean; uninstall: boolean;
 };
@@ -77,24 +77,24 @@ export function skillRows(hosts: HostInfo[], plugin: PluginStatus | null): Skill
     const base = { ids: group.map((host) => host.id), label: joinNames(group.map((host) => host.name)), path: group[0].skills_root };
     const entry = installedIn(group, plugin);
     if (!entry) {
-      return { ...base, version: DASH, tone: "mute", status: t("skill.status.notInstalled"), stale: false, primary: t("skill.install"), preview: true, uninstall: false };
+      return { ...base, version: DASH, tone: "mute", status: t("skill.status.notInstalled"), stateKey: "missing", primary: t("skill.install"), preview: true, uninstall: false };
     }
     const update = target ? t("skill.updateTo", { version: target }) : null;
     if (!entry.version) {
-      return { ...base, version: DASH, tone: "warn", status: t("skill.noVersionStamp"), stale: false, primary: update, preview: !!update, uninstall: !update };
+      return { ...base, version: DASH, tone: "warn", status: t("skill.noVersionStamp"), stateKey: "no-stamp", primary: update, preview: !!update, uninstall: !update };
     }
     if (isNewer(target, entry.version)) {
-      return { ...base, version: entry.version, tone: "warn", status: t("skill.status.updateAvailable"), stale: true, primary: update, preview: true, uninstall: false };
+      return { ...base, version: entry.version, tone: "warn", status: t("skill.status.updateAvailable"), stateKey: "stale", primary: update, preview: true, uninstall: false };
     }
     // An older release was chosen: offer it, but it is not an update.
     const other = target && target !== entry.version ? t("skill.installVersion", { version: target }) : null;
-    return { ...base, version: entry.version, tone: "ok", status: t("skill.status.installed"), stale: false, primary: other, preview: !!other, uninstall: true };
+    return { ...base, version: entry.version, tone: "ok", status: t("skill.status.installed"), stateKey: "current", primary: other, preview: !!other, uninstall: true };
   });
 }
 
 /** The rows that show an update waiting: the banner lists them and the Skills nav badge counts them. */
 export const pendingSkills = (hosts: HostInfo[], plugin: PluginStatus | null) =>
-  skillRows(hosts, plugin).filter((row) => row.stale);
+  skillRows(hosts, plugin).filter((row) => row.stateKey === "stale");
 
 /** Agents that are not on this computer and have no skills folder with Path in it. */
 export const notDetected = (hosts: HostInfo[], plugin: PluginStatus | null) =>

@@ -75,7 +75,7 @@ export function PlanBox({ plan, confirm, busy, onConfirm, onCancel }: {
         <b>{t("skillsPage.kept")}</b>
         <ul>{plan.skipped.map((entry) => <li key={entry.path}><span className="mono">{entry.path}</span><small>{entry.reason}</small></li>)}</ul>
       </>}
-      <div className="sub">{t("skillsPage.projectUntouched", { dir: ".project/" })}</div>
+      <div className="sub">{t("skillsPage.projectUntouched1")}<span className="mono">.project/</span>{t("skillsPage.projectUntouched2")}</div>
       <div className="actions">
         {plan.plan.length > 0 && <button className="btn small sk-danger" disabled={busy} onClick={onConfirm}>{busy ? t("skillsPage.removing") : confirm}</button>}
         <button className="btn small" disabled={busy} onClick={onCancel}>{t("updates.cancel")}</button>

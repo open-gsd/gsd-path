@@ -23,7 +23,7 @@ export function Board({ status, offline, now, skills }: { status: Status | null;
     : t("board.empty.filtered");
 
   return (
-    <main className="page" aria-label="Projects">
+    <main className="page" aria-label={t("nav.projects")}>
       {banner && (
         <div className="update-banner" role="status">
           <b>{banner.title}</b><span>{banner.text}</span>
