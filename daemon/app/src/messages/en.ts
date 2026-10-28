@@ -273,7 +273,7 @@ export const en = {
   "problems.namedProgram": "A program named ",
   "problems.listening": " is listening there.",
   "problems.pid": " (pid {pid})",
-  "problems.anotherProgram": "Another program is listening there.",
+  "problems.anotherProgram": "Another program is listening there. ",
   "problems.leaveRunning": "It is not a GSD Path monitor, so the app leaves it running.",
   "problems.setupFailed": "The setup check failed.",
   "problems.noMonitor": "No monitor was started.",
