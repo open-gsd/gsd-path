@@ -18,7 +18,9 @@ const TABLES: Record<Language, Partial<Record<MessageKey, string>>> = { en, "zh-
 const HANS_PREFIXES = ["zh-hans"];
 const HANS_EXACT = new Set(["zh", "zh-cn", "zh-sg", "zh-my"]);
 
-/** The language to draw for a stored choice and the system languages. */
+/** The language to draw for a stored choice and the system languages.
+ * The first preference we support wins, in order: English anywhere ahead of
+ * Chinese keeps English, and an unsupported first choice falls through. */
 export const resolveLanguage = (
   choice: string | null,
   systemLanguages: readonly string[],
@@ -26,6 +28,7 @@ export const resolveLanguage = (
   if (choice === "en" || choice === "zh-CN") return choice;
   for (const tag of systemLanguages) {
     const name = tag.toLowerCase();
+    if (name.startsWith("en")) return "en";
     if (HANS_EXACT.has(name) || HANS_PREFIXES.some((prefix) => name.startsWith(prefix))) {
       return "zh-CN";
     }

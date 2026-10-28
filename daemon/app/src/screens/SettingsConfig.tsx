@@ -14,7 +14,8 @@ export function useConfigForm(status: Status | null) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [note, setNote] = useState("");
+  // A flag, not text: the note renders in whatever language is active now.
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     api<Config>("GET", "/api/config").then(setConfig, (reason) => setError(String(reason)));
@@ -27,19 +28,19 @@ export function useConfigForm(status: Status | null) {
   }, [models]);
 
   const changes = config && draft ? configChanges(config, draft) : { payload: {}, errors: [], summary: [] };
-  const set = (part: Partial<Draft>) => { setNote(""); setDraft((old) => old && { ...old, ...part }); };
+  const set = (part: Partial<Draft>) => { setSaved(false); setDraft((old) => old && { ...old, ...part }); };
   const save = async () => {
-    setBusy(true); setError(""); setNote("");
+    setBusy(true); setError(""); setSaved(false);
     try {
       setConfig(await api<Config>("POST", "/api/config", changes.payload));
-      setNote(t("settings.saved"));
+      setSaved(true);
     } catch (reason) {
       setError(String(reason)); // the daemon refused: nothing changed
     }
     setBusy(false);
   };
-  const discard = () => { setError(""); if (config) setDraft(toDraft(config, unpriced)); };
-  const bar = <SaveBar summary={changes.summary} errors={changes.errors} error={error} note={note} busy={busy} onSave={save} onDiscard={discard} />;
+  const discard = () => { setError(""); setSaved(false); if (config) setDraft(toDraft(config, unpriced)); };
+  const bar = <SaveBar summary={changes.summary} errors={changes.errors} error={error} note={saved ? t("settings.saved") : ""} busy={busy} onSave={save} onDiscard={discard} />;
   return { draft, set, busy, error, bar };
 }
 type Form = ReturnType<typeof useConfigForm>;

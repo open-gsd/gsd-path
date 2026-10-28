@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { en } from "./messages/en";
 import { zh } from "./messages/zh";
 import {
-  applyLanguage, language, resolveLanguage, setLanguage, storedLanguage, t, type LanguageChoice,
+  applyLanguage, language, resolveLanguage, setLanguage, storedLanguage, t, watchLanguage, type LanguageChoice,
 } from "./i18n";
 
 // localStorage does not exist in the node test environment; the module reads
@@ -27,6 +27,10 @@ describe("resolveLanguage", () => {
       expect(resolveLanguage(null, tags)).toBe("zh-CN");
     }
   });
+  it("honors the first supported preference in order", () => {
+    expect(resolveLanguage(null, ["en-US", "zh-CN"])).toBe("en");
+    expect(resolveLanguage(null, ["zh-TW", "zh-CN"])).toBe("zh-CN");
+  });
   it("does not claim Traditional Chinese locales", () => {
     expect(resolveLanguage(null, ["zh-TW"])).toBe("en");
     expect(resolveLanguage(null, ["zh-HK", "en"])).toBe("en");
@@ -40,6 +44,12 @@ describe("resolveLanguage", () => {
 describe("message tables", () => {
   it("keeps zh-CN at key parity with the English source", () => {
     expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort());
+  });
+  it("keeps every {placeholder} in both tables", () => {
+    const names = (text: string) => [...text.matchAll(/\{([a-zA-Z]+)\}/g)].map((m) => m[1]).sort().join(",");
+    for (const key of Object.keys(en)) {
+      expect(names(zh[key as keyof typeof zh])).toBe(names(en[key as keyof typeof en]));
+    }
   });
   it("translates and falls back to English, never to a blank", () => {
     applyLanguage();
@@ -70,5 +80,19 @@ describe("the setting", () => {
     expect(documentElement.lang).toBe("zh-CN");
     setLanguage("system");
     expect(documentElement.lang).toBe("en");
+  });
+  it("follows a change made in the other window through the storage event", () => {
+    applyLanguage();
+    const listeners: ((event: { key: string | null }) => void)[] = [];
+    const addEventListener = (_: string, listener: (event: { key: string | null }) => void) => listeners.push(listener);
+    Object.defineProperty(globalThis, "addEventListener", { value: addEventListener, configurable: true });
+    watchLanguage();
+    // The tray window's watcher reacts to the key the main window wrote.
+    store.set("gsd-path.language", "zh-CN");
+    listeners.forEach((listener) => listener({ key: "gsd-path.language" }));
+    expect(language()).toBe("zh-CN");
+    store.set("gsd-path.language", "en");
+    listeners.forEach((listener) => listener({ key: "other-key" }));
+    expect(language()).toBe("zh-CN"); // an unrelated key changes nothing
   });
 });

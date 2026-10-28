@@ -545,7 +545,7 @@ export const zh: Record<keyof typeof en, string> = {
   "skillsPage.uninstall": "卸载",
   "skillsPage.noAgentFound": "此电脑上未找到任何编码代理。",
   "skillsPage.loading": "正在加载技能…",
-  "skillsPage.installInLabel": "将{label}安装到 {agent}",
+  "skillsPage.installInLabel": "{agent}：{label}",
   "skillsPage.uninstallFrom": "从 {label} 卸载",
   "skillsPage.shareNote": "{names} 共享 {path}，为其中一个安装即可同时覆盖。",
   "skillsPage.notDetected": "还有 {n} 个代理未在此电脑上检测到：{list}。",
