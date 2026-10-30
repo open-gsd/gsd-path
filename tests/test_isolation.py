@@ -2304,6 +2304,72 @@ class IsolationTests(unittest.TestCase):
                 self.assertEqual(result["status"], "committed")
                 self.assertEqual(git(repo, "rev-parse", "HEAD^"), head)
 
+    def patch_reentry_state(self, phase: str, status: str, log: str) -> str:
+        return f"---\npipeline: gsd-path/v2\nphase: {phase}\nstatus: {status}\n---\n\n## Log\n{log}"
+
+    PATCH_REENTRY_LOG = (
+        "- 2026-10-25 — ship — final review blocked; gap final-gap-1 verdict: blocked\n"
+        "- 2026-10-25 — plan — patch plan reopened\n"
+        "- 2026-10-25 — plan — patch plan approved\n"
+        "- 2026-10-25 — build — build started\n"
+    )
+
+    def test_build_checkpoint_accepts_patch_reentry_after_ship_active_head(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            # `build: complete milestone` left HEAD at ship/active; the blocked
+            # final review went through the patch plan uncommitted (#526).
+            head = self.committed_state(repo, "ship", "active")
+            self.write(
+                repo, ".project/STATE.md",
+                self.patch_reentry_state("build", "active", self.PATCH_REENTRY_LOG),
+            )
+            self.write(repo, ".project/review/PATCH-FINDINGS.md", "# Patch findings\n")
+            self.write(repo, ".project/review/final-gap-1.md", "# Gap\n")
+
+            result = isolation.checkpoint(
+                repo, head, "build: start patch wave 6",
+                "Why: commit the final-review finding set with the approved patch plan",
+                [".project"],
+            )
+
+            self.assertEqual(result["status"], "committed")
+            self.assertEqual(git(repo, "rev-parse", "HEAD^"), head)
+            committed = git(repo, "show", "--stat", "--format=", "HEAD")
+            self.assertIn(".project/STATE.md", committed)
+            self.assertIn(".project/review/PATCH-FINDINGS.md", committed)
+
+    def test_build_checkpoint_still_refused_without_patch_reentry_log(self) -> None:
+        stale_logs = (
+            # A hand-flipped build/active during final review: no patch loop.
+            "- 2026-10-25 — ship — final review blocked; gap final-gap-1 verdict: blocked\n",
+            # The patch plan reopened but never approved; build never restarted.
+            "- 2026-10-25 — plan — patch plan reopened\n"
+            "- 2026-10-25 — plan — patch plan approved\n",
+            # The patch loop ran, but a later event moved on: not the re-entry tail.
+            self.PATCH_REENTRY_LOG + "- 2026-10-25 — build — build done; final review pending\n",
+        )
+        for log in stale_logs:
+            with tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary) / "repo"
+                repo.mkdir()
+                self.init_bound_repo(repo)
+                head = self.committed_state(repo, "ship", "active")
+                self.write(
+                    repo, ".project/STATE.md",
+                    self.patch_reentry_state("build", "active", log),
+                )
+                self.write(repo, ".project/review/FINAL.md", "# Final Review\n")
+
+                with self.assertRaisesRegex(isolation.IsolationError, "no pre-ship commit"):
+                    isolation.checkpoint(
+                        repo, head, "build: record final review artifacts",
+                        "Why: Commit FINAL.md before archive.", [".project"],
+                    )
+                self.assertEqual(git(repo, "rev-parse", "HEAD"), head)
+
     def test_checkpoint_rejects_unrelated_changes_without_moving_head(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
