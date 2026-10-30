@@ -1,5 +1,6 @@
 // The Stats page: turns the daemon's GET /api/stats payload into what the charts show.
 // A chart with no data is a reason text, never a zero and never an empty axis.
+import { t } from "./i18n";
 import { statsHash } from "./route";
 import { duration, idOf, labelOf, money, PHASES, shortDate, tokens } from "./status";
 import type { Project } from "./status";
@@ -26,7 +27,7 @@ const WINDOW_DAYS = 14;
 const RELOAD_MS = 60_000;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-const reason = (payload: StatsPayload, key: Missing) => payload.missing[key] || "No data recorded.";
+const reason = (payload: StatsPayload, key: Missing) => payload.missing[key] || t("stats.noDataRecorded");
 /** "2026-09-29" → "Sep 29". */
 const dayLabel = (date: string) => `${MONTHS[Number(date.slice(5, 7)) - 1]} ${Number(date.slice(8, 10))}`;
 
@@ -45,7 +46,7 @@ function barChart(payload: StatsPayload, end: string | null, value: (day: Day) =
   const dates = windowDates(end ?? days[days.length - 1].date);
   const byDate = new Map(days.map((day) => [day.date, day]));
   const inWindow = dates.map((date) => byDate.get(date));
-  if (!inWindow.some(Boolean)) return `No host sessions in the last ${WINDOW_DAYS} days.`;
+  if (!inWindow.some(Boolean)) return t("stats.noSessionsWindow", { n: WINDOW_DAYS });
   const values = inWindow.map((day) => (day ? value(day) : null));
   const known = values.filter((n): n is number => n != null);
   if (!known.length) return none;
@@ -53,11 +54,11 @@ function barChart(payload: StatsPayload, end: string | null, value: (day: Day) =
   const at = dates[values.indexOf(peak)];
   return {
     total: text(known.reduce((sum, n) => sum + n, 0)) + unit,
-    peak: `peak ${text(peak)} · ${dayLabel(at)}`,
+    peak: t("stats.peakOf", { value: text(peak), date: dayLabel(at) }),
     first: dayLabel(dates[0]), last: dayLabel(dates[WINDOW_DAYS - 1]),
     bars: dates.map((date, index) => {
       const day = inWindow[index], n = values[index];
-      const note = !day ? "no sessions" : n == null ? blank : detail(day);
+      const note = !day ? t("stats.noSessions") : n == null ? blank : detail(day);
       return { date, percent: n == null ? null : peak ? Math.round((100 * n) / peak) : 0, title: `${dayLabel(date)} · ${note}` };
     }),
   };
@@ -65,16 +66,15 @@ function barChart(payload: StatsPayload, end: string | null, value: (day: Day) =
 
 /** Tokens per day. `end` is today's date as the daemon writes it; without it the last recorded day. */
 export const tokenChart = (payload: StatsPayload, end: string | null) => barChart(payload, end,
-  (day) => day.tokens, tokens, " tokens", (day) => `${tokens(day.tokens)} tokens · ${day.turns} turns`, "", "No data recorded.");
+  (day) => day.tokens, tokens, " " + t("stats.tokensUnit"), (day) => `${tokens(day.tokens)} ${t("stats.tokensUnit")} · ${day.turns} ${t("stats.turnsUnit")}`, "", t("stats.noDataRecorded"));
 
 /** Cost per day. A day whose models have no price has no bar and adds nothing to the total. */
 export const costChart = (payload: StatsPayload, end: string | null) => barChart(payload, end,
-  (day) => day.cost, money, "", (day) => money(day.cost), "no price", "No model in these sessions has a price, so no cost is known.");
+  (day) => day.cost, money, "", (day) => money(day.cost), t("stats.noPriceShort"), t("stats.noPriceLong"));
 
 export function unpricedNote(unpriced: string[]): string | null {
   if (!unpriced.length) return null;
-  const one = unpriced.length === 1;
-  return `${unpriced.join(", ")} ${one ? "has" : "have"} no price, so ${one ? "its" : "their"} tokens are counted and ${one ? "its" : "their"} cost is left out.`;
+  return t(unpriced.length === 1 ? "stats.unpricedOne" : "stats.unpricedMany", { models: unpriced.join(t("list.separator")) });
 }
 
 export type PhaseRow = { label: string; value: string; percent: number | null };
@@ -88,7 +88,7 @@ export function phaseRows(payload: StatsPayload, order: string[] = PHASES): Phas
   const names = [...order, ...phases.map((item) => item.phase).filter((phase) => !order.includes(phase))];
   return names.map((label) => {
     const spent = seconds.get(label);
-    if (spent == null) return { label, value: "not yet", percent: null };
+    if (spent == null) return { label, value: t("stats.notYet"), percent: null };
     return { label, value: duration(spent) ?? "", percent: peak ? Math.round((100 * spent) / peak) : 0 };
   });
 }
@@ -99,7 +99,7 @@ export type WaveRow = { label: string; cells: boolean[]; value: string };
 export function waveRows(payload: StatsPayload, names: Record<string, string> | undefined): WaveRow[] | string {
   if (!payload.waves?.length) return reason(payload, "waves");
   return payload.waves.map(({ wave, total, done }) => ({
-    label: ["wave", wave, names?.[wave]].filter((part) => part != null && part !== "").join(" "),
+    label: [t("project.wave", { n: wave }), names?.[wave]].filter((part) => part != null && part !== "").join(" "),
     cells: Array.from({ length: total }, (_, index) => index < done),
     value: `${done}/${total}`,
   }));
@@ -115,12 +115,12 @@ export function verifyChart(payload: StatsPayload): VerifyChart | string {
     title: [run.result, run.project, run.command, (run.commit ?? "").slice(0, 7), shortDate(run.recorded_at)].filter(Boolean).join(" · "),
   }));
   const passed = squares.filter((square) => square.pass).length;
-  return { total: `${passed} pass · ${squares.length - passed} fail`, squares };
+  return { total: `${passed} ${t("stats.pass")} · ${squares.length - passed} ${t("stats.fail")}`, squares };
 }
 
 /** The scope switch: All projects, then one entry per project. */
 export function scopes(projects: Project[], root: string | null): { label: string; href: string; current: boolean }[] {
-  return [{ label: "All projects", href: statsHash(null), current: root === null },
+  return [{ label: t("stats.allProjects"), href: statsHash(null), current: root === null },
     ...projects.map((p) => ({ label: labelOf(p), href: statsHash(idOf(p)), current: idOf(p) === root }))];
 }
 

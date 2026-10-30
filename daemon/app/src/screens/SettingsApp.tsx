@@ -1,12 +1,16 @@
-// Settings → App: launch at login, appearance, setup, diagnostics.
+// Settings → App: launch at login, appearance, language, setup, diagnostics.
 import { useEffect, useState } from "react";
+import { setLanguage, storedLanguage, t } from "../i18n";
+import type { LanguageChoice } from "../i18n";
 import { api, openLogs, setAutostart } from "../shell";
 import type { Shell } from "../shell";
 import { setTheme, storedTheme } from "../theme";
 import type { Theme } from "../theme";
 import { Field, Toggle } from "./SettingsParts";
 
-const THEMES: [Theme, string][] = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
+const THEMES = (): [Theme, string][] => [["system", t("theme.system")], ["light", t("theme.light")], ["dark", t("theme.dark")]];
+// The language names always show in their own language, so a reader can find theirs.
+const LANGUAGES = (): [LanguageChoice, string][] => [["system", t("language.system")], ["en", "English"], ["zh-CN", "简体中文"]];
 type Diagnostics = { daemon_version?: string; [key: string]: unknown };
 
 export function AppTab({ shell }: { shell: Shell }) {
@@ -14,6 +18,7 @@ export function AppTab({ shell }: { shell: Shell }) {
   const [login, setLogin] = useState(shell.autostart);
   const [loginBusy, setLoginBusy] = useState(false);
   const [theme, setChoice] = useState(storedTheme);
+  const [language, setLanguageChoice] = useState(storedLanguage);
   const [version, setVersion] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -31,6 +36,7 @@ export function AppTab({ shell }: { shell: Shell }) {
     setLoginBusy(false);
   };
   const choose = (choice: Theme) => { setTheme(choice); setChoice(choice); };
+  const chooseLanguage = (choice: LanguageChoice) => { setLanguage(choice); setLanguageChoice(choice); };
   const again = () => { localStorage.removeItem("gsd-path.setup-done"); location.reload(); };
   const copyReport = async () => {
     clear("report");
@@ -44,31 +50,36 @@ export function AppTab({ shell }: { shell: Shell }) {
 
   return (
     <>
-      <h2 className="set-h2">App</h2>
+      <h2 className="set-h2">{t("settings.tab.app")}</h2>
       <div className="card set-card">
-        <Field name="Launch at login" hint="Starts the app and its background monitor when you sign in.">
-          <Toggle on={login} label="Launch at login" disabled={loginBusy} onChange={toggleLogin} />
+        <Field name={t("app.launchAtLogin")} hint={t("app.launchAtLoginHint")}>
+          <Toggle on={login} label={t("app.launchAtLogin")} disabled={loginBusy} onChange={toggleLogin} />
         </Field>
-        {problem("login", "Launch at login did not change.")}
-        <Field name="Appearance" hint="Follows the system by default.">
-          <div className="seg" role="group" aria-label="Appearance">
-            {THEMES.map(([value, label]) => <button key={value} aria-pressed={theme === value} onClick={() => choose(value)}>{label}</button>)}
+        {problem("login", t("app.launchFailed"))}
+        <Field name={t("app.appearance")} hint={t("app.appearanceHint")}>
+          <div className="seg" role="group" aria-label={t("app.appearance")}>
+            {THEMES().map(([value, label]) => <button key={value} aria-pressed={theme === value} onClick={() => choose(value)}>{label}</button>)}
           </div>
         </Field>
-        <Field name="Setup" hint="Run the first-launch steps again: requirements, agents, skills, folders.">
-          <button className="btn small" onClick={again}>Run setup again</button>
+        <Field name={t("app.language")} hint={t("app.languageHint")}>
+          <div className="seg" role="group" aria-label={t("app.language")}>
+            {LANGUAGES().map(([value, label]) => <button key={value} aria-pressed={language === value} onClick={() => chooseLanguage(value)}>{label}</button>)}
+          </div>
         </Field>
-        <Field name="Diagnostics" hint="Logs and a copyable report for support.">
-          <button className="btn small" onClick={() => { clear("logs"); openLogs().catch(fail("logs")); }}>Open logs</button>
-          <button className="btn small" onClick={copyReport}>{copied ? "Copied" : "Copy report"}</button>
+        <Field name={t("app.setup")} hint={t("app.setupHint")}>
+          <button className="btn small" onClick={again}>{t("app.runSetupAgain")}</button>
         </Field>
-        {problem("logs", "Cannot open the logs folder.")}
-        {problem("report", "Cannot copy the report.")}
+        <Field name={t("app.diagnostics")} hint={t("app.diagnosticsHint")}>
+          <button className="btn small" onClick={() => { clear("logs"); openLogs().catch(fail("logs")); }}>{t("app.openLogs")}</button>
+          <button className="btn small" onClick={copyReport}>{copied ? t("ui.copied") : t("app.copyReport")}</button>
+        </Field>
+        {problem("logs", t("app.logsFailed"))}
+        {problem("report", t("app.reportFailed"))}
       </div>
       <p className="note">
-        {version ? <>Monitor version <span className="mono">{version}</span></>
-          : errors.version ? `Monitor version unavailable: ${errors.version}` : "Reading the monitor version…"}
-        {" · "}port <span className="mono">{shell.port}</span>
+        {version ? <>{t("app.monitorVersion")} <span className="mono">{version}</span></>
+          : errors.version ? t("app.monitorVersionUnavailable", { error: errors.version }) : t("app.readingVersion")}
+        {" · "}{t("app.port")} <span className="mono">{shell.port}</span>
       </p>
     </>
   );

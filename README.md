@@ -196,7 +196,8 @@ What the app does:
 - **Project setup:** runtime version, guard hooks, health check, and, for a
   multi-repo coordinator, member hooks and marker repair.
 - **Settings:** updates, Path settings (shipping mode, models, review panel),
-  watched folders, model prices, launch at login, and appearance.
+  watched folders, model prices, launch at login, appearance, and language
+  (English or Simplified Chinese).
 - **Stats** and the per-project **Environment** editor.
 - **Tray:** a compact project list, items that need attention, and controls
   to start, restart, and quit.

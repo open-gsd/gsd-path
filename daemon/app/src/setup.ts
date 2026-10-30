@@ -1,9 +1,10 @@
 // The setup wizard: its steps, what the footer offers, and where the skills go.
+import { t } from "./i18n";
 import { joinNames } from "./skills";
 import type { HostInfo } from "./skills";
 
-export const STEPS = ["Requirements", "Agents", "Skills", "Watch folders"];
-const LAST = STEPS.length - 1;
+export const STEPS = () => [t("setupWizard.requirements"), t("setupWizard.agents"), t("setupWizard.skills"), t("setupWizard.watchFolders")];
+const LAST = () => STEPS().length - 1;
 
 /** Steps 2 to 4 talk to the monitor. Without it the wizard stays on Requirements. */
 export const stepGate = (step: number, ready: boolean) => (ready ? step : 0);
@@ -11,8 +12,8 @@ export const stepGate = (step: number, ready: boolean) => (ready ? step : 0);
 export function footer(step: number, state: { blocked: boolean; ready: boolean; installing: boolean }) {
   return {
     back: step > 0 && !state.installing,
-    skip: step === LAST,
-    next: step === LAST ? "Open dashboard" : "Continue",
+    skip: step === LAST(),
+    next: step === LAST() ? t("setupWizard.openDashboard") : t("setupWizard.continue"),
     canNext: step === 0 ? !state.blocked && state.ready : !state.installing,
   };
 }
@@ -20,11 +21,11 @@ export function footer(step: number, state: { blocked: boolean; ready: boolean; 
 export const preselected = (hosts: HostInfo[]) => hosts.filter((host) => host.found).map((host) => host.id);
 
 export const agentCards = (hosts: HostInfo[], selected: string[]) => hosts.map((host) => ({
-  id: host.id, name: host.name, found: host.found, note: host.found ? "Found on this computer" : "Not found",
+  id: host.id, name: host.name, found: host.found, note: host.found ? t("setupWizard.foundHere") : t("setupWizard.notFound"),
   on: selected.includes(host.id),
 }));
 
-export const agentsWord = (count: number) => `${count} ${count === 1 ? "agent" : "agents"}`;
+export const agentsWord = (count: number) => count === 1 ? t("setupWizard.oneAgent") : t("setupWizard.agentsCount", { n: count });
 
 /** One install folder per skills root: agents that share a root get one row. */
 export function installTargets(hosts: HostInfo[], selected: string[]): { label: string; path: string; ids: string[] }[] {

@@ -1,5 +1,6 @@
 // Which screen the window shows, and what the Requirements step lists.
 // Pure functions of the shell state, so they can be tested without a window.
+import { t } from "./i18n";
 import type { Problem, Requirement, Shell } from "./shell";
 
 export type Screen =
@@ -30,7 +31,7 @@ export type RequirementRow = {
   name: string;
   tone: "ok" | "warn" | "miss";
   required: boolean;
-  pill: "Ready" | "Recommended fix" | "Required" | "Optional";
+  pill: string;
   detail: string;
   hint: string;
   action: RowAction | null;
@@ -39,15 +40,15 @@ export type RequirementRow = {
 const PYTHON_PAGE = "https://www.python.org/downloads/";
 
 export function pythonFix(os: Shell["os"]): RowAction {
-  if (os === "windows") return { label: "Copy winget command", copy: "winget install Python.Python.3.12" };
-  if (os === "linux") return { label: "Copy command", copy: "sudo apt install python3 python3-venv" };
-  return { label: "Open download page", url: PYTHON_PAGE };
+  if (os === "windows") return { label: t("req.copyWinget"), copy: "winget install Python.Python.3.12" };
+  if (os === "linux") return { label: t("req.copyCommand"), copy: "sudo apt install python3 python3-venv" };
+  return { label: t("req.openPage"), url: PYTHON_PAGE };
 }
 
 function gitFix(os: Shell["os"]): RowAction {
-  if (os === "windows") return { label: "Open download page", url: "https://git-scm.com/download/win" };
-  if (os === "linux") return { label: "Copy command", copy: "sudo apt install git" };
-  return { label: "Copy command", copy: "xcode-select --install" };
+  if (os === "windows") return { label: t("req.openPage"), url: "https://git-scm.com/download/win" };
+  if (os === "linux") return { label: t("req.copyCommand"), copy: "sudo apt install git" };
+  return { label: t("req.copyCommand"), copy: "xcode-select --install" };
 }
 
 function row(os: Shell["os"], item: Requirement): RequirementRow {
@@ -57,35 +58,35 @@ function row(os: Shell["os"], item: Requirement): RequirementRow {
     name: string, tone: RequirementRow["tone"], detail: string, hint: string, action: RowAction | null,
   ): RequirementRow => ({
     ...base, name, tone, detail, hint, action,
-    pill: tone === "ok" ? "Ready" : tone === "warn" ? "Recommended fix" : item.required ? "Required" : "Optional",
+    pill: tone === "ok" ? t("req.pill.ready") : tone === "warn" ? t("req.pill.recommended")
+      : item.required ? t("req.pill.required") : t("req.pill.optional"),
   });
   switch (item.id) {
     case "python": {
       // 3.9 runs Path but is past end of life; the macOS Command Line Tools still ship it.
       const old = ready && (item.detail ?? "").startsWith("3.9.");
-      return finish("Python 3.9+", !ready ? "miss" : old ? "warn" : "ok",
-        ready ? item.detail ?? "Installed" : "Not found on PATH",
-        old ? "Works, but 3.9 no longer gets security fixes."
-            : "Runs the background monitor, the installer and every pipeline helper.",
-        !ready ? pythonFix(os) : old ? { label: "Open download page", url: PYTHON_PAGE } : null);
+      return finish(t("req.python.name"), !ready ? "miss" : old ? "warn" : "ok",
+        ready ? item.detail ?? t("req.installed") : t("req.python.notFound"),
+        old ? t("req.python.oldHint") : t("req.python.hint"),
+        !ready ? pythonFix(os) : old ? { label: t("req.openPage"), url: PYTHON_PAGE } : null);
     }
     case "git":
-      return finish(os === "windows" ? "Git for Windows" : "Git", ready ? "ok" : "miss",
-        ready ? item.detail ?? "Installed" : "Not installed",
-        "Used by every project, worktree and hook.", ready ? null : gitFix(os));
+      return finish(os === "windows" ? t("req.git.windowsName") : t("req.git.name"), ready ? "ok" : "miss",
+        ready ? item.detail ?? t("req.installed") : t("req.git.notInstalled"),
+        t("req.git.hint"), ready ? null : gitFix(os));
     case "python-venv":
-      return finish("Python venv module", ready ? "ok" : "miss",
-        ready ? "Installed" : "python3-venv is not installed",
-        "The app keeps its monitor in a virtual environment. Debian and Ubuntu ship this module apart from Python.",
-        ready ? null : { label: "Copy command", copy: "sudo apt install python3-venv" });
+      return finish(t("req.venv.name"), ready ? "ok" : "miss",
+        ready ? t("req.installed") : t("req.venv.notInstalled"),
+        t("req.venv.hint"),
+        ready ? null : { label: t("req.copyCommand"), copy: "sudo apt install python3-venv" });
     case "gh":
-      return finish("GitHub CLI",
+      return finish(t("req.gh.name"),
         ready ? "ok" : item.state === "signed-out" ? "warn" : "miss",
-        ready ? "Signed in" : item.state === "signed-out" ? "Installed, not signed in" : "Not installed",
-        "Only needed for pull-request shipping and creating repositories.",
+        ready ? t("req.gh.signedIn") : item.state === "signed-out" ? t("req.gh.notSignedIn") : t("req.gh.notInstalled"),
+        t("req.gh.hint"),
         ready ? null
-          : item.state === "signed-out" ? { label: "Copy sign-in command", copy: "gh auth login" }
-          : { label: "Open install page", url: "https://cli.github.com/" });
+          : item.state === "signed-out" ? { label: t("req.gh.copySignIn"), copy: "gh auth login" }
+          : { label: t("req.gh.openInstall"), url: "https://cli.github.com/" });
     default:
       return finish(item.id, ready ? "ok" : "miss", item.detail ?? "", "", null);
   }

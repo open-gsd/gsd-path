@@ -1,5 +1,6 @@
 // The tray popover: a 380px window of its own (label "tray") that loads this bundle at #/tray.
 import { useState } from "react";
+import { t } from "../i18n";
 import { readyLine, reviewAction } from "../appUpdate";
 import { boot, openUrl, trayAction } from "../shell";
 import type { Shell } from "../shell";
@@ -27,26 +28,26 @@ export function Tray({ shell }: { shell: Shell }) {
       </div>
       {shell.phase === "blocked" ? (
         <div className="tray-strip">
-          <span className="grow">Setup needs attention.</span>
-          <button className="btn tiny" onClick={() => trayAction("open")}>Open</button>
+          <span className="grow">{t("trayPop.setupAttention")}</span>
+          <button className="btn tiny" onClick={() => trayAction("open")}>{t("trayPop.open")}</button>
         </div>
       ) : stopped && shell.phase === "ready" && (
         <div className="tray-strip">
-          <span className="grow">Monitor stopped.{updated && ` Showing the update from ${updated}.`}</span>
-          <button className="btn tiny" onClick={() => boot()}>Start</button>
+          <span className="grow">{t("trayPop.monitorStopped")}{updated && " " + t("trayPop.showingFrom", { time: updated })}</span>
+          <button className="btn tiny" onClick={() => boot()}>{t("trayPop.start")}</button>
         </div>
       )}
       <div className={stopped ? "tray-body stopped" : "tray-body"}>
         {attention.length > 0 && <>
-          <div className="tray-cap attention">Needs attention · {attention.length}</div>
+          <div className="tray-cap attention">{t("trayPop.needsAttention", { n: attention.length })}</div>
           {attention.map((card) => (
             <button key={card.root} className="tray-card" onClick={() => trayAction("open", card.root)}>
               <span className="grow"><b>{card.name}</b><span className="sub" style={{ display: "block" }}>{card.reason}</span></span>
-              <span>Open ›</span>
+              <span>{t("trayPop.openArrow")}</span>
             </button>
           ))}
         </>}
-        {projects.length > 0 && <div className="tray-cap">Projects</div>}
+        {projects.length > 0 && <div className="tray-cap">{t("nav.projects")}</div>}
         {trayRows(projects).map((row) => (
           <div key={row.root}>
             <button className={row.quiet ? "tray-row quiet" : "tray-row"} aria-expanded={open === row.root}
@@ -57,8 +58,8 @@ export function Tray({ shell }: { shell: Shell }) {
             </button>
             {open === row.root && (
               <div className="tray-open">
-                <button className="btn tiny" onClick={() => trayAction("open", row.root)}>Details</button>
-                <CopyButton className="btn tiny" text="/path" label="Copy /path" />
+                <button className="btn tiny" onClick={() => trayAction("open", row.root)}>{t("trayPop.details")}</button>
+                <CopyButton className="btn tiny" text="/path" label={t("trayPop.copyPath")} />
               </div>
             )}
           </div>
@@ -66,16 +67,16 @@ export function Tray({ shell }: { shell: Shell }) {
       </div>
       {(appLine || status?.plugin?.update_available) && (
         <div className="tray-strip update">
-          <span className="grow"><b>{appLine ?? `Skills ${status?.plugin?.latest ?? "update"} is ready`}</b></span>
-          <button className="btn tiny primary" onClick={() => trayAction(reviewAction(shell))}>Review</button>
+          <span className="grow"><b>{appLine ?? t("trayPop.skillsReady", { version: status?.plugin?.latest ?? t("trayPop.updateWord") })}</b></span>
+          <button className="btn tiny primary" onClick={() => trayAction(reviewAction(shell))}>{t("trayPop.review")}</button>
         </div>
       )}
       <div className="tray-foot">
-        <button className="btn primary" onClick={() => trayAction("open")}>Open dashboard</button>
-        <button className="btn quiet" disabled={stopped} onClick={() => openUrl(`http://127.0.0.1:${shell.port}/`)}>In browser</button>
+        <button className="btn primary" onClick={() => trayAction("open")}>{t("trayPop.openDashboard")}</button>
+        <button className="btn quiet" disabled={stopped} onClick={() => openUrl(`http://127.0.0.1:${shell.port}/`)}>{t("trayPop.inBrowser")}</button>
         <span className="grow" />
-        <button className="btn quiet" disabled={!shell.owned} onClick={() => trayAction("restart")}>Restart</button>
-        <button className="btn quiet" onClick={() => trayAction("quit")}>Quit</button>
+        <button className="btn quiet" disabled={!shell.owned} onClick={() => trayAction("restart")}>{t("trayPop.restart")}</button>
+        <button className="btn quiet" onClick={() => trayAction("quit")}>{t("trayPop.quit")}</button>
       </div>
     </div>
   );

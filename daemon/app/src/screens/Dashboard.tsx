@@ -1,4 +1,5 @@
 // The monitor runs: the header, the offline banner and the page the route names.
+import { t } from "../i18n";
 import type { Route } from "../route";
 import type { Shell } from "../shell";
 import { pendingSkills } from "../skills";
@@ -14,7 +15,7 @@ import { Settings } from "./Settings";
 import { Skills } from "./Skills";
 import { Stats } from "./Stats";
 
-const NAV = [["projects", "Projects"], ["skills", "Skills"], ["stats", "Stats"], ["settings", "Settings"]] as const;
+const NAV = () => ({ projects: t("nav.projects"), skills: t("nav.skills"), stats: t("nav.stats"), settings: t("nav.settings") });
 // A project page, its files, and its environment all sit under Projects.
 const navOf = (route: Route) => (route.page === "project" || route.page === "env" ? "projects" : route.page);
 
@@ -34,25 +35,25 @@ export function Dashboard({ shell, route, onStart }: { shell: Shell; route: Rout
     <>
       <header className="top">
         <Logo />
-        <nav className="nav" aria-label="Main">
-          {NAV.map(([page, label]) => (
+        <nav className="nav" aria-label={t("nav.main")}>
+          {Object.entries(NAV()).map(([page, label]) => (
             <a key={page} href={"#/" + page} aria-current={navOf(route) === page ? "page" : undefined}>
               {label}{page === "skills" && pending > 0 && <span className="nav-badge">{pending}</span>}
             </a>
           ))}
         </nav>
         <span className="grow" />
-        <button className="btn tall" onClick={refresh}>Refresh</button>
+        <button className="btn tall" onClick={refresh}>{t("nav.refresh")}</button>
         <span className="updated" role="status">
           <i className={offline ? "dot bad" : status ? "dot ok" : "dot"} />
-          {offline ? "Offline" : updated ? `Updated ${updated}` : "Connecting…"}
+          {offline ? t("nav.offline") : updated ? t("nav.updated", { time: updated }) : t("nav.connecting")}
         </span>
       </header>
       {offline && (
         <div className="offline" role="status">
           <i className="dot bad" />
-          <span className="grow"><b>Offline.</b> {updated ? `Showing the last update from ${updated}.` : "The monitor does not answer."}</span>
-          <button className="btn small" onClick={onStart}>Start monitor</button>
+          <span className="grow"><b>{t("nav.offlineDot")}</b> {updated ? t("nav.showingLast", { time: updated }) : t("nav.noAnswer")}</span>
+          <button className="btn small" onClick={onStart}>{t("nav.startMonitor")}</button>
         </div>
       )}
       {route.page === "skills" ? <Skills skills={skills} />

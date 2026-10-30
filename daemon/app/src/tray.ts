@@ -1,11 +1,12 @@
 // The tray popover: the status line, the "Needs attention" cards and the project list.
+import { t } from "./i18n";
 import { healthTone, idOf, labelOf, milestoneStack, nameOf, phaseCells, reasons, sortProjects, stateLabel, stateOf } from "./status";
 import type { Cell, Project, Status, Tone } from "./status";
 
 export function trayStatus(status: Status | null, offline: boolean): { tone: Tone; text: string } {
-  if (offline || !status) return { tone: "bad", text: "Stopped" };
+  if (offline || !status) return { tone: "bad", text: t("tray.stopped") };
   const count = status.projects.length;
-  return { tone: "ok", text: `${count} ${count === 1 ? "project" : "projects"}` };
+  return { tone: "ok", text: count === 1 ? t("tray.oneProject") : t("tray.projects", { n: count }) };
 }
 
 const SEVERITY: Record<Tone, number> = { bad: 0, warn: 1, ok: 2 };
@@ -23,10 +24,10 @@ export type TrayRow = { root: string; name: string; tone: Tone; line: string; ce
 export function trayRows(projects: Project[]): TrayRow[] {
   return sortProjects(projects).map((p) => {
     const shipped = stateOf(p) === "shipped";
-    const progress = p.tasks_total ? `${p.tasks_done ?? 0} of ${p.tasks_total} tasks` : null;
+    const progress = p.tasks_total ? t("tray.progress", { done: p.tasks_done ?? 0, total: p.tasks_total }) : null;
     return {
       root: idOf(p), name: labelOf(p), tone: healthTone(p), cells: phaseCells(p), quiet: shipped,
-      line: [milestoneStack(p).cur.number, ...(shipped ? ["shipped"] : [p.phase || "no phase", progress])].filter(Boolean).join(" · "),
+      line: [milestoneStack(p).cur.number, ...(shipped ? [t("state.shipped")] : [p.phase || t("tray.noPhase"), progress])].filter(Boolean).join(" · "),
     };
   });
 }

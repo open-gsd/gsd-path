@@ -12,7 +12,7 @@ const OPEN = { blocked: false, ready: true, installing: false };
 
 describe("steps", () => {
   it("has four steps", () => {
-    expect(STEPS).toEqual(["Requirements", "Agents", "Skills", "Watch folders"]);
+    expect(STEPS()).toEqual(["Requirements", "Agents", "Skills", "Watch folders"]);
   });
   it("stays on Requirements while the monitor does not run", () => {
     expect(stepGate(2, false)).toBe(0);

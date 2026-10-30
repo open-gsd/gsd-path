@@ -1,5 +1,6 @@
 // Pieces the Settings tabs share.
 import type { ReactNode } from "react";
+import { t } from "../i18n";
 
 /** An on/off switch: 36×22 with an 18px knob. */
 export function Toggle({ on, label, disabled, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: (on: boolean) => void }) {
@@ -28,15 +29,15 @@ export function SaveBar({ summary, errors, error, note, busy, onSave, onDiscard 
     <div className="set-save">
       {summary.length > 0 && (
         <div className="set-changes">
-          <b>Save will write {summary.length === 1 ? "this change" : `these ${summary.length} changes`}</b>
+          <b>{summary.length === 1 ? t("settings.saveWillWriteOne") : t("settings.saveWillWrite", { n: summary.length })}</b>
           <ul>{summary.map((line) => <li key={line}>{line}</li>)}</ul>
         </div>
       )}
       {errors.length > 0 && <ul className="set-errors" role="alert">{errors.map((line) => <li key={line}>{line}</li>)}</ul>}
       {error && <div className="error" role="alert">{error}</div>}
       <div className="actions">
-        <button className="btn primary" disabled={busy || !summary.length} onClick={onSave}>{busy ? "Saving…" : "Save"}</button>
-        <button className="btn" disabled={busy || !dirty} onClick={onDiscard}>Discard</button>
+        <button className="btn primary" disabled={busy || !summary.length} onClick={onSave}>{busy ? t("settings.saving") : t("settings.save")}</button>
+        <button className="btn" disabled={busy || !dirty} onClick={onDiscard}>{t("settings.discard")}</button>
         {note && <span className="sub" role="status">{note}</span>}
       </div>
     </div>

@@ -2,6 +2,8 @@
 // derivations every view shares. The daemon decides state and health; this
 // module only formats them. Missing values stay missing: a dash, never zero.
 
+import { language, t } from "./i18n";
+
 export type Milestone = {
   number: string; slug: string; status?: string | null; archive?: string | null; goal?: string | null;
   phase?: string | null; depends?: string[]; integrated?: string | null;
@@ -75,7 +77,16 @@ export const labelOf = (p: Project) => nameOf(p) + (flavorOf(p) ? ` · ${flavorO
 /** The framework badge; GSD Path cards have none. */
 export const flavorOf = (p: Project) => (p.flavor && p.flavor !== "gsd-path" ? p.flavor : null);
 export const stateOf = (p: Project) => p.workflow?.state ?? "unverified";
-export const stateLabel = (p: Project) => p.workflow?.label ?? "Unverified";
+/** The state pill. English shows the daemon's own label verbatim; a translated
+ * language maps the known states locally, falling back to the daemon label. */
+export function stateLabel(p: Project): string {
+  if (language() === "en") return p.workflow?.label ?? "Unverified";
+  const local: Record<string, string> = {
+    active: t("state.active"), blocked: t("state.blocked"), shipped: t("state.shipped"),
+    unverified: t("state.unverified"), idle: t("state.idle"),
+  };
+  return local[stateOf(p)] ?? p.workflow?.label ?? t("state.unverified");
+}
 /** Health comes from the daemon; older payloads get a local guess. */
 export const healthOf = (p: Project) => p.health || (p.status === "blocked" ? "red" : "green");
 export const healthTone = (p: Project): Tone => ({ red: "bad", amber: "warn" } as Record<string, Tone>)[healthOf(p)] ?? "ok";
@@ -101,12 +112,13 @@ export function milestoneStack(p: Project): { before: Milestone[]; cur: Mileston
   const roadmap = p.roadmap_milestones ?? [];
   const index = roadmap.findIndex((m) => m.slug === p.milestone);
   const fromBranch = (p.branch ?? "").match(/M\d{3,}/);
-  const cur = index >= 0 ? roadmap[index] : { number: fromBranch ? fromBranch[0] : "now", slug: p.milestone || "no milestone" };
+  const cur = index >= 0 ? roadmap[index]
+    : { number: fromBranch ? fromBranch[0] : t("milestone.now"), slug: p.milestone || t("milestone.none") };
   const before = index >= 0 ? roadmap.slice(0, index) : roadmap.filter(isDone);
   const after = index >= 0 ? roadmap.slice(index + 1) : roadmap.filter((m) => !isDone(m));
   const next = p.next_milestone;
   if (next?.milestone && next.milestone !== cur.slug && !after.some((m) => m.slug === next.milestone)) {
-    after.push({ number: "next", slug: next.milestone, status: next.status || "planned", phase: next.phase });
+    after.push({ number: t("milestone.next"), slug: next.milestone, status: next.status || "planned", phase: next.phase });
   }
   return { before, cur, after };
 }
@@ -121,8 +133,8 @@ export function ago(iso: string | null | undefined, now: number): string {
   const then = Date.parse(iso ?? "");
   if (Number.isNaN(then)) return DASH;
   const s = Math.max(0, (now - then) / 1000);
-  return s < 60 ? "just now" : s < 3600 ? Math.floor(s / 60) + "m ago"
-    : s < 86400 ? Math.floor(s / 3600) + "h ago" : Math.floor(s / 86400) + "d ago";
+  return s < 60 ? t("time.justNow") : s < 3600 ? t("time.minutesAgo", { n: Math.floor(s / 60) })
+    : s < 86400 ? t("time.hoursAgo", { n: Math.floor(s / 3600) }) : t("time.daysAgo", { n: Math.floor(s / 86400) });
 }
 
 export function duration(seconds: number | null | undefined): string | null {
@@ -144,8 +156,8 @@ export const shortDate = (iso: string | null | undefined) => (iso ?? "").slice(0
 
 /** Cost and turns of matched host sessions. No session: a dash and the reason. */
 export function spendCell(slot: SpendSlot | null | undefined): { cost: string; turns: string } {
-  if (!slot?.turns) return { cost: DASH, turns: "No matched sessions" };
-  return { cost: money(slot.cost), turns: `${int(slot.turns)} turns` };
+  if (!slot?.turns) return { cost: DASH, turns: t("spend.noSessions") };
+  return { cost: money(slot.cost), turns: t("spend.turns", { n: int(slot.turns) }) };
 }
 
 /** The daemon's own scan interval; 5 seconds is its default. */

@@ -1,5 +1,6 @@
 // Settings → Path settings: user defaults or one project. The same fields and rules as the daemon dashboard.
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { canReset, fieldValue, integrationOptions, lockOf, modelKey, pathChanges, pathProjects, savedNote, scopeQuery } from "../settingsPath";
 import type { PathData, PathDrafts } from "../settingsPath";
 import { api } from "../shell";
@@ -51,24 +52,24 @@ export function PathTab({ status }: { status: Status | null }) {
 
   const scope = (
     <div className="set-scope">
-      <div className="seg" role="group" aria-label="Settings for">
-        <button aria-pressed={!root} disabled={busy} onClick={() => setRoot("")}>User defaults</button>
-        <button aria-pressed={!!root} disabled={busy || !projects.length} onClick={() => root || setRoot(projects[0].root)}>Project</button>
+      <div className="seg" role="group" aria-label={t("path.settingsFor")}>
+        <button aria-pressed={!root} disabled={busy} onClick={() => setRoot("")}>{t("path.userDefaults")}</button>
+        <button aria-pressed={!!root} disabled={busy || !projects.length} onClick={() => root || setRoot(projects[0].root)}>{t("path.project")}</button>
       </div>
       {root && (
-        <select className="set-input" aria-label="Project" value={root} disabled={busy} onChange={(event) => setRoot(event.target.value)}>
+        <select className="set-input" aria-label={t("path.project")} value={root} disabled={busy} onChange={(event) => setRoot(event.target.value)}>
           {projects.map((project) => <option key={project.root} value={project.root}>{nameOf(project)}</option>)}
         </select>
       )}
-      {!projects.length && <span className="sub">No watched project to choose.</span>}
+      {!projects.length && <span className="sub">{t("path.noProjectToChoose")}</span>}
     </div>
   );
   if (!data) {
     return (
       <>
-        <h2 className="set-h2">Path settings</h2>
+        <h2 className="set-h2">{t("settings.tab.path")}</h2>
         {scope}
-        {error ? <div className="error" role="alert"><FixText text={error} /></div> : <p className="note">Loading settings…</p>}
+        {error ? <div className="error" role="alert"><FixText text={error} /></div> : <p className="note">{t("settings.loading")}</p>}
       </>
     );
   }
@@ -80,11 +81,11 @@ export function PathTab({ status }: { status: Status | null }) {
     const marked = able.some((key) => drafts[key] === null);
     return (
       <button className="link" disabled={busy} onClick={() => (marked ? undo(able) : able.forEach((key) => edit(key, null)))}>
-        {marked ? "Undo reset" : "Reset"}
+        {marked ? t("path.undoReset") : t("path.reset")}
       </button>
     );
   };
-  const source = (key: "integration" | "review_panel") => <div className="set-source">Source: {data.settings[key].source}</div>;
+  const source = (key: "integration" | "review_panel") => <div className="set-source">{t("path.source")}: {data.settings[key].source}</div>;
   const mode = data.settings.integration;
   const input = (key: string, label: string) => (
     <input className={drafts[key] === null ? "set-input struck" : "set-input"} aria-label={label} value={fieldValue(data, drafts, key)}
@@ -93,19 +94,19 @@ export function PathTab({ status }: { status: Status | null }) {
 
   return (
     <>
-      <h2 className="set-h2">Path settings</h2>
+      <h2 className="set-h2">{t("settings.tab.path")}</h2>
       {scope}
       {data.locked && <div className="set-locked" role="status">{data.locked}</div>}
       <div className="set-rows">
         <div className="set-setting">
           <div>
-            <b>Shipping mode</b>
-            <div className="sub">How finished milestones reach main. {mode.locked
-              || (root ? "Changes the project default; explicit milestone overrides are retained." : "Used when a new project is initialized.")}</div>
-            {root && mode.current && <div className="sub">Current milestone: {mode.current} ({mode.current_source})</div>}
+            <b>{t("path.shippingMode")}</b>
+            <div className="sub">{t("path.shippingHow")} {mode.locked
+              || (root ? t("path.shippingProjectNote") : t("path.shippingUserNote"))}</div>
+            {root && mode.current && <div className="sub">{t("path.currentMilestone")}: {mode.current} ({mode.current_source})</div>}
             {source("integration")}
           </div>
-          <select className={drafts.integration === null ? "set-input struck" : "set-input"} aria-label="Shipping mode"
+          <select className={drafts.integration === null ? "set-input struck" : "set-input"} aria-label={t("path.shippingMode")}
             value={fieldValue(data, drafts, "integration")} disabled={off("integration") || drafts.integration === null}
             onChange={(event) => edit("integration", event.target.value)}>
             {integrationOptions(mode.value).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -114,16 +115,16 @@ export function PathTab({ status }: { status: Status | null }) {
         </div>
         <div className="set-setting">
           <div>
-            <b>Review panel</b>
-            <div className="sub">Extra reviewers from other model families: <span className="mono">off</span>, <span className="mono">detected</span>,
-              or comma-separated model families. Quick lane keeps panels off.</div>
+            <b>{t("path.reviewPanel")}</b>
+            <div className="sub">{t("path.panelSub1")}<span className="mono">off</span>, <span className="mono">detected</span>,
+              {t("path.panelSub2")}</div>
             {data.approved_review_panel && (
-              <div className="sub">Recorded review panel: {data.approved_review_panel.value} ({data.approved_review_panel.source}).
-                Approved review contracts keep their values.</div>
+              <div className="sub">{t("path.recordedPanel", { value: data.approved_review_panel.value, source: data.approved_review_panel.source})}.
+                {t("path.approvedKeepValues")}</div>
             )}
             {source("review_panel")}
           </div>
-          <input className={drafts.review_panel === null ? "set-input struck" : "set-input"} aria-label="Review panel" list="set-panel-options"
+          <input className={drafts.review_panel === null ? "set-input struck" : "set-input"} aria-label={t("path.reviewPanel")} list="set-panel-options"
             value={fieldValue(data, drafts, "review_panel")} disabled={off("review_panel") || drafts.review_panel === null}
             onChange={(event) => edit("review_panel", event.target.value)} />
           <datalist id="set-panel-options"><option value="off" /><option value="detected" /></datalist>
@@ -132,35 +133,35 @@ export function PathTab({ status }: { status: Status | null }) {
         <div className="set-models">
           <div className="line">
             <div className="grow">
-              <b>Models and effort</b>
-              <div className="sub">Per role. Use an exact value your agent offers, or <span className="mono">inherit</span>.
-                Unsupported values stop dispatch. Recorded assignments stay pinned.</div>
+              <b>{t("path.modelsAndEffort")}</b>
+              <div className="sub">{t("path.modelsSub1")}<span className="mono">inherit</span>.
+                {t("path.modelsSub2")}</div>
             </div>
-            <select className="set-input" aria-label="Agent" value={host} disabled={busy} onChange={(event) => setHost(event.target.value)}>
-              <option value="">All agents</option>
+            <select className="set-input" aria-label={t("path.agent")} value={host} disabled={busy} onChange={(event) => setHost(event.target.value)}>
+              <option value="">{t("path.allAgents")}</option>
               {data.hosts.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
           </div>
           <div className="set-roles">
-            <span className="set-th">Role</span><span className="set-th">Model</span><span className="set-th">Effort</span><span />
+            <span className="set-th">{t("path.role")}</span><span className="set-th">{t("settings.model")}</span><span className="set-th">{t("path.effort")}</span><span />
             {data.roles.map((role) => {
               const model = modelKey(host, role, "model"), effort = modelKey(host, role, "effort");
               return (
                 <div key={role} className="set-role">
                   <span className="mono">{role}</span>
-                  {input(model, `${role} model`)}
-                  {input(effort, `${role} effort`)}
+                  {input(model, t("path.roleModel", { role }))}
+                  {input(effort, t("path.roleEffort", { role }))}
                   <span>{reset([model, effort])}</span>
                 </div>
               );
             })}
           </div>
           <details className="set-sources">
-            <summary>Configured values and sources</summary>
+            <summary>{t("path.configuredValues")}</summary>
             {Object.entries(data.models).map(([key, entry]) => (
               <p key={key} className="set-source"><b>{key}</b>: {entry.value} · {entry.source}</p>
             ))}
-            {!Object.keys(data.models).length && <p className="sub">No model overrides.</p>}
+            {!Object.keys(data.models).length && <p className="sub">{t("path.noOverrides")}</p>}
           </details>
         </div>
       </div>

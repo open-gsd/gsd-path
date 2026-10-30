@@ -1,5 +1,7 @@
 // The Environment page: rows, masking, name checks and the changes a save sends.
 // A value is in memory only while its row shows it, or while it is an edit not saved yet.
+import { t } from "./i18n";
+
 export const ENV_FILES = [".env", ".env.local", ".env.development", ".env.production"] as const;
 export type EnvFile = (typeof ENV_FILES)[number];
 export type GitState = "tracked" | "ignored" | "untracked";
@@ -25,8 +27,8 @@ export const MASK = "•".repeat(12);
 export const JEV = "GSD_PATH_JEV";
 // The same rule as NAME in the daemon's env_files.py.
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const NAME_RULE = "A name has letters, digits, and _ only, and does not start with a digit.";
-const DUPLICATE = "This name is used more than once.";
+const NAME_RULE = () => t("envPage.nameRule");
+const DUPLICATE = () => t("envPage.duplicateName");
 
 export const rowsFrom = (vars: Listing["vars"]): EnvRow[] => vars.map((item, key) => (
   { key, original: item.name, name: item.name, empty: item.empty, draft: null, disk: null, shown: false, removed: false }));
@@ -58,8 +60,8 @@ export function rowErrors(rows: EnvRow[]): Record<number, string> {
   const errors: Record<number, string> = {};
   for (const row of rows) {
     if (row.removed) continue;
-    const error = !row.name ? "Enter a name." : !NAME.test(row.name) ? NAME_RULE
-      : used.filter((name) => name === row.name).length > 1 ? DUPLICATE : null;
+    const error = !row.name ? t("envPage.enterName") : !NAME.test(row.name) ? NAME_RULE()
+      : used.filter((name) => name === row.name).length > 1 ? DUPLICATE() : null;
     if (error) errors[row.key] = error;
   }
   return errors;
@@ -76,7 +78,7 @@ export function buildChanges(rows: EnvRow[], fetched: Record<string, string>): C
     if (row.original === null) return [{ name: row.name, value: row.draft ?? "" }];
     if (renamed(row)) {
       const value = known(row) ?? fetched[row.original];
-      if (value === undefined) throw new Error(`The value of ${row.original} is not loaded.`);
+      if (value === undefined) throw new Error(t("envPage.valueNotLoaded", { name: row.original }));
       return [{ name: row.original, remove: true }, { name: row.name, value }];
     }
     const same = row.draft === null || row.draft === row.disk || (row.empty && row.draft === "");
@@ -98,21 +100,21 @@ export function jevPlan(on: boolean, target: EnvFile, values: Partial<Record<Env
 }
 
 export const gitPill = (git: GitState): { tone: "warn" | "ok" | "mute"; label: string } => ({
-  tracked: { tone: "warn" as const, label: "Tracked by Git" },
-  ignored: { tone: "ok" as const, label: "Ignored by Git" },
-  untracked: { tone: "mute" as const, label: "Not tracked" },
+  tracked: { tone: "warn" as const, label: t("envPage.trackedByGit") },
+  ignored: { tone: "ok" as const, label: t("envPage.ignoredByGit") },
+  untracked: { tone: "mute" as const, label: t("envPage.notTracked") },
 })[git];
 
 export function fileNote({ file, git, exists }: Listing): string {
-  const text = git === "tracked" ? `Values in ${file} would be committed. Keep secrets in .env.local.`
-    : git === "ignored" ? `${file} is listed in .gitignore, so these values stay out of commits.`
-    : `${file} is not in Git and not in .gitignore, so a commit can still pick it up. Keep secrets in .env.local.`;
-  return exists ? text : `${text} The file does not exist yet; Save creates it.`;
+  const text = git === "tracked" ? t("envPage.noteTracked", { file })
+    : git === "ignored" ? t("envPage.noteIgnored", { file })
+    : t("envPage.noteUntracked", { file });
+  return exists ? text : text + " " + t("envPage.noteNotExists");
 }
 
-const VERB = { add: "Add", change: "Change", remove: "Remove" };
+const VERB = { add: () => t("envPage.verbAdd"), change: () => t("envPage.verbChange"), remove: () => t("envPage.verbRemove") };
 /** The save preview: names and the kind of change. Never a value. */
-export const diffLines = (diff: DiffItem[]) => diff.map((item) => `${VERB[item.change]} ${item.name}`);
+export const diffLines = (diff: DiffItem[]) => diff.map((item) => `${VERB[item.change]()} ${item.name}`);
 
 /** The monitor refuses every env route (no write token): all files fail with one message. */
 export const refusal = (errors: (string | null)[]): string | null =>

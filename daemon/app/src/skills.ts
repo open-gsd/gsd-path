@@ -1,4 +1,5 @@
 // Path skills per agent: the payloads of /api/hosts and /api/plugin/status, and what the Skills page shows.
+import { t } from "./i18n";
 import { DASH } from "./status";
 
 /** One agent from GET /api/hosts. */
@@ -46,7 +47,8 @@ export const targetVersion = (plugin: { latest?: string | null; releases?: Relea
   plugin?.releases?.selected ?? plugin?.releases?.latest ?? plugin?.latest ?? null;
 
 export const joinNames = (names: string[]) =>
-  names.length < 2 ? names.join("") : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  names.length < 2 ? names.join("")
+    : names.slice(0, -1).join(t("list.separator")) + t("list.and") + names[names.length - 1];
 
 /** Agents by skills folder, in the daemon's order. Codex and Zed share one folder. */
 function groups(hosts: HostInfo[]): HostInfo[][] {
@@ -62,6 +64,8 @@ const shown = (group: HostInfo[], plugin: PluginStatus) => group.some((host) => 
 
 export type SkillRow = {
   ids: string[]; label: string; path: string; version: string; tone: "ok" | "warn" | "mute"; status: string;
+  /** Stable state behind the status text: logic reads it, never the translated words. */
+  stateKey: "missing" | "no-stamp" | "stale" | "current";
   /** The label of the install button, or null when there is nothing to install. */
   primary: string | null; preview: boolean; uninstall: boolean;
 };
@@ -73,24 +77,24 @@ export function skillRows(hosts: HostInfo[], plugin: PluginStatus | null): Skill
     const base = { ids: group.map((host) => host.id), label: joinNames(group.map((host) => host.name)), path: group[0].skills_root };
     const entry = installedIn(group, plugin);
     if (!entry) {
-      return { ...base, version: DASH, tone: "mute", status: "Not installed", primary: "Install", preview: true, uninstall: false };
+      return { ...base, version: DASH, tone: "mute", status: t("skill.status.notInstalled"), stateKey: "missing", primary: t("skill.install"), preview: true, uninstall: false };
     }
-    const update = target ? `Update to ${target}` : null;
+    const update = target ? t("skill.updateTo", { version: target }) : null;
     if (!entry.version) {
-      return { ...base, version: DASH, tone: "warn", status: "No version stamp", primary: update, preview: !!update, uninstall: !update };
+      return { ...base, version: DASH, tone: "warn", status: t("skill.noVersionStamp"), stateKey: "no-stamp", primary: update, preview: !!update, uninstall: !update };
     }
     if (isNewer(target, entry.version)) {
-      return { ...base, version: entry.version, tone: "warn", status: "Update available", primary: update, preview: true, uninstall: false };
+      return { ...base, version: entry.version, tone: "warn", status: t("skill.status.updateAvailable"), stateKey: "stale", primary: update, preview: true, uninstall: false };
     }
     // An older release was chosen: offer it, but it is not an update.
-    const other = target && target !== entry.version ? `Install ${target}` : null;
-    return { ...base, version: entry.version, tone: "ok", status: "Installed", primary: other, preview: !!other, uninstall: true };
+    const other = target && target !== entry.version ? t("skill.installVersion", { version: target }) : null;
+    return { ...base, version: entry.version, tone: "ok", status: t("skill.status.installed"), stateKey: "current", primary: other, preview: !!other, uninstall: true };
   });
 }
 
-/** The rows that show "Update available": the banner lists them and the Skills nav badge counts them. */
+/** The rows that show an update waiting: the banner lists them and the Skills nav badge counts them. */
 export const pendingSkills = (hosts: HostInfo[], plugin: PluginStatus | null) =>
-  skillRows(hosts, plugin).filter((row) => row.status === "Update available");
+  skillRows(hosts, plugin).filter((row) => row.stateKey === "stale");
 
 /** Agents that are not on this computer and have no skills folder with Path in it. */
 export const notDetected = (hosts: HostInfo[], plugin: PluginStatus | null) =>
@@ -102,7 +106,7 @@ export const sharedRoots = (hosts: HostInfo[]) => groups(hosts).filter((group) =
 /** The release picker: "" follows the latest release. Null hides the picker (git source, or no release list). */
 export function releaseOptions(releases: Releases | undefined): { value: string; label: string }[] | null {
   if (!releases?.latest || releases.source === "git") return null;
-  return [{ value: "", label: `Latest · ${releases.latest}` },
+  return [{ value: "", label: t("skill.latestRelease", { version: releases.latest }) },
     ...releases.versions.filter((version) => version !== releases.latest).map((version) => ({ value: version, label: version }))];
 }
 
@@ -110,10 +114,11 @@ export type Failure = { title: string; text: string; unchanged: string | null; f
 
 /** The failure card: what failed, what the installer says was not changed, and the fix command when the message has one. */
 export function failure(done: "installed" | "updated" | "removed", labels: string[], error: string): Failure {
+  const doneWord = done === "installed" ? t("skill.done.installed") : done === "updated" ? t("skill.done.updated") : t("skill.done.removed");
   return {
-    title: `${joinNames(labels)} ${labels.length > 1 ? "were" : "was"} not ${done}`,
+    title: t(labels.length > 1 ? "skill.failure.wereNot" : "skill.failure.wasNot", { names: joinNames(labels), done: doneWord }),
     text: error,
-    unchanged: error.startsWith("installer refused") || error.includes("rolled back") ? "Nothing was changed." : null,
+    unchanged: error.startsWith("installer refused") || error.includes("rolled back") ? t("skill.failure.unchanged") : null,
     fix: error.split("`")[1] ?? null,
   };
 }
@@ -124,9 +129,9 @@ export function frameworkRows(plugin: PluginStatus | null, errors: Record<string
   return Object.entries(plugin?.frameworks ?? {}).filter(([, item]) => item.detected).map(([name, item]) => {
     const parts = [...(item.installed ? [`CLI\u00a0${item.installed}`] : []), ...item.hosts.map((h) => `${h.host}\u00a0${h.version ?? "?"}`)];
     return {
-      name, where: item.hosts.length ? item.hosts.map((h) => h.dir).join(", ") : "global command",
+      name, where: item.hosts.length ? item.hosts.map((h) => h.dir).join(t("list.separator")) : t("skill.globalCommand"),
       version: parts.join("\n") || "—",  // one install per line
-      status: !item.latest ? "Not checked yet" : item.update_available ? `Update to ${item.latest}` : "Up to date",
+      status: !item.latest ? t("skill.notCheckedYet") : item.update_available ? t("skill.updateTo", { version: item.latest }) : t("setup.upToDate"),
       tone: !item.latest ? "mute" : item.update_available ? "acc" : "ok",
       update: item.update_available,
       error: errors[name] ?? null,

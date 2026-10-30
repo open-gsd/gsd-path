@@ -1,5 +1,6 @@
 // Settings → Updates: skills per agent folder and the runtime of each project. Each update is previewed first.
 import { Fragment, useEffect, useState } from "react";
+import { t } from "../i18n";
 import { allCurrent, opOutcome, updatePlan, updateRows } from "../settingsUpdates";
 import type { OpResult, PluginStatus, UpdateStep } from "../settingsUpdates";
 import { api } from "../shell";
@@ -66,24 +67,24 @@ export function UpdatesTab({ shell, status }: { shell: Shell; status: Status | n
   return (
     <>
       <div className="set-head">
-        <h2>Updates</h2>
-        <button className="btn primary" disabled={busy || !plan.length || all === "confirm"} onClick={previewAll}>Update all</button>
+        <h2>{t("settings.tab.updates")}</h2>
+        <button className="btn primary" disabled={busy || !plan.length || all === "confirm"} onClick={previewAll}>{t("updates.updateAll")}</button>
       </div>
       <AppUpdateRow shell={shell} />
-      {error && <div className="error" role="alert">Cannot read the update status. <FixText text={error} /></div>}
+      {error && <div className="error" role="alert">{t("updates.cannotRead")} <FixText text={error} /></div>}
       {all === "confirm" && (
         <div className="set-confirm" role="status">
-          <span className="grow"><b>{plan.length === 1 ? "1 update is" : `${plan.length} updates are`} ready.</b> Nothing has changed yet. Check each preview below.</span>
-          <button className="btn small primary" onClick={runAll}>Update all now</button>
-          <button className="btn small" onClick={cancelAll}>Cancel</button>
+          <span className="grow"><b>{t(plan.length === 1 ? "updates.oneReady" : "updates.manyReady", { n: plan.length })}</b> {t("updates.nothingChangedPreviews")}</span>
+          <button className="btn small primary" onClick={runAll}>{t("updates.updateAllNow")}</button>
+          <button className="btn small" onClick={cancelAll}>{t("updates.cancel")}</button>
         </div>
       )}
-      {all === "stopped" && <div className="error" role="alert">An update failed. The updates after it did not run.</div>}
-      {!plugin ? (!error && <p className="note">Reading the installed versions…</p>) : (
+      {all === "stopped" && <div className="error" role="alert">{t("updates.updateFailedStopped")}</div>}
+      {!plugin ? (!error && <p className="note">{t("updates.reading")}</p>) : (
         <>
           {allCurrent(rows) && !busy && (
             <p className="set-fine" role="status">
-              <i className="dot ok" />Everything is up to date.{!rows.length && " No skills or project runtimes are installed."}
+              <i className="dot ok" />{t("updates.everythingCurrent")}{!rows.length && " " + t("updates.nothingInstalled")}
             </p>
           )}
           {rows.length > 0 && (
@@ -95,10 +96,10 @@ export function UpdatesTab({ shell, status }: { shell: Shell; status: Status | n
                     <div className="set-update">
                       <div><b>{row.name}</b><div className="set-path">{row.sub}</div></div>
                       <span className="set-version">{row.version}</span>
-                      {row.state === "current" ? <span className="pill ok">Up to date</span>
+                      {row.state === "current" ? <span className="pill ok">{t("setup.upToDate")}</span>
                         : row.state === "unknown" ? <span className="pill mute">{row.note}</span>
                         : <button className="btn small" disabled={busy || all === "confirm" || !!ops[row.group]}
-                            onClick={() => send(row.step!, true)}>{row.note || "Update"}</button>}
+                            onClick={() => send(row.step!, true)}>{row.note || t("updates.update")}</button>}
                     </div>
                     {op && <OpPanel op={op} solo={all !== "confirm"} busy={busy}
                       onRun={() => run(op.step)} onRetry={() => send(op.step, true)} onClose={() => setOp(row.group, null)} />}
@@ -108,9 +109,9 @@ export function UpdatesTab({ shell, status }: { shell: Shell; status: Status | n
             </div>
           )}
           {plugin.latest == null && !error && (
-            <p className="note">The latest release is not known yet. Use “Check for updates” on the <a href="#/skills">Skills</a> page.</p>
+            <p className="note">{t("updates.latestNotKnown", { skills: t("nav.skills") })}</p>
           )}
-          <p className="note">The skills and each project runtime update separately. One skills update writes every agent folder.</p>
+          <p className="note">{t("updates.separateNote")}</p>
         </>
       )}
     </>
@@ -124,34 +125,34 @@ function OpPanel({ op, solo, busy, onRun, onRetry, onClose }: {
   const output = op.output ? <pre className="code set-output">{op.output}</pre> : null;
   return (
     <div className="set-op" aria-live="polite">
-      {op.phase === "checking" && <span className="sub">Preparing the preview…</span>}
-      {op.phase === "running" && <span className="sub">Updating… Do not close the app.</span>}
+      {op.phase === "checking" && <span className="sub">{t("updates.preparingPreview")}</span>}
+      {op.phase === "running" && <span className="sub">{t("updates.updatingDoNotClose")}</span>}
       {op.phase === "preview" && (
         <>
-          <div><b>Preview: {op.step.label}.</b> <span className="sub">Nothing has changed yet.</span></div>
-          {output ?? <span className="sub">The installer printed no preview.</span>}
+          <div><b>{t("updates.previewOf", { label: op.step.label })}</b> <span className="sub">{t("updates.nothingChanged")}</span></div>
+          {output ?? <span className="sub">{t("updates.noPreview")}</span>}
           {solo && (
             <div className="actions">
-              <button className="btn small primary" disabled={busy} onClick={onRun}>Update now</button>
-              <button className="btn small" disabled={busy} onClick={onClose}>Cancel</button>
+              <button className="btn small primary" disabled={busy} onClick={onRun}>{t("updates.updateNow")}</button>
+              <button className="btn small" disabled={busy} onClick={onClose}>{t("updates.cancel")}</button>
             </div>
           )}
         </>
       )}
       {op.phase === "done" && (
         <>
-          <div className="line"><span className="pill ok">Updated</span><span className="sub grow">{op.step.label}</span>
-            <button className="link" onClick={onClose}>Hide</button></div>
+          <div className="line"><span className="pill ok">{t("updates.updated")}</span><span className="sub grow">{op.step.label}</span>
+            <button className="link" onClick={onClose}>{t("updates.hide")}</button></div>
           {output}
         </>
       )}
       {op.phase === "failed" && (
         <>
-          <div className="error" role="alert"><b>The update did not finish.</b> <FixText text={op.error} /></div>
+          <div className="error" role="alert"><b>{t("updates.didNotFinish")}</b> <FixText text={op.error} /></div>
           {output}
           <div className="actions">
-            <button className="btn small" disabled={busy} onClick={onRetry}>Try again</button>
-            <button className="btn small" disabled={busy} onClick={onClose}>Close</button>
+            <button className="btn small" disabled={busy} onClick={onRetry}>{t("common.tryAgain")}</button>
+            <button className="btn small" disabled={busy} onClick={onClose}>{t("updates.close")}</button>
           </div>
         </>
       )}

@@ -3,6 +3,7 @@ import { parseRoute } from "./route";
 import { pickScreen } from "./screen";
 import { boot, getShell, onShellChange, onShowUpdate, usePort } from "./shell";
 import type { Shell } from "./shell";
+import { t, useLanguage } from "./i18n";
 import { FirstLaunch } from "./screens/FirstLaunch";
 import { BlockingProblems, PortInUse, PythonMissing } from "./screens/Problems";
 import { AppUpdateDialog, SHOW_UPDATE } from "./screens/AppUpdate";
@@ -13,6 +14,7 @@ import { Tray } from "./screens/Tray";
 const SETUP_DONE = "gsd-path.setup-done";
 
 export function App() {
+  useLanguage();
   const [shell, setShell] = useState<Shell | null>(null);
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE) === "1");
   const [firstLaunchSeen, setFirstLaunchSeen] = useState(false);
@@ -49,7 +51,7 @@ export function App() {
 
   switch (pickScreen(shell, { setupDone, firstLaunchSeen })) {
     case "checking":
-      return <div className="center"><p className="lead">Checking your setup…</p></div>;
+      return <div className="center"><p className="lead">{t("app.checking")}</p></div>;
     case "first-launch":
       return <FirstLaunch shell={shell} onRetry={retry} onDone={() => setFirstLaunchSeen(true)} />;
     case "requirements":

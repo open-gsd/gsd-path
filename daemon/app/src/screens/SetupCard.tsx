@@ -1,6 +1,7 @@
 // The project page's right column: "Setup in this project", member repositories, and the removal of Path.
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { t } from "../i18n";
 import { doctorReport, memberRows, setupRows } from "../project";
 import type { Member, SetupRow } from "../project";
 import { envHash, projectHash } from "../route";
@@ -51,13 +52,13 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
   const propose = (at: string, label: string, call: (dry_run: boolean) => Promise<OpResult>) => guard(at, async () => {
     setAsk(null);
     const plan = await call(true);
-    if (!plan.ok) throw new Error(plan.error || "The dry run failed.");
+    if (!plan.ok) throw new Error(plan.error || t("skillsOp.dryRunFailed"));
     setAsk({ at, label, text: plan.stdout_tail ?? "", output: true, apply: () => call(false) });
   });
   const confirm = (pending: Ask) => guard(pending.at, async () => {
     setAsk(null);
     const result = await pending.apply();
-    setNote({ at: pending.at, ok: result.ok, text: result.ok ? "Done." : result.error || "The operation failed.",
+    setNote({ at: pending.at, ok: result.ok, text: result.ok ? t("skillsOp.done") : result.error || t("skillsOp.operationFailed"),
       output: [result.source_notice, result.stdout_tail].filter(Boolean).join("\n") });
     setDoctor(null); // the last health check is about the old state
     reload();
@@ -73,18 +74,18 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
     return propose(row.key, label, (dry_run) => projectOp(p.root, run, { dry_run }));
   };
   const memberHooks = (member: string) =>
-    propose(member, "Install hooks", (dry_run) => projectOp(p.root, "member-hooks", { member, dry_run }));
+    propose(member, t("setupCard.installHooks"), (dry_run) => projectOp(p.root, "member-hooks", { member, dry_run }));
   // Repair has no dry run in the daemon, so the text says what it does.
   const repair = (at: string) => {
     setNote(null);
-    setAsk({ at, label: "Repair", output: false, apply: () => projectOp(p.root, "member-repair"),
-      text: "Repair rewrites the member markers that are missing or stale, for every member of this project. It changes no other file." });
+    setAsk({ at, label: t("setupCard.repair"), output: false, apply: () => projectOp(p.root, "member-repair"),
+      text: t("setupCard.repairText") });
   };
   const planRemoval = () => guard("remove", async () => setRemoval((await planUninstall({ scope: "project", root: p.root })).plan));
   const remove = () => guard("remove", async () => {
     const result = await applyUninstall({ scope: "project", root: p.root });
     setRemoval(null);
-    setNote(result.ok ? { at: "remove", ok: true, text: "Path was removed from this project.", output: result.applied.join("\n") }
+    setNote(result.ok ? { at: "remove", ok: true, text: t("setupCard.removed"), output: result.applied.join("\n") }
       : { at: "remove", ok: false, text: result.errors.map((item) => `${item.path}: ${item.error}`).join("\n") });
     setDoctor(null);
     reload();
@@ -97,11 +98,11 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
         {ask.output ? <Output text={ask.text} /> : <div className="sub">{ask.text}</div>}
         <div className="actions">
           <button className="btn small primary" disabled={!!busy} onClick={() => confirm(ask)}>{ask.label}</button>
-          <button className="btn small" onClick={() => setAsk(null)}>Cancel</button>
+          <button className="btn small" onClick={() => setAsk(null)}>{t("updates.cancel")}</button>
         </div>
       </div>
     )}
-    {busy === at && <div className="sk-ask sub" role="status">Working…</div>}
+    {busy === at && <div className="sk-ask sub" role="status">{t("skillsOp.working")}</div>}
     {note?.at === at && (
       <div className="sk-ask">
         <div className={note.ok ? "sk-done-line" : "error"} role={note.ok ? "status" : "alert"}>{note.ok && <i className="dot ok" />}{note.text}</div>
@@ -114,9 +115,9 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
 
   return <>
     <div className="card setup-card">
-      <div className="setup-card-head">Setup in this project</div>
-      {error && <div className="setup-row"><p className="error" role="alert">{error} <button className="link" onClick={reload}>Try again</button></p></div>}
-      {!setup && !error && <div className="setup-row sub">{plugin ? "The monitor does not report the setup of this project." : "Loading setup…"}</div>}
+      <div className="setup-card-head">{t("setupCard.title")}</div>
+      {error && <div className="setup-row"><p className="error" role="alert">{error} <button className="link" onClick={reload}>{t("common.tryAgain")}</button></p></div>}
+      {!setup && !error && <div className="setup-row sub">{plugin ? t("setupCard.notReported") : t("setupCard.loading")}</div>}
       {rows.map((row) => (
         <div key={row.key} className="setup-row">
           <div className="grow">
@@ -126,12 +127,12 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
           </div>
           {row.action?.run === "env" ? <a className="btn small" href={envHash(p.root)}>{row.action.label}</a>
             : row.action ? <button className={row.action.primary ? "btn small primary" : "btn small"} disabled={!!busy} onClick={() => act(row)}>{row.action.label}</button>
-            : row.ok ? <span className="pill ok">Up to date</span> : null}
+            : row.ok ? <span className="pill ok">{t("setup.upToDate")}</span> : null}
           {under(row.key)}
           {row.key === "doctor" && report && busy !== "doctor" && (
             <ul className="sk-doctor">
               {report.lines.map((line, index) => <li key={index} className={line.kind === "error" ? "sk-finding" : undefined}>{line.text}</li>)}
-              {!report.lines.length && <li>The health check printed nothing.</li>}
+              {!report.lines.length && <li>{t("setupCard.doctorNothing")}</li>}
             </ul>
           )}
         </div>
@@ -140,11 +141,11 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
 
     {members && (!members.ok || list.length > 0) && (
       <div className="card setup-card">
-        <div className="setup-card-head">Member repositories <span>coordinator · .project/MEMBERS.md</span></div>
+        <div className="setup-card-head">{t("setupCard.memberRepos")} <span>coordinator · .project/MEMBERS.md</span></div>
         {!members.ok && (
           <div className="setup-row">
             <div className="grow"><div className="error" role="alert">{members.error}</div></div>
-            <button className="btn small" disabled={!!busy} onClick={() => repair("members")}>Repair</button>
+            <button className="btn small" disabled={!!busy} onClick={() => repair("members")}>{t("setupCard.repair")}</button>
             {under("members")}
           </div>
         )}
@@ -161,15 +162,15 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
               {member.reason && <div className="member-reason mono">{member.reason}</div>}
             </div>
             <span className="actions">
-              {member.actions.includes("repair") && <button className="btn small" disabled={!!busy} onClick={() => repair(member.checkout)}>Repair</button>}
-              {member.actions.includes("hooks") && <button className="btn small" disabled={!!busy} onClick={() => memberHooks(member.checkout)}>Install hooks</button>}
+              {member.actions.includes("repair") && <button className="btn small" disabled={!!busy} onClick={() => repair(member.checkout)}>{t("setupCard.repair")}</button>}
+              {member.actions.includes("hooks") && <button className="btn small" disabled={!!busy} onClick={() => memberHooks(member.checkout)}>{t("setupCard.installHooks")}</button>}
             </span>
             {under(member.checkout)}
           </div>
         ))}
         <div className="setup-foot-note">
-          <span className="grow">Joining a repository happens in your agent: <span className="mono">/path</span> then <span className="mono">members add</span>.</span>
-          <CopyButton text="/path" label="Copy /path" className="btn tiny" />
+          <span className="grow">{t("setupCard.joiningNote1")}<span className="mono">/path</span>{t("setupCard.joiningNote2")}<span className="mono">members add</span>{t("setupCard.joiningNote3")}</span>
+          <CopyButton text="/path" label={t("trayPop.copyPath")} className="btn tiny" />
         </div>
       </div>
     )}
@@ -178,9 +179,9 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
 
     <div className="sk-remove">
       <button className="link quiet" disabled={!!busy} aria-expanded={!!removal} onClick={() => (removal ? setRemoval(null) : planRemoval())}>
-        Remove Path from this project
+        {t("setupCard.removePath")}
       </button>
-      {removal && <PlanBox plan={removal} confirm="Remove" busy={busy === "remove"} onConfirm={remove} onCancel={() => setRemoval(null)} />}
+      {removal && <PlanBox plan={removal} confirm={t("setupCard.remove")} busy={busy === "remove"} onConfirm={remove} onCancel={() => setRemoval(null)} />}
       {under("remove")}
     </div>
   </>;
