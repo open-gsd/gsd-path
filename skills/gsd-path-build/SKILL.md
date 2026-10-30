@@ -132,7 +132,9 @@ brief unless the canonical `build: abandon milestone <slug>` checkpoint moves
 that same brief into `.project/archive/`; build adds fix tasks and repairs
 briefs, it never replans. It also refuses a `build:` checkpoint while the
 committed STATE is `ship/active`: final-review outputs stay uncommitted until
-the ship commit.
+the ship commit. The one exception is the patch re-entry checkpoint: the
+worktree STATE is `build/active` and its Log ends with `patch plan reopened`,
+`patch plan approved`, `build started`.
 
 ## Execute from runtime receipts
 
