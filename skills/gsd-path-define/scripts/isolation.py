@@ -5372,6 +5372,50 @@ def _committed_ship_active(repo: Path) -> bool:
     return fields.get("phase") == "ship" and fields.get("status") == "active"
 
 
+# The STATE Log tail that sanctions a build checkpoint past a HEAD that is
+# still ship/active: the blocked final review went through the patch plan
+# (reopened, then approved) and build started again (#526).
+_PATCH_REENTRY_LOG = (
+    ("plan", "patch plan reopened"),
+    ("plan", "patch plan approved"),
+    ("build", "build started"),
+)
+
+
+def _patch_reentry_build_active(repo: Path) -> bool:
+    """True when the worktree STATE is the sanctioned patch-re-entry build.
+
+    A blocked final review leaves HEAD at `build: complete milestone`
+    (ship/active) on purpose: the patch plan runs uncommitted and the patch
+    build's own checkpoint commits the artifacts (SHIP.md). This reads the
+    worktree STATE the checkpoint is about to commit and accepts only the
+    documented sequence — a hand-flipped build/active during final review
+    carries no such Log tail and stays refused (#429, #526).
+    """
+
+    state = repo / ".project" / "STATE.md"
+    try:
+        text = state.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    frontmatter = text.split("\n---", 1)[0]
+    fields = {
+        key: _unquote(value)
+        for key, value in re.findall(r"(?m)^(phase|status):(.*)$", frontmatter)
+    }
+    if not (fields.get("phase") == "build" and fields.get("status") == "active"):
+        return False
+    events: List[Tuple[str, str]] = []
+    for line in text.splitlines():
+        match = re.fullmatch(r"- \d{4}-\d{2}-\d{2} — (\S+) — (.+)", line)
+        if match:
+            events.append((match.group(1), match.group(2)))
+    # The sanctioned sequence appears in order, as the Log tail of this
+    # milestone's patch loop; the final event must be the build restart.
+    last = len(_PATCH_REENTRY_LOG)
+    return len(events) >= last and tuple(events[-last:]) == _PATCH_REENTRY_LOG
+
+
 def checkpoint(
     repo: Path,
     expected_head: str,
@@ -5421,7 +5465,11 @@ def checkpoint(
                 "subject": subject.strip(),
             }
         raise IsolationError("primary HEAD differs from --expected-head")
-    if subject.strip().startswith("build:") and _committed_ship_active(repo):
+    if (
+        subject.strip().startswith("build:")
+        and _committed_ship_active(repo)
+        and not _patch_reentry_build_active(repo)
+    ):
         raise IsolationError(
             "STATE is ship/active: final review creates no pre-ship commit; leave its "
             "outputs uncommitted for archive_milestone.py, and send findings through "
