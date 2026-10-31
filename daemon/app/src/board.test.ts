@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { boardRow, filterCounts, setupPill, updateBanner, visibleProjects } from "./board";
+import { boardRow, coordinatorOf, filterCounts, pathCard, setupPill, updateBanner, visibleProjects } from "./board";
 import { asking, blocked, building, shipped, status } from "./fixtures";
 import type { HostInfo, PluginStatus, ProjectSetup } from "./skills";
 import { phaseTrack } from "./project";
+import type { Member } from "./project";
 import { nameOf } from "./status";
 
 const NOW = Date.parse(status.generated_at!);
@@ -142,5 +143,28 @@ describe("updateBanner", () => {
   it("is hidden when nothing is pending or the status is not loaded", () => {
     expect(updateBanner(hosts, plugin({ hosts: {}, projects: [setup()] }), status.projects)).toBeNull();
     expect(updateBanner(hosts, null, status.projects)).toBeNull();
+  });
+});
+
+describe("multi-repo links", () => {
+  const member = (checkout: string): Member => ({
+    name: checkout.split("/").pop()!, checkout, remote: "git@x:m.git", integration: "default", marker: { current: true, reason: null }, hooks: true });
+  const coordinator = (root: string, checkouts: string[]): ProjectSetup => ({
+    root, local_skills: [], runtime: true, contracts: true, hooks: true, runtime_version: "1.4.0", members: checkouts.map(member) });
+  const piCard = { ...asking, root: "/work/atlas", repository: "atlas-pi", flavor: "gsd-pi" };
+
+  it("names the coordinator of each watched member", () => {
+    const links = coordinatorOf([coordinator("/work/gsd-path", ["/work/atlas", "/work/unwatched"])], status.projects);
+    expect([...links]).toEqual([["/work/atlas", "gsd-path"], ["/work/unwatched", "gsd-path"]]);
+  });
+  it("skips a coordinator that is not a watched GSD Path card and keeps the first coordinator of a member", () => {
+    const setups = [coordinator("/work/elsewhere", ["/work/atlas"]), coordinator("/work/notes", ["/work/atlas"]),
+      coordinator("/work/gsd-path", ["/work/atlas"])];
+    expect([...coordinatorOf(setups, status.projects)]).toEqual([["/work/atlas", "field-notes"]]);
+    expect([...coordinatorOf([{ ...coordinator("/work/gsd-path", []), members: undefined }], status.projects)]).toEqual([]);
+  });
+  it("finds the GSD Path card at a root, not another framework in the same folder", () => {
+    expect(pathCard([piCard, blocked], "/work/atlas")).toBe(blocked);
+    expect(pathCard([piCard], "/work/atlas")).toBeUndefined();
   });
 });

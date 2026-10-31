@@ -52,3 +52,8 @@ a.btn:hover{color:var(--text)}
 .board.with-setup .board-th,.board.with-setup .board-row{grid-template-columns:minmax(150px,1.4fr) minmax(150px,1.1fr) minmax(110px,1fr) 44px 92px 132px}
 .board.with-setup .meta{margin-top:0}
 .fw-versions{white-space:pre-line}
+.board-rel{margin-top:6px}
+.board-member{display:flex;align-items:flex-start;gap:10px;padding:10px 0 10px 18px;border-bottom:1px solid var(--line);font-size:13px}
+.board-member>[aria-hidden]{color:var(--faint)}
+.board-member .ppath{display:inline;margin:0 0 0 8px}
+.board-member .sk-pills{margin-top:0}

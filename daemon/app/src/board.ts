@@ -40,6 +40,21 @@ export function boardRow(p: Project, now: number): BoardRow {
   };
 }
 
+/** The board card of the GSD Path project at this root, or undefined when it is not watched. */
+export const pathCard = (projects: Project[], root: string) => projects.find((p) => p.root === root && !flavorOf(p));
+
+/** Coordinator name per watched member root, from each coordinator's member list. */
+export function coordinatorOf(setups: ProjectSetup[], projects: Project[]): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const setup of setups) {
+    const coordinator = pathCard(projects, setup.root);
+    for (const member of setup.members ?? []) {
+      if (coordinator && !result.has(member.checkout)) result.set(member.checkout, nameOf(coordinator));
+    }
+  }
+  return result;
+}
+
 /** A runtime older than the latest release, or an old runtime without a version stamp. */
 export const runtimePending = (setup: { runtime?: boolean; runtime_version?: string | null }, latest: string | null) =>
   setup.runtime && !!latest && (!setup.runtime_version || isNewer(latest, setup.runtime_version));

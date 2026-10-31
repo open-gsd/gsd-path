@@ -62,6 +62,21 @@ def _members(plugin, root: str) -> dict:
     return result
 
 
+def board_members(plugin, root: str) -> dict:
+    """The members of a coordinator for the board, or {} when the project has no MEMBERS.md.
+
+    A failure returns no members and the error, so one bad coordinator never breaks the status read.
+    """
+    members_file = Path(root) / ".project" / "MEMBERS.md"
+    if not members_file.exists() and not members_file.is_symlink():
+        return {}
+    try:
+        result = _members(plugin, root)
+    except Exception as error:  # a missing plugin source or unexpected helper output
+        return {"members": [], "members_error": str(error)}
+    return {"members": result["members"], "members_error": result["error"]}
+
+
 def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
     preview: List[str] = ["--dry-run"] if body.get("dry_run") else []
     if op in INSTALLER_OPS:

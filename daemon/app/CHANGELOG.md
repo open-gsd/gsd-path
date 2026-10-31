@@ -7,6 +7,12 @@ The app has its own version and `app-v<version>` tags, separate from the
 ## [Unreleased]
 
 ### Added
+- The Projects board shows multi-repo projects. A coordinator card shows how
+  many members it has and lists each member under it, with its marker and
+  member-hook state and a link to its own card when its folder is watched. A
+  watched member card shows which coordinator it belongs to. A members file
+  that does not validate shows "Coordinator · members invalid", with the
+  error on hover.
 - The Projects board lists gsd-pi (`.gsd/`) and gsd-core (`.planning/`)
   projects. A folder with more than one framework shows one card per
   framework, with a framework badge. These cards are read-only.

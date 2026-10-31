@@ -680,6 +680,30 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(project["root"], str(self.project))
         for key in ("local_skills", "runtime", "contracts", "hooks", "runtime_version"):
             self.assertIn(key, project)
+        self.assertNotIn("members", project)  # not a coordinator
+
+    def test_api_plugin_status_lists_a_coordinators_members(self):
+        members_file = self.project / ".project" / "MEMBERS.md"
+        members_file.write_text("# Members\n", encoding="utf-8")
+        source_git = self.manager.src_dir / ".git"
+        made_source = not source_git.exists()
+        source_git.mkdir(parents=True, exist_ok=True)
+        member = {"name": "api", "checkout": "/work/api", "remote": "git@x:api.git", "integration": "default"}
+        old_runner = self.manager.runner
+        self.manager.runner = FakeRunner([(0, json.dumps({"members": [member]}), ""),
+                                          (0, json.dumps({"current": True, "reason": None}), "")])
+        try:
+            status, payload = self.request("GET", "/api/plugin/status")
+        finally:
+            self.manager.runner = old_runner
+            members_file.unlink()
+            if made_source:
+                source_git.rmdir()
+        self.assertEqual(status, 200)
+        project = payload["projects"][0]
+        self.assertEqual([(row["name"], row["marker"]) for row in project["members"]],
+                         [("api", {"current": True, "reason": None})])
+        self.assertIsNone(project["members_error"])
 
     def test_uninstall_dry_run_returns_plan(self):
         status, payload = self.request(
