@@ -523,6 +523,7 @@ export const en = {
   "setupCard.memberVisibility": "Visibility",
   "setupCard.memberNeedsName": "Enter a member name.",
   "setupCard.memberNeedsCheckout": "Enter the checkout folder.",
+  "setupCard.memberNeedsFullPath": "Enter a full folder path, or use Browse.",
   "setupCard.memberNeedsRepo": "Enter the new repository as owner/name.",
   "setupCard.addExistingText": "Add {name} at {checkout} as a member. This writes .project/MEMBERS.md in this project and a member marker in the Git folder of {name}. Members change only between milestones.",
   "setupCard.addCreateText": "Create the {visibility} GitHub repository {repo}, clone it to {checkout}, and add it as member {name}. The app cannot delete the GitHub repository later.",

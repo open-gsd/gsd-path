@@ -239,6 +239,14 @@ describe("add member form", () => {
       expect(memberAdd(form({ create: true, repo }))).toEqual({ error: "Enter the new repository as owner/name." });
     }
   });
+  it("refuses a relative checkout and accepts full paths", () => {
+    for (const checkout of ["api", "work/api", "./api", "C:api"]) {
+      expect(memberAdd(form({ checkout }))).toEqual({ error: "Enter a full folder path, or use Browse." });
+    }
+    for (const checkout of ["~/x", "/x", "C:\\x", "C:/x"]) {
+      expect(memberAdd(form({ checkout }))).toHaveProperty("body.checkout", checkout);
+    }
+  });
   it("starts private, so a new repository is never public by default", () => {
     expect(emptyMemberForm()).toMatchObject({ integration: "default", create: false, visibility: "private" });
   });

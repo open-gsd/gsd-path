@@ -253,6 +253,7 @@ export function memberAdd(form: MemberForm): { body: Record<string, string>; con
   const name = form.name.trim(), checkout = form.checkout.trim(), repo = form.repo.trim();
   if (!name) return { error: t("setupCard.memberNeedsName") };
   if (!checkout) return { error: t("setupCard.memberNeedsCheckout") };
+  if (!/^([/~]|[A-Za-z]:[\\/])/.test(checkout)) return { error: t("setupCard.memberNeedsFullPath") };
   if (form.create && !/^[^/\s]+\/[^/\s]+$/.test(repo)) return { error: t("setupCard.memberNeedsRepo") };
   const body: Record<string, string> = { name, checkout, integration: form.integration };
   if (!form.create) return { body, confirm: t("setupCard.addExistingText", { name, checkout }) };
