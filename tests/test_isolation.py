@@ -2341,6 +2341,39 @@ class IsolationTests(unittest.TestCase):
             self.assertIn(".project/STATE.md", committed)
             self.assertIn(".project/review/PATCH-FINDINGS.md", committed)
 
+    def test_build_checkpoint_accepts_resumed_patch_planner_reentry(self) -> None:
+        # A blocked patch planner resumed inside the plan stay: the extra
+        # `patch planning blocked` / `planning resumed` events stay between
+        # the reopen and the approval (#531).
+        log = (
+            "- 2026-10-25 — ship — final review blocked; gap final-gap-1 verdict: blocked\n"
+            "- 2026-10-25 — plan — patch plan reopened\n"
+            "- 2026-10-25 — plan — patch planning blocked: NEEDS-USER ruling pending\n"
+            "- 2026-10-25 — plan — planning resumed\n"
+            "- 2026-10-25 — plan — patch plan approved\n"
+            "- 2026-10-25 — build — build started\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            head = self.committed_state(repo, "ship", "active")
+            self.write(
+                repo, ".project/STATE.md",
+                self.patch_reentry_state("build", "active", log),
+            )
+            self.write(repo, ".project/review/PATCH-FINDINGS.md", "# Patch findings\n")
+            self.write(repo, ".project/review/final-gap-1.md", "# Gap\n")
+
+            result = isolation.checkpoint(
+                repo, head, "build: start patch wave 6",
+                "Why: commit the final-review finding set with the approved patch plan",
+                [".project"],
+            )
+
+            self.assertEqual(result["status"], "committed")
+            self.assertEqual(git(repo, "rev-parse", "HEAD^"), head)
+
     def test_build_checkpoint_still_refused_without_patch_reentry_log(self) -> None:
         stale_logs = (
             # A hand-flipped build/active during final review: no patch loop.
@@ -2350,6 +2383,14 @@ class IsolationTests(unittest.TestCase):
             "- 2026-10-25 — plan — patch plan approved\n",
             # The patch loop ran, but a later event moved on: not the re-entry tail.
             self.PATCH_REENTRY_LOG + "- 2026-10-25 — build — build done; final review pending\n",
+            # Approved and started, but the plan stay never opened with a reopen.
+            "- 2026-10-25 — plan — patch plan approved\n"
+            "- 2026-10-25 — build — build started\n",
+            # A plan stay that opens with `planning resumed` alone never
+            # entered through the patch plan.
+            "- 2026-10-25 — plan — planning resumed\n"
+            "- 2026-10-25 — plan — patch plan approved\n"
+            "- 2026-10-25 — build — build started\n",
         )
         for log in stale_logs:
             with tempfile.TemporaryDirectory() as temporary:

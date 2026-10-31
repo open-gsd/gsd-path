@@ -133,8 +133,9 @@ that same brief into `.project/archive/`; build adds fix tasks and repairs
 briefs, it never replans. It also refuses a `build:` checkpoint while the
 committed STATE is `ship/active`: final-review outputs stay uncommitted until
 the ship commit. The one exception is the patch re-entry checkpoint: the
-worktree STATE is `build/active` and its Log ends with `patch plan reopened`,
-`patch plan approved`, `build started`.
+worktree STATE is `build/active`, its Log ends with `patch plan approved`
+then `build started`, and the plan stay holding that approval opened with
+`patch plan reopened` (a blocked, resumed planner may log events inside it).
 
 ## Execute from runtime receipts
 
