@@ -361,5 +361,44 @@ class MemberAddTests(Case):
         self.assertIn("milestone boundary", result["error"])
 
 
+class MemberChangeTests(Case):
+    """Remove a member and change its integration: members.py owns every rule."""
+
+    def test_remove_runs_members_remove_with_the_name(self):
+        out = json.dumps({"members": [], "cleaned": [self.member + "/.git/gsd-path/member.json"]})
+        self.answers[("members.py", "remove")] = (0, out, "")
+        result = self.run_op(op="member-remove", name=" api ")
+        self.assertEqual(result, {"ok": True, "stdout_tail": out, "error": None})
+        self.assertEqual(self.helper_args(), [["remove", "--repo", self.root, "--name=api"]])
+
+    def test_integration_runs_set_integration_with_name_and_mode(self):
+        self.run_op(op="member-integration", name="api", integration="pull-request")
+        self.assertEqual(self.helper_args(), [["set-integration", "--repo", self.root, "--name=api",
+                                               "--integration=pull-request"]])
+
+    def test_a_name_that_looks_like_an_option_stays_a_value(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        import members
+        self.run_op(op="member-remove", name="--repo=/elsewhere")
+        parsed = members.parser().parse_args(self.helper_args()[0])
+        self.assertEqual((parsed.name, str(parsed.repo)), ("--repo=/elsewhere", self.root))
+
+    def test_a_missing_field_or_a_preview_runs_nothing(self):
+        for body, text in (({"op": "member-remove"}, "name is required"),
+                           ({"op": "member-remove", "name": ["api"]}, "name is required"),
+                           ({"op": "member-integration", "name": "api"}, "integration is required"),
+                           ({"op": "member-remove", "name": "api", "dry_run": True}, "no preview"),
+                           ({"op": "member-integration", "name": "api", "integration": "direct", "dry_run": True}, "no preview")):
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, text):
+                self.run_op(**body)
+        self.assertEqual(self.calls, [])
+
+    def test_a_refused_change_returns_the_helper_text(self):
+        self.answers[("members.py", "remove")] = (1, "", "error: task briefs name member api; change those tasks before removing it\n")
+        result = self.run_op(op="member-remove", name="api")
+        self.assertFalse(result["ok"])
+        self.assertIn("task briefs name member api", result["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

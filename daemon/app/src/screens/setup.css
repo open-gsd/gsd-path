@@ -46,6 +46,7 @@ button.step:disabled{cursor:default}
 .sk-finding{color:var(--danger)}
 .sk-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
 .member-name{font-weight:600;text-decoration:none}
+.member-mode{min-height:22px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--text);padding:0 6px;font:inherit;font-size:12px}
 .member-reason{font-size:12px;color:var(--danger);margin-top:5px;overflow-wrap:anywhere}
 .setup-foot-note{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)}
 .see-charts{display:inline-block;margin-top:8px;font-size:12.5px;text-decoration:none}

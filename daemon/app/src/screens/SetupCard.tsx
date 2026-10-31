@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { t } from "../i18n";
-import { browsedCheckout, doctorReport, emptyMemberForm, MEMBER_INTEGRATIONS, MEMBER_VISIBILITIES, memberAdd, memberRows, setupRows } from "../project";
+import { browsedCheckout, doctorReport, emptyMemberForm, MEMBER_INTEGRATIONS, MEMBER_VISIBILITIES, memberAdd, memberIntegration, memberRemove, memberRows, setupRows } from "../project";
 import type { Member, MemberForm, SetupRow } from "../project";
 import { envHash, projectHash } from "../route";
 import { api, pickFolder } from "../shell";
@@ -92,6 +92,18 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
       return result;
     } });
   };
+  // members.py remove has no dry run either; the row goes away when it works.
+  const removeMember = (at: string, name: string) => {
+    const request = memberRemove(name);
+    setNote(null);
+    setAsk({ at, label: t("setupCard.remove"), output: false, text: request.confirm,
+      apply: () => projectOp(p.root, "member-remove", request.body) });
+  };
+  // A mode change is one field and easy to change back, so it runs without a confirm.
+  const setIntegration = (member: { name: string; checkout: string; integration: string }, integration: string) => {
+    const body = memberIntegration(member, integration);
+    if (body) confirm({ at: member.checkout, label: "", text: "", output: false, apply: () => projectOp(p.root, "member-integration", body) });
+  };
   const edit = (change: Partial<MemberForm>) => {
     if (!adding) return;
     setAdding({ ...adding, ...change });
@@ -179,13 +191,17 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
               <div className="sk-pills">
                 <span className={`pill ${member.marker.tone}`}>{member.marker.label}</span>
                 <span className={`pill ${member.hooks.tone}`}>{member.hooks.label}</span>
-                <span className="pill mute">{member.integration}</span>
+                <select className="member-mode" aria-label={t("setupCard.memberIntegration")} value={member.integration}
+                  disabled={!!busy} onChange={(event) => setIntegration(member, event.target.value)}>
+                  {MEMBER_INTEGRATIONS.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
               </div>
               {member.reason && <div className="member-reason mono">{member.reason}</div>}
             </div>
             <span className="actions">
               {member.actions.includes("repair") && <button className="btn small" disabled={!!busy} onClick={() => repair(member.checkout)}>{t("setupCard.repair")}</button>}
               {member.actions.includes("hooks") && <button className="btn small" disabled={!!busy} onClick={() => memberHooks(member.checkout)}>{t("setupCard.installHooks")}</button>}
+              <button className="btn small" disabled={!!busy} onClick={() => removeMember(member.checkout, member.name)}>{t("setupCard.remove")}</button>
             </span>
             {under(member.checkout)}
           </div>
