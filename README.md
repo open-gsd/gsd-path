@@ -24,16 +24,16 @@ The [host trust matrix](https://github.com/open-gsd/gsd-path/blob/main/docs/trus
 is the source of truth for live milestone proof and each host's guard tier.
 
 <!-- release-docs -->
-## What's new in 1.7.0 — 2026-10-30
+## What's new in 1.7.1 — 2026-10-31
 
-**Latest npm release:** [@opengsd/gsd-path@1.7.0](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.7.0) — [release notes](CHANGELOG.md#170---2026-10-30)
+**Latest npm release:** [@opengsd/gsd-path@1.7.1](https://www.npmjs.com/package/@opengsd/gsd-path/v/1.7.1) — [release notes](CHANGELOG.md#171---2026-10-31)
 
 **Recent highlights**
-- translate every app screen through the message tables
-- add the app language setting with message tables
-- accept blessed successor runtimes on closed milestones
-- add a publish-only runtime store CLI
-- add evidence-manifest joining tasks to accepted evidence
+- scope reviews to agreed acceptance criteria
+- accept a resumed patch planner's re-entry checkpoint
+- Align FULL and WORKFLOW deep-review rule with INTENT request
+- Document resumed-planner patch re-entry Log rule
+- update release notes for v1.7.0
 
 <!-- /release-docs -->
 

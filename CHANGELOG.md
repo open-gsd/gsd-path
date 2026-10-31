@@ -11,6 +11,15 @@ app and the daemon have their own file,
 [daemon/app/CHANGELOG.md](daemon/app/CHANGELOG.md). Release bookkeeping and
 test-only changes are not listed; the Git history has them.
 
+## [1.7.1] - 2026-10-31
+
+### Changed
+- Focus reviews on agreed requirements and required proof, without searching for unrelated improvements.
+- Require an explicit request for adversarial review, and limit repeat reviews to repaired failures and affected checks.
+
+### Fixed
+- Resume a patch planner after its re-entry checkpoint without rejecting its task log.
+
 ## [1.7.0] - 2026-10-30
 
 ### Added
