@@ -9,11 +9,11 @@ milestone loop. While a milestone builds, the next one can be planned in
 parallel under `.project/next/` (lookahead); a building milestone can also be
 abandoned on an explicit ruling, archiving its partial work for a re-slice.
 
-**Hosts with a passing full live milestone for release 1.6.2:** Codex, Claude
+**Hosts with a passing full live milestone for release 1.7.0:** Codex, Claude
 Code, Grok, OpenCode, Antigravity CLI, Cursor, and Kimi Code.
 
 **Hosts with an installer and a dispatch contract, but no live milestone for
-release 1.6.2:** GitHub Copilot CLI (account quota exhausted), Qwen Code, Zed,
+release 1.7.0:** GitHub Copilot CLI (account quota exhausted), Qwen Code, Zed,
 and Kiro (API credits), and Muse Code (no live release evidence recorded yet).
 These hosts are excluded from the release evaluation. Exclusion is not a pass.
 
