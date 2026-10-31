@@ -293,8 +293,8 @@ from `files` unless it is that allowed Project-verify copy.
 
 Build reviews each completed wave against task criteria and the INTENT success
 criteria that wave owns. Each wave carries a review depth — `full`,
-`verify-only` for low-risk waves, or sparingly `deep`
-for irreversible or security-critical waves. The canonical
+`verify-only` for low-risk waves, or `deep` only when INTENT.md records an
+explicit user request for adversarial review. The canonical
 [build contract](skills/gsd-path-build/SKILL.md) defines each depth's writer
 and evidence rules. Review findings are keyed by their failed criterion and
 carried forward across cycles, so a criterion failing again after its fix task

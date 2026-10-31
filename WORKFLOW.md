@@ -373,8 +373,8 @@ require a verdict per owned SC id. Acceptance criteria,
 owned SCs, and Verify are the contract; the coder owns
 implementation decisions inside the stated constraints. The planner reads
 `.project/LESSONS.md` when present and assigns each wave a `Review depth` —
-`full`, `verify-only` for low-risk waves, or sparingly `deep` for
-irreversible or security-critical waves; wave 1 and any wave touching
+`full`, `verify-only` for low-risk waves, or `deep` only when INTENT.md
+records an explicit user request for adversarial review; wave 1 and any wave touching
 authentication, payments, data migration, or concurrency stays `full` or
 `deep`. PLAN.md Config may name an optional `review_panel` (`off` by
 default, or `detected` / a named family list). In program flow CHARTER.md
