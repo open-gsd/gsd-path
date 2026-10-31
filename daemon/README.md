@@ -519,12 +519,18 @@ VERSION-stamp probes plus the update-check cache, never a source refresh; see
   checkout folder, or null for a main checkout), `milestone`, `phase`, `status`,
   `branch`, `archive`, `integration`, `status_source`, `state_mtime`,
   `last_activity_iso`.
-- Progress: `tasks` (`[{id, title, wave, status, files}]`), `tasks_done`,
+- Progress: `tasks` (`[{id, title, wave, status, files, repo}]`; `repo` is the
+  member repository a multi-repo task changes, or null), `tasks_done`,
   `tasks_total`, `current_wave`, `waves`, `roadmap_milestones`
   (`[{number, slug, status, archive, duration_s, tokens}]` — `duration_s`
   and `tokens` are null placeholders for now), `next_milestone`, `git`
   (`{branch, head, dirty}`). `dirty` is Boolean or null; runtime changed-file
   lists become `false` when empty and `true` when nonempty.
+- Multi-repo, read-only: `member_lock` (`[{name, branch, base}]` from
+  `.project/build/members.json`, or from the archive once ship moves it; null
+  when no member is locked) and `member_close` (the ship close rows
+  `[{name, status, merge, tag, ...}]` from the member-close journal in the Git
+  common dir, named after the archive; `[]` before ship).
 - Runtime enrichment: `pending_answers`, `next_skill`, `handoff`. The project
   detail page displays the runtime handoff outcome and next action.
 - `workflow`: `{state, label, reason?}` is the shared browser/tray presentation.

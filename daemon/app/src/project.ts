@@ -209,3 +209,34 @@ export const memberRows = (members: Member[], watched: string[]): MemberRow[] =>
   hooks: member.hooks ? { label: t("member.hooksInstalled"), tone: "ok" } : { label: t("member.noHooks"), tone: "warn" },
   actions: [...(member.marker.current ? [] : ["repair" as const]), ...(member.hooks ? [] : ["hooks" as const])],
 }));
+
+export type RepoRow = {
+  name: string; tasks: string; branch: string; base: string;
+  close: { label: string; tone: "ok" | "acc"; detail: string | null } | null;
+};
+
+/** "Repositories" on a multi-repo milestone: this project, then each locked member, then members only tasks
+ *  name so far. Empty for a single-repo milestone. Read-only: the lock and close rows come from the daemon. */
+export function repoRows(p: Project): RepoRow[] {
+  const tasks = p.tasks ?? [], lock = p.member_lock ?? [];
+  const named = tasks.map((task) => task.repo).filter((repo): repo is string => !!repo);
+  const members = [...new Set([...lock.map((item) => item.name), ...named])];
+  if (!members.length) return [];
+  const count = (repo: string | null) => {
+    const own = tasks.filter((task) => (task.repo || null) === repo);
+    return own.length ? `${own.filter((task) => task.status === "done").length}/${own.length}` : DASH;
+  };
+  const close = (name: string): RepoRow["close"] => {
+    const row = p.member_close?.find((item) => item.name === name);
+    if (!row) return null;
+    if (row.status !== "integrated") return { label: t("repos.closing"), tone: "acc", detail: null };
+    return { label: t("repos.integrated"), tone: "ok", detail: [row.merge?.slice(0, 7), row.tag].filter(Boolean).join(" · ") || null };
+  };
+  return [
+    { name: t("repos.thisProject"), tasks: count(null), branch: p.branch || DASH, base: DASH, close: null },
+    ...members.map((name) => {
+      const locked = lock.find((item) => item.name === name);
+      return { name, tasks: count(name), branch: locked?.branch || DASH, base: locked?.base.slice(0, 7) || DASH, close: close(name) };
+    }),
+  ];
+}
