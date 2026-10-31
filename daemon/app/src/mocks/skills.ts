@@ -27,7 +27,7 @@ const member = (name: string, current: boolean, hooks: boolean, reason: string |
   name, checkout: "/work/" + name, remote: `git@github.com:open-gsd/${name}.git`, integration: "pull-request", marker: { current, reason }, hooks });
 // /work/gsd-path is a coordinator; /work/notes has a members file that does not validate.
 const members = [member("gsd-path-daemon", true, false), member("gsd-path-app", false, true, "marker names another coordinator path"),
-  member("gsd-path-docs", true, true)];
+  member("gsd-path-docs", true, true), member("atlas", true, true)];
 let failClaude = true; // the first real install into Claude Code fails, the next one works
 let busy = false;
 
@@ -69,7 +69,10 @@ function pluginStatus() {
     return [id, { installed: root in installed, version: installed[root] ?? null, root }];
   }));
   const latest = releases.latest;
-  return { latest, update_available: Object.values(installed).some((version) => version !== latest), hosts, projects, releases, frameworks };
+  const withMembers = projects.map((item) => item.root === "/work/gsd-path" ? { ...item, members, members_error: null }
+    : item.root === "/work/notes" ? { ...item, members: [], members_error: "error: member field-notes-web: marker is missing or stale; run members.py repair --repo /work/notes" }
+    : item);
+  return { latest, update_available: Object.values(installed).some((version) => version !== latest), hosts, projects: withMembers, releases, frameworks };
 }
 
 function install(body: { hosts?: string[]; dry_run?: boolean }) {

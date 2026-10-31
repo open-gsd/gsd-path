@@ -1046,7 +1046,8 @@ class _Handler(BaseHTTPRequestHandler):
                 # Setup rows are for GSD Path installs; other frameworks have none.
                 roots = sorted(str(status.root) for status in self.watcher.projects.values()
                                if status.flavor == PATH_FLAVOR)
-                payload["projects"] = [self.plugin.detect_project(root) for root in roots]
+                payload["projects"] = [{**self.plugin.detect_project(root), **project_ops.board_members(self.plugin, root)}
+                                       for root in roots]
             except Exception as error:  # detection must never break the dashboard
                 payload["hosts"] = {}
                 payload["projects"] = []

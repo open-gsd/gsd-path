@@ -1,6 +1,7 @@
 // Path skills per agent: the payloads of /api/hosts and /api/plugin/status, and what the Skills page shows.
 import { t } from "./i18n";
 import { DASH } from "./status";
+import type { Member } from "./project";
 
 /** One agent from GET /api/hosts. */
 export type HostInfo = { id: string; name: string; found: boolean; path: string | null; skills_root: string };
@@ -8,6 +9,8 @@ export type PluginHost = { installed: boolean; version: string | null; root?: st
 /** One project from detect_project() in the daemon. */
 export type ProjectSetup = {
   root: string; local_skills: string[]; runtime: boolean; contracts: boolean; hooks: boolean; runtime_version: string | null;
+  /** Set only on a coordinator (a project with .project/MEMBERS.md). Older daemons omit both. */
+  members?: Member[]; members_error?: string | null;
 };
 export type Releases = { latest: string | null; selected: string | null; versions: string[]; source?: "npm" | "git" };
 export type PluginStatus = {
