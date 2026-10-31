@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 -B -c '\nimport hashlib, json\nfrom pathlib import Path\nrepo = Path(\"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/cursor-opus-5-5/quick/repo\")\nbefore = json.loads(Path(\"/tmp/gsd-path-final-hashes-1.json\").read_text())\nnames = list(before[\"sha256\"])\nafter = {name: hashlib.sha256((repo / name).read_bytes()).hexdigest() for name in names}\nledger = [json.loads(line) for line in (repo / \".project/build/verify-ledger.jsonl\").read_text().splitlines() if line.strip()]\nprint(json.dumps({\n  \"hashes_unchanged\": after == before[\"sha256\"],\n  \"sha256\": after,\n  \"ledger_entries\": len(ledger),\n  \"ledger_entries_before\": before[\"ledger_entries\"],\n  \"new_ledger_entry\": len(ledger) != before[\"ledger_entries\"],\n}, indent=2))\n'\necho \"--- GATE ---\"\npython3 -B /Users/jeremymcspadden/.gsd-path/runtimes/e05c5aad5982108a3f3615d16754ab136883c6c461f7fb1eb3c1d869b9d5df31/check_handoffs.py final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/cursor-opus-5-5/quick/repo\necho \"--- HEAD ---\"\ngit -C /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/cursor-opus-5-5/quick/repo rev-parse HEAD\necho \"--- STATUS ---\"\ngit -C /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/cursor-opus-5-5/quick/repo status --short",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 6d56c80a5ca64396c4375998ee8ffd51169614de\nReview scope: final\nInspection: reconstructed product\n\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 425d9cc6abcd73eead8088e30419bf4c5b50f66c\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 6d56c80a5ca64396c4375998ee8ffd51169614de",
+  "wave_review_artifact": ".project/archive/001-count-json/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json/review/FINAL.md"
+}
