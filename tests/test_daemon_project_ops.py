@@ -310,5 +310,57 @@ class MemberTests(Case):
         self.assertNotIn("--member-of", [arg for call in self.calls for arg in call])
 
 
+class BoardMemberTests(Case):
+    """The board reads each coordinator's members from the plugin status."""
+
+    def setUp(self):
+        super().setUp()
+        (self.plugin.src_dir / "scripts").mkdir(parents=True)
+        (self.plugin.src_dir / "scripts" / "members.py").write_text("", encoding="utf-8")
+
+    def write_members_file(self):
+        (Path(self.root) / ".project").mkdir(parents=True)
+        (Path(self.root) / ".project" / "MEMBERS.md").write_text("# Members\n", encoding="utf-8")
+
+    def test_a_project_without_a_members_file_is_not_a_coordinator_and_runs_no_helper(self):
+        self.assertEqual(project_ops.board_members(self.plugin, self.root), {})
+        self.assertEqual(self.calls, [])
+
+    def test_a_coordinator_lists_its_members_with_marker_and_hook_state(self):
+        self.write_members_file()
+        self.answers[("members.py", "validate")] = (0, json.dumps(self.members), "")
+        self.answers[("members.py", "detect")] = (0, json.dumps({"current": False, "reason": "marker names another coordinator"}), "")
+        result = project_ops.board_members(self.plugin, self.root)
+        self.assertIsNone(result["members_error"])
+        self.assertEqual([(row["name"], row["checkout"]) for row in result["members"]], [("api", self.member)])
+        self.assertEqual(result["members"][0]["marker"], {"current": False, "reason": "marker names another coordinator"})
+        self.assertIs(result["members"][0]["hooks"], False)
+
+    def test_a_members_file_that_does_not_validate_returns_the_helper_error(self):
+        self.write_members_file()
+        self.answers[("members.py", "validate")] = (1, "", "error: member api: marker is missing; run members.py repair\n")
+        result = project_ops.board_members(self.plugin, self.root)
+        self.assertEqual(result["members"], [])
+        self.assertIn("run members.py repair", result["members_error"])
+
+    def test_a_helper_that_cannot_run_returns_the_error_instead_of_raising(self):
+        self.write_members_file()
+        with mock.patch.object(self.plugin, "runner", side_effect=OSError("python not found")):
+            result = project_ops.board_members(self.plugin, self.root)
+        self.assertEqual(result, {"members": [], "members_error": "python not found"})
+
+    def test_a_coordinator_without_the_plugin_source_reports_it_and_fetches_nothing(self):
+        self.write_members_file()
+        (self.plugin.src_dir / "scripts" / "members.py").unlink()
+        git_calls = []
+        self.plugin.git_runner = lambda argv, cwd=None: git_calls.append(argv) or (0, "", "")
+        with mock.patch.object(self.plugin, "_fetch_release") as fetch:
+            result = project_ops.board_members(self.plugin, self.root)
+        self.assertEqual(result, {"members": [], "members_error": project_ops.NO_SOURCE_ERROR})
+        self.assertEqual(self.calls, [])
+        self.assertEqual(git_calls, [])
+        fetch.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
