@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/opencode/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/opencode/quick --category verification -- python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/opencode/quick/repo/.opencode/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/opencode/quick/repo --task-id T001 2>&1 | tail -40",
+  "output": "commit 16e1636e73ff99c9e9255d2d264787795f536f14\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Sat Oct 31 09:14:23 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Sat Oct 31 09:14:23 2026 -0500\n\n    T001: Extend count.py CLI \u2014 --json output, int()-compatible validation, clean errors, real CLI tests\n    \n    Task: .project/tasks/T001-extend-count-cli.md\n    Base: ee5bd1a0ed9501084912f02aab2524ab31905ff6\n    Files:\n    - .project/tasks/T001-extend-count-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-extend-count-cli.md |  34 +++++++--\n count.py                                |  39 +++++++++-\n test_count.py                           | 128 ++++++++++++++++++++++++++++++++\n 3 files changed, 194 insertions(+), 7 deletions(-)",
+  "fixture_bundle": "opencode/fixture.bundle",
+  "run_manifest": ".project/archive/001-extend-count-cli/trust-run-manifest.json",
+  "fixture_base_commit": "ee5bd1a0ed9501084912f02aab2524ab31905ff6",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/3d9a6d125d3c36cd0e34fcfa1e2941c955a03fd2f00b88b1ba5d39e8f1e45b25/7bcc1abd1205610df5ec6d687bd9bcdbb3d98d31e36703ea379a9c85cd2a9d2c/verify/task-t001-verify",
+  "landing_commit": "16e1636e73ff99c9e9255d2d264787795f536f14",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

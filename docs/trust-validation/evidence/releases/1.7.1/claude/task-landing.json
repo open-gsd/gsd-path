@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "af13831f-0e9c-4639-8f2b-80a8e558ea5b",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B .claude/skills/gsd-path/scripts/dispatch_driver.py finish --repo $PWD --task-id T001; echo rc=$?; git log --oneline -4; git status --short; git worktree list",
+  "output": "commit 88a1d84b4c4433bfd7fa3d9d6cd742e4c044d6c2\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Sat Oct 31 08:59:27 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Sat Oct 31 08:59:27 2026 -0500\n\n    T001: Add --json output and invalid-input errors to count.py with real-CLI tests\n    \n    Task: .project/tasks/T001-count-json-validation.md\n    Base: b93584c1f4bc9e37892de617ff7b34b3173d8165\n    Files:\n    - .project/tasks/T001-count-json-validation.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-json-validation.md | 24 +++++++-\n count.py                                     | 30 +++++++++-\n test_count.py                                | 87 ++++++++++++++++++++++++++++\n 3 files changed, 136 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "claude/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "fixture_base_commit": "b93584c1f4bc9e37892de617ff7b34b3173d8165",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/a1946c70ced7e0cdeda8ecf2c4449ecaf21b75a5573c9258a928347a03dc3c55/86990a6ecb943114b041800f57bdacfc0b035abb10eb8cdb6940127c042a3455/verify/task-t001-verify",
+  "landing_commit": "88a1d84b4c4433bfd7fa3d9d6cd742e4c044d6c2",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 -B \"/Users/jeremymcspadden/.gsd-path/runtimes/e05c5aad5982108a3f3615d16754ab136883c6c461f7fb1eb3c1d869b9d5df31/archive_milestone.py\" validate-integrated --repo \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/opencode/quick/repo\" --slug extend-count-cli",
+  "output": "{\"archive\": \".project/archive/001-extend-count-cli\", \"base\": \"9bdd7d2326a53aaf2a1c3fd7bfe1ec8702ae431f\", \"commit\": \"1bacf399ac02502eec3cbc44a9f6b6d57a9e5c7d\", \"integrate\": \"9bdd7d2326a53aaf2a1c3fd7bfe1ec8702ae431f\", \"landing\": \"9bdd7d2326a53aaf2a1c3fd7bfe1ec8702ae431f\", \"mode\": \"direct\", \"tag\": \"milestone/001-extend-count-cli\"}\n",
+  "fixture_bundle": "opencode/fixture.bundle",
+  "run_manifest": ".project/archive/001-extend-count-cli/trust-run-manifest.json",
+  "ship_commit": "1bacf399ac02502eec3cbc44a9f6b6d57a9e5c7d",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "36fa5c7ec0ed5de553a7878b5dfc0b4fc27b982b",
+  "integration_commit": "9bdd7d2326a53aaf2a1c3fd7bfe1ec8702ae431f",
+  "milestone_tag": "milestone/001-extend-count-cli"
+}

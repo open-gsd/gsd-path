@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/grok/plugin/tests/evaluate_codex.py activity --arm /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/grok/quick --category verification -- python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/grok/quick/repo/.grok/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/grok/quick/repo --task-id T001",
+  "output": "commit 710f7756776cefa1bbc66e1c1b26957f9bd978a4\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Sat Oct 31 09:35:10 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Sat Oct 31 09:35:10 2026 -0500\n\n    T001: Extend count.py with JSON output and CLI tests\n    \n    Task: .project/tasks/T001-count-cli.md\n    Base: e3bc180445a56afa28486cbcec45e93663b639f9\n    Files:\n    - .project/tasks/T001-count-cli.md\n    - count.py\n    - tests/test_count.py\n\n .project/tasks/T001-count-cli.md |  20 ++++++-\n count.py                         |  39 ++++++++++++-\n tests/test_count.py              | 118 +++++++++++++++++++++++++++++++++++++++\n 3 files changed, 172 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "grok/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-count/trust-run-manifest.json",
+  "fixture_base_commit": "e3bc180445a56afa28486cbcec45e93663b639f9",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/b0e3106bc3634d3d4b2e8e7d2eb6d947c8a29695fa53b992cffc69aef180bbb8/5a6a25bdf54c61ceaece6825443ec383acc2bc325fdf83edccc1980b9309ab83/verify/task-t001-verify",
+  "landing_commit": "710f7756776cefa1bbc66e1c1b26957f9bd978a4",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "a842cddc-dd6d-473e-ad14-66635b87d3f4",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 -m unittest test_count.py",
+  "output": "{\"command\": \"python3 -m unittest test_count.py\", \"commit\": \"83fd9b1f9c5ce615e42a5b8d1be60ecd2c136a42\", \"execution\": {\"base\": \"212800dc7c20aa17d478ef5ea8b11344b0b4c484\", \"cwd\": \"/Users/jeremymcspadden/.gsd-path/projects/6b7c1549e09d3a6a66b46c325a53f8f633b88936b83085b93a3af774b44d887a/b781a864e6009d60b15a10f671cbab8edf66ba01fae160714739460af43a5619/verify/task-t001-verify\", \"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/antigravity/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-10-31T140736+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \".....\\n----------------------------------------------------------------------\\nRan 5 tests in 1.017s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/antigravity/quick/repo\"}, \"recorded_at\": \"2026-10-31T14:07:37+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest discover -s . -p \\\"test_*.py\\\"\", \"commit\": \"f025a6bdf41f43d9d88c00ada2a0412cb0a4eb86\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \".....\\n----------------------------------------------------------------------\\nRan 5 tests in 1.211s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/6b7c1549e09d3a6a66b46c325a53f8f633b88936b83085b93a3af774b44d887a/b781a864e6009d60b15a10f671cbab8edf66ba01fae160714739460af43a5619/verify/project-verify\"}, \"recorded_at\": \"2026-10-31T14:15:13+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-count-cli/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

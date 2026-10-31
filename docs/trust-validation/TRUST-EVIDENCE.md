@@ -1,6 +1,6 @@
 # GSD Path — Trust Evidence Log
 
-Current release evidence: [1.7.0 candidate](#release-evidence-2026-10-30--170).
+Current release evidence: [1.7.1 candidate](#release-evidence-2026-10-31--171).
 Earlier sections remain historical observations.
 
 **Date:** 2026-08-05 (reconciled 2026-08-11 — dispatch-smoke rows downgraded; see notes)  
@@ -427,7 +427,7 @@ publication authority.
 
 ---
 
-## Release evidence (2026-10-30 — 1.7.0)
+## Release evidence (2026-10-30 — 1.7.0, historical)
 
 Candidate: `e2dd08576d7486b302dc7a870a47aaa7f788089f`, prepared in PR #529.
 The merge commit of PR #529 has the identical product tree. The release gate
@@ -456,3 +456,31 @@ release tag commit date before publication. [Run notes](evidence/releases/1.7.0/
 list usage counters, the invalid attempts, the corrections, and each
 acceptance output. The complete `verify:release` gate is required before
 publication; receipts do not grant publication authority.
+
+---
+
+## Release evidence (2026-10-31 — 1.7.1)
+
+Candidate: `ab909c7ddd43a178305672e74f48a6d3d5624e62`, prepared in PR #536.
+The release gate required a fresh run on every host in the live-check scope
+and reused no earlier receipt. Codex, Claude Code, Grok, OpenCode,
+Antigravity, Cursor, and Kimi have validated current-candidate receipts under
+`evidence/releases/1.7.1/`. A fresh clone of each integrated local origin
+`main` passed the external widget acceptance check 6/6, 42/42 in total. See
+[HOST-MATRIX.md](HOST-MATRIX.md) for each receipt.
+
+Each receipt binds a native child to the landed task, isolated Task Verify,
+full-wave final review, runtime-owned project Verify with same-HEAD result
+reuse, committed archive, local-origin integration, and Git guard results.
+Claude Code and Cursor also passed native guard probes; the other five hosts
+used the declared Git-only tier. Invalid Codex and Cursor attempts are
+retained and supply no passing proof. The owner approved Cursor model
+substitutions and OpenCode provider recovery; OpenCode continued the same
+fixture in a fresh native conversation and kept its original child evidence.
+
+GitHub Copilot CLI, Muse Code, Qwen, Kiro, and Zed stay excluded from the
+live-check scope. Exclusion is not a live-test pass.
+[Run notes](evidence/releases/1.7.1/notes/RUNS.md) list usage counters, the
+invalid attempts, the recoveries, and each acceptance output. The complete
+`verify:release` gate is required before publication; receipts do not grant
+publication authority.

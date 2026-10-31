@@ -1,0 +1,14 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "a842cddc-dd6d-473e-ad14-66635b87d3f4",
+  "result": "pass",
+  "step": "install",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/antigravity/plugin/scripts/install.mjs --antigravity --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/antigravity/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.7.1\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/antigravity/quick/repo\n\n  \u2713 antigravity: installed 16 shared skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/antigravity/quick/repo/.agents/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime.json, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/antigravity/quick/repo\n  ! Antigravity discovers /gsd-path but has no documented hard explicit-only skill switch; invoke the skill explicitly.\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "host_version": "1.4.12",
+  "install_root": ".agents/skills",
+  "candidate": "ab909c7ddd43a178305672e74f48a6d3d5624e62",
+  "package_version": "1.7.1",
+  "exit_code": 0
+}

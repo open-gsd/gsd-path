@@ -1,0 +1,1043 @@
+[
+  {
+    "host": "antigravity",
+    "attempt": "antigravity",
+    "run": "run-20261031T134938366251Z",
+    "session_id": "a842cddc-dd6d-473e-ad14-66635b87d3f4",
+    "exit_code": 0,
+    "elapsed_seconds": 519.3924634580035,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 133239,
+      "output_tokens": 21024,
+      "thinking_tokens": 9834,
+      "cache_read_tokens": 1606243,
+      "total_tokens": 154263
+    }
+  },
+  {
+    "host": "antigravity",
+    "attempt": "antigravity",
+    "run": "run-20261031T135921035387Z",
+    "session_id": "a842cddc-dd6d-473e-ad14-66635b87d3f4",
+    "exit_code": 0,
+    "elapsed_seconds": 140.30570295802318,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 162539,
+      "output_tokens": 31333,
+      "thinking_tokens": 13207,
+      "cache_read_tokens": 2397091,
+      "total_tokens": 193872
+    }
+  },
+  {
+    "host": "antigravity",
+    "attempt": "antigravity",
+    "run": "run-20261031T140241333861Z",
+    "session_id": "a842cddc-dd6d-473e-ad14-66635b87d3f4",
+    "exit_code": 0,
+    "elapsed_seconds": 635.0716773329768,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 273144,
+      "output_tokens": 59937,
+      "thinking_tokens": 25577,
+      "cache_read_tokens": 7477111,
+      "total_tokens": 333081
+    }
+  },
+  {
+    "host": "antigravity",
+    "attempt": "antigravity",
+    "run": "run-20261031T141344434785Z",
+    "session_id": "a842cddc-dd6d-473e-ad14-66635b87d3f4",
+    "exit_code": 0,
+    "elapsed_seconds": 164.10103270807303,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 316759,
+      "output_tokens": 64639,
+      "thinking_tokens": 26535,
+      "cache_read_tokens": 7880614,
+      "total_tokens": 381398
+    }
+  },
+  {
+    "host": "antigravity",
+    "attempt": "antigravity",
+    "run": "run-20261031T142050230164Z",
+    "session_id": "a842cddc-dd6d-473e-ad14-66635b87d3f4",
+    "exit_code": 0,
+    "elapsed_seconds": 29.857954166829586,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 324828,
+      "output_tokens": 66805,
+      "thinking_tokens": 26946,
+      "cache_read_tokens": 7987249,
+      "total_tokens": 391633
+    }
+  },
+  {
+    "host": "antigravity",
+    "attempt": "antigravity",
+    "run": "run-20261031T142209037290Z",
+    "session_id": "a842cddc-dd6d-473e-ad14-66635b87d3f4",
+    "exit_code": 0,
+    "elapsed_seconds": 111.5950929580722,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 349045,
+      "output_tokens": 73579,
+      "thinking_tokens": 29840,
+      "cache_read_tokens": 8350465,
+      "total_tokens": 422624
+    }
+  },
+  {
+    "host": "claude",
+    "attempt": "claude",
+    "run": "run-20261031T134924370266Z",
+    "session_id": "af13831f-0e9c-4639-8f2b-80a8e558ea5b",
+    "exit_code": 0,
+    "elapsed_seconds": 270.67479416611604,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 20,
+      "cache_creation_input_tokens": 10486,
+      "cache_read_input_tokens": 2029164,
+      "output_tokens": 7987,
+      "output_tokens_details": {
+        "thinking_tokens": 1156
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 10486,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "global",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1363,
+          "cache_read_input_tokens": 229878,
+          "cache_creation_input_tokens": 1055,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 1055
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    }
+  },
+  {
+    "host": "claude",
+    "attempt": "claude",
+    "run": "run-20261031T135456996144Z",
+    "session_id": "af13831f-0e9c-4639-8f2b-80a8e558ea5b",
+    "exit_code": 0,
+    "elapsed_seconds": 118.53907145792618,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 22,
+      "cache_creation_input_tokens": 27768,
+      "cache_read_input_tokens": 2438482,
+      "output_tokens": 10770,
+      "output_tokens_details": {
+        "thinking_tokens": 1169
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 27768,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "global",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 942,
+          "cache_read_input_tokens": 257905,
+          "cache_creation_input_tokens": 796,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 796
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    }
+  },
+  {
+    "host": "claude",
+    "attempt": "claude",
+    "run": "run-20261031T135724041750Z",
+    "session_id": "af13831f-0e9c-4639-8f2b-80a8e558ea5b",
+    "exit_code": 0,
+    "elapsed_seconds": 381.4586274169851,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 20,
+      "cache_creation_input_tokens": 15235,
+      "cache_read_input_tokens": 2921058,
+      "output_tokens": 6611,
+      "output_tokens_details": {
+        "thinking_tokens": 1230
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 15235,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "global",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1709,
+          "cache_read_input_tokens": 332620,
+          "cache_creation_input_tokens": 1772,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 1772
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    }
+  },
+  {
+    "host": "claude",
+    "attempt": "claude",
+    "run": "run-20261031T140425084163Z",
+    "session_id": "af13831f-0e9c-4639-8f2b-80a8e558ea5b",
+    "exit_code": 0,
+    "elapsed_seconds": 46.72147166682407,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 10,
+      "cache_creation_input_tokens": 6070,
+      "cache_read_input_tokens": 1687268,
+      "output_tokens": 3717,
+      "output_tokens_details": {
+        "thinking_tokens": 442
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 6070,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "global",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1520,
+          "cache_read_input_tokens": 339334,
+          "cache_creation_input_tokens": 1128,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 1128
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    }
+  },
+  {
+    "host": "claude",
+    "attempt": "claude",
+    "run": "run-20261031T140546801972Z",
+    "session_id": "af13831f-0e9c-4639-8f2b-80a8e558ea5b",
+    "exit_code": 0,
+    "elapsed_seconds": 69.09681654092856,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 24,
+      "cache_creation_input_tokens": 8244,
+      "cache_read_input_tokens": 3785918,
+      "output_tokens": 4599,
+      "output_tokens_details": {
+        "thinking_tokens": 108
+      },
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 8244,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "global",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 1404,
+          "cache_read_input_tokens": 347520,
+          "cache_creation_input_tokens": 1186,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 1186
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    }
+  },
+  {
+    "host": "codex",
+    "attempt": "codex",
+    "run": "run-20261031T134924364343Z",
+    "session_id": "01a19238-e8b1-7050-88f1-6a56fb70d34b",
+    "exit_code": 0,
+    "elapsed_seconds": 91.22761104186065,
+    "requested_model": "gpt-6-astra",
+    "usage": {
+      "input_tokens": 494427,
+      "cached_input_tokens": 436864,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2090,
+      "reasoning_output_tokens": 403
+    }
+  },
+  {
+    "host": "codex",
+    "attempt": "codex-retry-branch-binding",
+    "run": "run-20261031T135219792134Z",
+    "session_id": "01a1923b-94f2-72c0-989a-395354a542b4",
+    "exit_code": 0,
+    "elapsed_seconds": 256.94615404098295,
+    "requested_model": "gpt-6-astra",
+    "usage": {
+      "input_tokens": 1770743,
+      "cached_input_tokens": 1689216,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 6636,
+      "reasoning_output_tokens": 427
+    }
+  },
+  {
+    "host": "codex",
+    "attempt": "codex-retry-branch-binding",
+    "run": "run-20261031T135709174565Z",
+    "session_id": "01a1923b-94f2-72c0-989a-395354a542b4",
+    "exit_code": 0,
+    "elapsed_seconds": 125.04457133286633,
+    "requested_model": "gpt-6-astra",
+    "usage": {
+      "input_tokens": 2540872,
+      "cached_input_tokens": 2443648,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 11000,
+      "reasoning_output_tokens": 732
+    }
+  },
+  {
+    "host": "codex",
+    "attempt": "codex-retry-branch-binding",
+    "run": "run-20261031T140031411048Z",
+    "session_id": "01a1923b-94f2-72c0-989a-395354a542b4",
+    "exit_code": 0,
+    "elapsed_seconds": 396.5478723749984,
+    "requested_model": "gpt-6-astra",
+    "usage": {
+      "input_tokens": 6425907,
+      "cached_input_tokens": 6289536,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 17280,
+      "reasoning_output_tokens": 1155
+    }
+  },
+  {
+    "host": "codex",
+    "attempt": "codex-retry-branch-binding",
+    "run": "run-20261031T140850431587Z",
+    "session_id": "01a1923b-94f2-72c0-989a-395354a542b4",
+    "exit_code": 0,
+    "elapsed_seconds": 80.29335525003262,
+    "requested_model": "gpt-6-astra",
+    "usage": {
+      "input_tokens": 7673522,
+      "cached_input_tokens": 7517056,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 19575,
+      "reasoning_output_tokens": 1391
+    }
+  },
+  {
+    "host": "codex",
+    "attempt": "codex-retry-branch-binding",
+    "run": "run-20261031T141051584033Z",
+    "session_id": "01a1923b-94f2-72c0-989a-395354a542b4",
+    "exit_code": 0,
+    "elapsed_seconds": 30.266739709069952,
+    "requested_model": "gpt-6-astra",
+    "usage": {
+      "input_tokens": 8332558,
+      "cached_input_tokens": 8172672,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 20518,
+      "reasoning_output_tokens": 1391
+    }
+  },
+  {
+    "host": "codex",
+    "attempt": "codex-retry-branch-binding",
+    "run": "run-20261031T141151404634Z",
+    "session_id": "01a1923b-94f2-72c0-989a-395354a542b4",
+    "exit_code": 0,
+    "elapsed_seconds": 57.23788541601971,
+    "requested_model": "gpt-6-astra",
+    "usage": {
+      "input_tokens": 9687114,
+      "cached_input_tokens": 9522304,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 22237,
+      "reasoning_output_tokens": 1398
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor",
+    "run": "run-20261031T134938363951Z",
+    "session_id": "13647e82-e2bf-42ee-96f8-e045db09193a",
+    "exit_code": 0,
+    "elapsed_seconds": 240.61209095804952,
+    "requested_model": null,
+    "usage": {
+      "inputTokens": 60203,
+      "outputTokens": 13731,
+      "cacheReadTokens": 1628384,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-opus-5-5",
+    "run": "run-20261031T142032391460Z",
+    "session_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+    "exit_code": 1,
+    "elapsed_seconds": 5.337549667106941,
+    "requested_model": "claude-opus-5-5-high",
+    "usage": null
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-opus-5-5",
+    "run": "run-20261031T142141219169Z",
+    "session_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+    "exit_code": 0,
+    "elapsed_seconds": 910.8063757501077,
+    "requested_model": "grok-4.7-high",
+    "usage": {
+      "inputTokens": 200445,
+      "outputTokens": 40625,
+      "cacheReadTokens": 4372096,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-opus-5-5",
+    "run": "run-20261031T143731753678Z",
+    "session_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+    "exit_code": 0,
+    "elapsed_seconds": 160.12835995783098,
+    "requested_model": "grok-4.7-high",
+    "usage": {
+      "inputTokens": 18601,
+      "outputTokens": 14763,
+      "cacheReadTokens": 627328,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-opus-5-5",
+    "run": "run-20261031T144111788366Z",
+    "session_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+    "exit_code": 0,
+    "elapsed_seconds": 239.15456187492236,
+    "requested_model": "grok-4.7-high",
+    "usage": {
+      "inputTokens": 59424,
+      "outputTokens": 19883,
+      "cacheReadTokens": 4588928,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-opus-5-5",
+    "run": "run-20261031T144536696290Z",
+    "session_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+    "exit_code": 0,
+    "elapsed_seconds": 41.08621670817956,
+    "requested_model": "grok-4.7-high",
+    "usage": {
+      "inputTokens": 6696,
+      "outputTokens": 3391,
+      "cacheReadTokens": 906368,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-opus-5-5",
+    "run": "run-20261031T144648266413Z",
+    "session_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+    "exit_code": 0,
+    "elapsed_seconds": 1355.4828165001236,
+    "requested_model": "grok-4.7-high",
+    "usage": {
+      "inputTokens": 33415,
+      "outputTokens": 10964,
+      "cacheReadTokens": 3302528,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-opus-5-5",
+    "run": "run-20261031T150954594977Z",
+    "session_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+    "exit_code": 0,
+    "elapsed_seconds": 192.1739510828629,
+    "requested_model": "grok-4.7-high",
+    "usage": {
+      "inputTokens": 175382,
+      "outputTokens": 13221,
+      "cacheReadTokens": 2612864,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-opus-5-5",
+    "run": "run-20261031T151349811439Z",
+    "session_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+    "exit_code": 0,
+    "elapsed_seconds": 59.98316595796496,
+    "requested_model": "grok-4.7-high",
+    "usage": {
+      "inputTokens": 8677,
+      "outputTokens": 4253,
+      "cacheReadTokens": 1291648,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-opus-5-5",
+    "run": "run-20261031T151552273702Z",
+    "session_id": "03b14d2a-4db8-4338-9178-f870ab241899",
+    "exit_code": 0,
+    "elapsed_seconds": 186.54744724999182,
+    "requested_model": "grok-4.7-high",
+    "usage": {
+      "inputTokens": 29776,
+      "outputTokens": 11811,
+      "cacheReadTokens": 5547776,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-retry-owner-gate",
+    "run": "run-20261031T135515325987Z",
+    "session_id": "168b6e5c-5107-49a5-acad-d470971fdbbe",
+    "exit_code": 0,
+    "elapsed_seconds": 205.8881381249521,
+    "requested_model": null,
+    "usage": {
+      "inputTokens": 69045,
+      "outputTokens": 14545,
+      "cacheReadTokens": 2015552,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-retry-owner-gate",
+    "run": "run-20261031T135921035746Z",
+    "session_id": "168b6e5c-5107-49a5-acad-d470971fdbbe",
+    "exit_code": 0,
+    "elapsed_seconds": 91.35241741710342,
+    "requested_model": null,
+    "usage": {
+      "inputTokens": 20254,
+      "outputTokens": 9300,
+      "cacheReadTokens": 2549856,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-retry-owner-gate",
+    "run": "run-20261031T140143096284Z",
+    "session_id": "168b6e5c-5107-49a5-acad-d470971fdbbe",
+    "exit_code": 0,
+    "elapsed_seconds": 251.27747637499124,
+    "requested_model": null,
+    "usage": {
+      "inputTokens": 40882,
+      "outputTokens": 15732,
+      "cacheReadTokens": 6147008,
+      "cacheWriteTokens": 0
+    }
+  },
+  {
+    "host": "cursor",
+    "attempt": "cursor-retry-verify-owner",
+    "run": "run-20261031T140826051513Z",
+    "session_id": "7a058353-808d-44c8-a783-563bbb3391c5",
+    "exit_code": 143,
+    "elapsed_seconds": 472.4297169998754,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "grok",
+    "attempt": "grok",
+    "run": "run-20261031T134924360949Z",
+    "session_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+    "exit_code": 0,
+    "elapsed_seconds": 634.9841972920112,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 333759,
+      "cache_read_input_tokens": 3648896,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 58748,
+      "reasoning_tokens": 43399,
+      "total_tokens": 4041403
+    }
+  },
+  {
+    "host": "grok",
+    "attempt": "grok",
+    "run": "run-20261031T140031414482Z",
+    "session_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+    "exit_code": 0,
+    "elapsed_seconds": 227.9043646659702,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 154091,
+      "cache_read_input_tokens": 1493376,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 14554,
+      "reasoning_tokens": 10545,
+      "total_tokens": 1662021
+    }
+  },
+  {
+    "host": "grok",
+    "attempt": "grok",
+    "run": "run-20261031T140520462745Z",
+    "session_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+    "exit_code": 0,
+    "elapsed_seconds": 781.9600349168759,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 199244,
+      "cache_read_input_tokens": 6971776,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 42492,
+      "reasoning_tokens": 28462,
+      "total_tokens": 7213512
+    }
+  },
+  {
+    "host": "grok",
+    "attempt": "grok",
+    "run": "run-20261031T142030042784Z",
+    "session_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+    "exit_code": 0,
+    "elapsed_seconds": 45.20754124992527,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 6758,
+      "cache_read_input_tokens": 680448,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 2969,
+      "reasoning_tokens": 1889,
+      "total_tokens": 690175
+    }
+  },
+  {
+    "host": "grok",
+    "attempt": "grok",
+    "run": "run-20261031T142158825144Z",
+    "session_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+    "exit_code": 0,
+    "elapsed_seconds": 1452.0222904582042,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 515513,
+      "cache_read_input_tokens": 11152128,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 97532,
+      "reasoning_tokens": 67686,
+      "total_tokens": 11765173
+    }
+  },
+  {
+    "host": "grok",
+    "attempt": "grok",
+    "run": "run-20261031T144647075471Z",
+    "session_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+    "exit_code": 0,
+    "elapsed_seconds": 446.0986098749563,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 137333,
+      "cache_read_input_tokens": 3371776,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 19722,
+      "reasoning_tokens": 11479,
+      "total_tokens": 3528831
+    }
+  },
+  {
+    "host": "grok",
+    "attempt": "grok",
+    "run": "run-20261031T145620883113Z",
+    "session_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+    "exit_code": 0,
+    "elapsed_seconds": 38.19685308402404,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 4515,
+      "cache_read_input_tokens": 374912,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 2869,
+      "reasoning_tokens": 2140,
+      "total_tokens": 382296
+    }
+  },
+  {
+    "host": "grok",
+    "attempt": "grok",
+    "run": "run-20261031T145740746018Z",
+    "session_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+    "exit_code": 0,
+    "elapsed_seconds": 184.09788762498647,
+    "requested_model": null,
+    "usage": {
+      "input_tokens": 38153,
+      "cache_read_input_tokens": 3544960,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 11329,
+      "reasoning_tokens": 6456,
+      "total_tokens": 3594442
+    }
+  },
+  {
+    "host": "kimi",
+    "attempt": "kimi",
+    "run": "run-20261031T134938359720Z",
+    "session_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+    "exit_code": 0,
+    "elapsed_seconds": 987.1672974999528,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "kimi",
+    "attempt": "kimi",
+    "run": "run-20261031T140706310045Z",
+    "session_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+    "exit_code": 0,
+    "elapsed_seconds": 219.70555541687645,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "kimi",
+    "attempt": "kimi",
+    "run": "run-20261031T141151403564Z",
+    "session_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+    "exit_code": 0,
+    "elapsed_seconds": 298.965831708163,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "kimi",
+    "attempt": "kimi",
+    "run": "run-20261031T142031193391Z",
+    "session_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+    "exit_code": 0,
+    "elapsed_seconds": 925.9587116669863,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "kimi",
+    "attempt": "kimi",
+    "run": "run-20261031T143623137386Z",
+    "session_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+    "exit_code": 0,
+    "elapsed_seconds": 174.59962612506934,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "kimi",
+    "attempt": "kimi",
+    "run": "run-20261031T144002249089Z",
+    "session_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+    "exit_code": 0,
+    "elapsed_seconds": 97.23618695884943,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "kimi",
+    "attempt": "kimi",
+    "run": "run-20261031T144238885159Z",
+    "session_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+    "exit_code": 0,
+    "elapsed_seconds": 340.3424404170364,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T134924386705Z",
+    "session_id": "ses_e6dc70908ffe5URo2hXe6BquUf",
+    "exit_code": 0,
+    "elapsed_seconds": 676.8585299579427,
+    "requested_model": null,
+    "usage": {
+      "tokens": {
+        "total": 147387,
+        "input": 243,
+        "output": 444,
+        "reasoning": 76,
+        "cache": {
+          "write": 0,
+          "read": 146624
+        }
+      },
+      "cost": 0
+    }
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T140143101419Z",
+    "session_id": "ses_e6dc70908ffe5URo2hXe6BquUf",
+    "exit_code": 0,
+    "elapsed_seconds": 266.73366825003177,
+    "requested_model": null,
+    "usage": {
+      "tokens": {
+        "total": 171824,
+        "input": 1178,
+        "output": 382,
+        "reasoning": 152,
+        "cache": {
+          "write": 0,
+          "read": 170112
+        }
+      },
+      "cost": 0
+    }
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T140706312671Z",
+    "session_id": "ses_e6dc70908ffe5URo2hXe6BquUf",
+    "exit_code": 0,
+    "elapsed_seconds": 766.5667338329367,
+    "requested_model": null,
+    "usage": {
+      "tokens": {
+        "total": 226643,
+        "input": 1442,
+        "output": 587,
+        "reasoning": 102,
+        "cache": {
+          "write": 0,
+          "read": 224512
+        }
+      },
+      "cost": 0
+    }
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T142129671724Z",
+    "session_id": null,
+    "exit_code": -15,
+    "elapsed_seconds": 845.3088562500197,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T143535206390Z",
+    "session_id": null,
+    "exit_code": -15,
+    "elapsed_seconds": 494.4165274160914,
+    "requested_model": null,
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T144349822856Z",
+    "session_id": null,
+    "exit_code": -15,
+    "elapsed_seconds": 250.57285970798694,
+    "requested_model": "opencode/claude-opus-5-5",
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T144819794607Z",
+    "session_id": null,
+    "exit_code": -15,
+    "elapsed_seconds": 125.87389954202808,
+    "requested_model": "openai/gpt-6.1-sol",
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T150157754072Z",
+    "session_id": null,
+    "exit_code": -15,
+    "elapsed_seconds": 486.82530950009823,
+    "requested_model": "openrouter/anthropic/claude-opus-5.5",
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T151009879587Z",
+    "session_id": null,
+    "exit_code": -15,
+    "elapsed_seconds": 501.29050154215656,
+    "requested_model": "openrouter/openai/gpt-6.1-sol",
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T151835075668Z",
+    "session_id": null,
+    "exit_code": -15,
+    "elapsed_seconds": 66.8346752920188,
+    "requested_model": "google/gemini-pro-latest",
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T164632470706Z",
+    "session_id": null,
+    "exit_code": -15,
+    "elapsed_seconds": 228.82994754216634,
+    "requested_model": "openai/gpt-6.1-sol",
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T165025419375Z",
+    "session_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+    "exit_code": 0,
+    "elapsed_seconds": 62.65498916688375,
+    "requested_model": "openai/gpt-6.1-sol",
+    "usage": {
+      "tokens": {
+        "total": 93777,
+        "input": 793,
+        "output": 440,
+        "reasoning": 0,
+        "cache": {
+          "write": 0,
+          "read": 92544
+        }
+      },
+      "cost": 0
+    }
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T165136807116Z",
+    "session_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+    "exit_code": 0,
+    "elapsed_seconds": 21.855077375192195,
+    "requested_model": "openai/gpt-6.1-sol",
+    "usage": {
+      "tokens": {
+        "total": 94150,
+        "input": 181,
+        "output": 145,
+        "reasoning": 0,
+        "cache": {
+          "write": 0,
+          "read": 93824
+        }
+      },
+      "cost": 0
+    }
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T165257942224Z",
+    "session_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+    "exit_code": 0,
+    "elapsed_seconds": 114.63259004219435,
+    "requested_model": "openai/gpt-6.1-sol",
+    "usage": {
+      "tokens": {
+        "total": 105652,
+        "input": 306,
+        "output": 386,
+        "reasoning": 0,
+        "cache": {
+          "write": 0,
+          "read": 104960
+        }
+      },
+      "cost": 0
+    }
+  }
+]
