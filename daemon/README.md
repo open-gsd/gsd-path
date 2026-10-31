@@ -418,8 +418,10 @@ one global op-lock — a second concurrent operation gets
   comes from its runtime declaration, falling back to legacy
   `.gsd-path/runtime/VERSION`; unstamped runtimes report `null`. A
   coordinator (a project with `.project/MEMBERS.md`) also has `members` (the
-  same rows as the `members` project operation) and `members_error` (the
-  `members.py` error text, or `null`). Other projects have neither key.
+  same rows as the `members` project operation) and `members_error` (`null`,
+  the `members.py` error text, or why the helper could not run). This read
+  never fetches the plugin source: when it is missing, `members` is `[]` and
+  `members_error` says so. Other projects have neither key.
 - `POST /api/plugin/install` — `{scope: "global"|"project", hosts?, root?,
   local_hosts?, hooks?, dry_run?}` → `{ok, argv, stdout_tail, error}`.
 - `POST /api/plugin/update` — `{scope, root?, dry_run?}`.
