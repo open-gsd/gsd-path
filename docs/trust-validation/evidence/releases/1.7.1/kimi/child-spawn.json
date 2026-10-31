@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "Agent",
+    "run": "run-20261031T142031193391Z",
+    "session_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+    "tool_call": {
+      "id": "tool_xUiZUSEnB6mLNhBpkqfP3UFq",
+      "input": {
+        "description": "build_T001",
+        "subagent_type": "coder"
+      },
+      "prompt_sha256": "c430cdbc9bbf57d0a96d07563fbfecb3d6a633d35fb411743ca30267698b0cd9"
+    },
+    "tool_result": {
+      "agent_id": "agent-2",
+      "actual_subagent_type": "coder",
+      "status": "completed",
+      "stop_reason": "completed",
+      "content": "agent_id: agent-2\nactual_subagent_type: coder\nstatus: completed\nstop_reason: completed\n\n[summary]\nT001: extended `count.py` with `--json` mode (either position, single `widgets` member) and clean invalid-input handling (exit 1, empty stdout, stderr message + usage, no traceback); added `test_count.py` with 14 real-subprocess unittest tests covering AC1\u2013AC4 including `+5`, `007`, `\u0661\u0662\u0663`, `abc`, `\"\"`, `--json --json`, `--bogus`, `3 4`.\nVerify `python3 -m unittest -v test_count.py`: **Ran 14 tests \u2014 OK**; manual CLI spot checks for every acceptance criterion also passed with expected output and exit codes.\n\nChanged paths:\n- `count.py`\n- `test_count.py`\n- `.project/tasks/T001-count-cli.md` (Log entry only)\n\nRESULT: T001 ready\n\nresume_hint: Continue with Agent(resume=\"agent-2\", prompt=\"...\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
+    },
+    "session_store": {
+      "state": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+      "type": "sub",
+      "labels": {
+        "parentAgentId": "main",
+        "profileName": "coder"
+      },
+      "turn_ended_reasons": [
+        "completed"
+      ]
+    }
+  }
+}

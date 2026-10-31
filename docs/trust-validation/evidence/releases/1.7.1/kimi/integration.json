@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_289ea4db-ba37-405d-b3ed-a78b284905b9",
+  "result": "pass",
+  "step": "integration",
+  "command": "REPO=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/kimi/quick/repo\npython3 -B /Users/jeremymcspadden/.gsd-path/runtimes/e05c5aad5982108a3f3615d16754ab136883c6c461f7fb1eb3c1d869b9d5df31/archive_milestone.py validate-integrated --repo \"$REPO\" --slug widget-count-cli\necho \"--- git worktree list --porcelain:\"; git -C \"$REPO\" worktree list --porcelain\necho \"--- tag:\"; git -C \"$REPO\" rev-parse milestone/001-widget-count-cli\necho \"--- origin/main:\"; git -C \"$REPO\" rev-parse origin/main; git -C \"$REPO\" log --format='%H %s' -3 origin/main",
+  "output": "{\"archive\": \".project/archive/001-widget-count-cli\", \"base\": \"3bd9dc4d519525a4e51852154602991debcc6caa\", \"commit\": \"0b86e0a6b1a50672d0d9ef8ec20845dfaa3c7613\", \"integrate\": \"3bd9dc4d519525a4e51852154602991debcc6caa\", \"landing\": \"3bd9dc4d519525a4e51852154602991debcc6caa\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-count-cli\"}\n--- git worktree list --porcelain:\nworktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/kimi/quick/repo\nHEAD 0b86e0a6b1a50672d0d9ef8ec20845dfaa3c7613\nbranch refs/heads/gsd-path/M001\n\n--- tag:\n458d8010d00f4200a2efacd64f2422cd8b2e5db5\n--- origin/main:\n3bd9dc4d519525a4e51852154602991debcc6caa\n3bd9dc4d519525a4e51852154602991debcc6caa integrate: M001 \u2014 merge gsd-path/M001 into main\n0b86e0a6b1a50672d0d9ef8ec20845dfaa3c7613 ship: M001 \u2014 widget-count-cli\nd3514f9a251aff0c36c0e458d495ae2524a00eae build: complete milestone\n",
+  "fixture_bundle": "kimi/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-count-cli/trust-run-manifest.json",
+  "ship_commit": "0b86e0a6b1a50672d0d9ef8ec20845dfaa3c7613",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "f8c4aa9776bf92a337e157e6bd407295ae1d994d",
+  "integration_commit": "3bd9dc4d519525a4e51852154602991debcc6caa",
+  "milestone_tag": "milestone/001-widget-count-cli"
+}
