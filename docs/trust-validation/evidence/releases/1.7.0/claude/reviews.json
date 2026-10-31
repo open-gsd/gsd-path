@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "aee52783-96ae-4bc1-942a-ea000886f633",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/97c12323d6c9828b5814ee1b3a8ab72240e28dda8c2db46058a7ce9388ab6c7a/check_handoffs.py final --repo $PWD; echo rc=$?; cat .project/review/final-gap-1.md; sed -n '1,20p' .project/review/FINAL.md; grep -c '^### SC' .project/review/FINAL.md; grep -n 'Overall verdict' .project/review/FINAL.md",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: b69b26833bd5b50866179ada5b03b136e112362f\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 46dc3c99a36d0d94e3d41ca3eb45665723b33ac4\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: b69b26833bd5b50866179ada5b03b136e112362f",
+  "wave_review_artifact": ".project/archive/001-count-json-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json-cli/review/FINAL.md"
+}

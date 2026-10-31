@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a18f24-8846-7de0-90ea-356a00aec68f",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 -m unittest tests/test_count.py",
+  "output": "{\"command\": \"python3 -m unittest tests/test_count.py\", \"commit\": \"c609825a4aff943e271719ed2d23a220e564e1cd\", \"execution\": {\"base\": \"2b698bc154585f78bb355f5bf05d623aefda869c\", \"cwd\": \"/Users/jeremymcspadden/.gsd-path/projects/8e17e8d0589f7a1ae3983fa9ea7ce7512531d62de0c1ab7cb4977d85d94fdbf0/0711803c2d416d2d5d1d85d2f8a965bb9d267168994acac5fc0c0f4f7c44fb37/verify/task-t001-verify\", \"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/grok/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-10-31T001142+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \".......\\n----------------------------------------------------------------------\\nRan 7 tests in 0.937s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/grok/quick/repo\"}, \"recorded_at\": \"2026-10-31T00:11:43+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest discover -s tests\", \"commit\": \"095ddd88ee6ae41632863798051e99ae8ac2c00c\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \".......\\n----------------------------------------------------------------------\\nRan 7 tests in 1.083s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/8e17e8d0589f7a1ae3983fa9ea7ce7512531d62de0c1ab7cb4977d85d94fdbf0/0711803c2d416d2d5d1d85d2f8a965bb9d267168994acac5fc0c0f4f7c44fb37/verify/project-verify\"}, \"recorded_at\": \"2026-10-31T00:26:04+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-widget-count/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

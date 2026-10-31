@@ -14,7 +14,7 @@ One router skill drives a gated pipeline: inspect → define → research → de
 plan → build → ship. Every handoff lives in `.project/` so any session can resume from disk.
 
 **Hosts:** Codex, Claude Code, Grok, OpenCode, Antigravity, Cursor, and Kimi
-Code have a passing live milestone for release 1.6.2. Copilot CLI, Qwen, Zed,
+Code have a passing live milestone for release 1.7.0. Copilot CLI, Qwen, Zed,
 Kiro, and Muse Code install, but have no live milestone for that release. See
 [host tiers](README.md).
 

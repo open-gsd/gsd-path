@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_e70db6fe4ffeFyG2g1s7MGeZzn",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/97c12323d6c9828b5814ee1b3a8ab72240e28dda8c2db46058a7ce9388ab6c7a/check_handoffs.py final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/opencode/quick/repo",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: e73455b2bdf1032727dd0f8d9b5a2ad16345a9e4\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: bed3f567f856c126fb2dc726d0eb7d5bc14aeed7\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: e73455b2bdf1032727dd0f8d9b5a2ad16345a9e4",
+  "wave_review_artifact": ".project/archive/001-count-json/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-json/review/FINAL.md"
+}

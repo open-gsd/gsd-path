@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_844a491f-6359-4238-9371-d36e15f5062b",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/kimi/quick/repo/.kimi-code/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/kimi/quick/repo --task-id T001",
+  "output": "commit 72cccc7663b08ae8aea1a29f059fa5f9e95de089\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Oct 30 19:18:05 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Oct 30 19:18:05 2026 -0500\n\n    T001: Extend count.py with int() token parsing, --json mode, and real-CLI tests\n    \n    Task: .project/tasks/T001-count-cli-args.md\n    Base: b6e1f37804cf60f887b4cc92c952011747dd612c\n    Files:\n    - .project/tasks/T001-count-cli-args.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-count-cli-args.md | 26 ++++++++--\n count.py                              | 35 ++++++++++++-\n test_count.py                         | 97 +++++++++++++++++++++++++++++++++++\n 3 files changed, 153 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "kimi/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli/trust-run-manifest.json",
+  "fixture_base_commit": "b6e1f37804cf60f887b4cc92c952011747dd612c",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/b01722634dc72e5d819676d8f29798f4396e98ecd1dd73bc23c5aee654b156dc/ba8a39454c3b05591138537fb3e6e289845c4e316b71bad3b03628ff5bbe2f26/verify/task-t001-verify",
+  "landing_commit": "72cccc7663b08ae8aea1a29f059fa5f9e95de089",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

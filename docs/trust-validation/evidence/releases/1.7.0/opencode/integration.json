@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_e70db6fe4ffeFyG2g1s7MGeZzn",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/97c12323d6c9828b5814ee1b3a8ab72240e28dda8c2db46058a7ce9388ab6c7a/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/opencode/quick/repo --slug count-json",
+  "output": "{\"archive\": \".project/archive/001-count-json\", \"base\": \"fde27900e2c51d43d6cfb9fdeeb3c14773da755a\", \"commit\": \"35d9a430f597ce3b759f28f722bc7083d8ab0441\", \"integrate\": \"fde27900e2c51d43d6cfb9fdeeb3c14773da755a\", \"landing\": \"fde27900e2c51d43d6cfb9fdeeb3c14773da755a\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json\"}\n",
+  "fixture_bundle": "opencode/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json/trust-run-manifest.json",
+  "ship_commit": "35d9a430f597ce3b759f28f722bc7083d8ab0441",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "eb4f35442ccfc9c030a10b5988d8fab7620343cd",
+  "integration_commit": "fde27900e2c51d43d6cfb9fdeeb3c14773da755a",
+  "milestone_tag": "milestone/001-count-json"
+}

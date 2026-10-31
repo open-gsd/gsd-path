@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_844a491f-6359-4238-9371-d36e15f5062b",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "Agent",
+    "run": "run-20261031T000931786450Z",
+    "session_id": "session_844a491f-6359-4238-9371-d36e15f5062b",
+    "tool_call": {
+      "id": "tool_KQrOkqgPO5lB3TYsgOddprPy",
+      "input": {
+        "description": "build_t001",
+        "subagent_type": "coder"
+      },
+      "prompt_sha256": "8f77934cb7fa4d4118d12a3e3b049ef3fc8904abae0e08c2241a34fb45772040"
+    },
+    "tool_result": {
+      "agent_id": "agent-2",
+      "actual_subagent_type": "coder",
+      "status": "completed",
+      "stop_reason": "completed",
+      "content": "agent_id: agent-2\nactual_subagent_type: coder\nstatus: completed\nstop_reason: completed\n\n[summary]\nVerdict: **ready**\n\nFiles changed:\n- `count.py` \u2014 rewritten: manual `sys.argv[1:]` parse; `--json` accepted once before/after the count; every other token goes through `int()` (no cap, no reinterpretation); failures print one `count.py: error: \u2026` line to stderr and exit 2 with empty stdout; human output `print(f\"{n} widgets\")`, JSON output `print(json.dumps({\"widgets\": n}))` \u2014 both byte-exact per SC1\u2013SC3/C1.\n- `test_count.py` \u2014 new: stdlib `unittest` driving the real CLI via `subprocess` (`sys.executable`, absolute path); 11 tests covering SC1 (no args), SC2 (`+5`, `-0`, `-3`, `007`, ` 5 `, `1_000`, Unicode digit `\u0663`, 10**40), SC3 (`--json`, `--json 5`, `5 --json`), SC4 (repeated `--json`, extra count, unknown flag, `int()`-rejected tokens; asserts empty stdout, nonzero exit, single stderr line, no traceback, token named).\n- `.project/tasks/T001-count-cli-args.md` \u2014 Log append only.\n\nVerify output tail (`python3 -m unittest -v test_count.py`):\n```\ntest_json_after_count (test_count.TestJsonMode.test_json_after_count) ... ok\ntest_json_alone_defaults_to_zero (test_count.TestJsonMode.test_json_alone_defaults_to_zero) ... ok\ntest_json_before_count (test_count.TestJsonMode.test_json_before_count) ... ok\n\n----------------------------------------------------------------------\nRan 11 tests in 0.462s\n\nOK\n```\nBare `python3 -m unittest` discovery also runs all 11 tests OK. No git state touched; no frontmatter edited.\n\nRESULT: T001 ready\n\nresume_hint: Continue with Agent(resume=\"agent-2\", prompt=\"...\"). Use agent_id only; do not set subagent_type. The subagent retains its prior context; redo any unfinished tool call if its result was lost."
+    },
+    "session_store": {
+      "state": "session_844a491f-6359-4238-9371-d36e15f5062b",
+      "type": "sub",
+      "labels": {
+        "parentAgentId": "main",
+        "profileName": "coder"
+      },
+      "turn_ended_reasons": [
+        "completed"
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "aee52783-96ae-4bc1-942a-ea000886f633",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B .claude/skills/gsd-path/scripts/dispatch_driver.py finish --repo $PWD --task-id T001 > /tmp/gsd-path-claude-quick/finish-T001-claude.json; echo rc=$?; python3 -m json.tool /tmp/gsd-path-claude-quick/finish-T001-claude.json | head -80",
+  "output": "commit 632c5c7968c79574ee33cf7bf2ef81c17455760f\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Oct 30 18:39:27 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Oct 30 18:39:27 2026 -0500\n\n    T001: Add --json mode and strict error handling to count.py with real-CLI tests\n    \n    Task: .project/tasks/T001-count-json-cli.md\n    Base: acf2d1048a1dfc5868a4a02dc713fbc28321b0cb\n    Files:\n    - .project/tasks/T001-count-json-cli.md\n    - count.py\n    - tests/test_count.py\n\n .project/tasks/T001-count-json-cli.md | 23 +++++++--\n count.py                              | 33 ++++++++++++-\n tests/test_count.py                   | 88 +++++++++++++++++++++++++++++++++++\n 3 files changed, 139 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "claude/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "fixture_base_commit": "acf2d1048a1dfc5868a4a02dc713fbc28321b0cb",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/71262bc6a7a0c5c7eaf6ff80bbe160c27b9e2cf17ce7068a9e697693c11e1742/b1f4f564f7ea18e201224dc620a4684da235620f983ec46dd15a8f03f4aa0b0b/verify/task-t001-verify",
+  "landing_commit": "632c5c7968c79574ee33cf7bf2ef81c17455760f",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

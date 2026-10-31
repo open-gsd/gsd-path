@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Task",
+  "child_api": "Task",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "Task",
+    "run": "run-20261030T234227478139Z",
+    "session_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+    "tool_key": "taskToolCall",
+    "tool_use": {
+      "id": "tool_8deff5c0-9f34-4b57-b383-2953b3a23e6",
+      "input": {
+        "description": "build_t001",
+        "subagentType": {
+          "custom": {
+            "name": "gsd-path"
+          }
+        },
+        "model": "composer-2.5",
+        "agentId": "bf6e6e1e-49db-4a0a-84a4-95cc536ba96c",
+        "attachments": [],
+        "mode": "TASK_MODE_UNSPECIFIED",
+        "respondingToMessageIds": [],
+        "environment": "SUBAGENT_EXECUTION_ENVIRONMENT_UNSPECIFIED",
+        "machine": {
+          "sameMachine": {}
+        }
+      },
+      "prompt_sha256": "eb893d2b25c77301dda27cfe667b15b6f798aa4f4804d0e3dfa786bbc849b3c0"
+    },
+    "tool_result": {
+      "is_error": false,
+      "content": "{\"success\": {\"conversationSteps\": [{\"assistantMessage\": {\"text\": \"Implementing T001: reading the coder role, task file, and INTENT.\\nImplementing `count.py` and subprocess tests.\\nFixing argv parsing: `-0` was misclassified as an unknown flag because it starts with `-`.\\nT001 implements the count CLI (SC1\\u2013SC3) and subprocess tests (SC4). Verify: `python3 -m unittest tests/test_count_cli.py -v` \\u2014 OK, 13 tests.\\n\\n**Changed paths:** `count.py`, `tests/test_count_cli.py`, `.project/tasks/T001-count-cli.md` (Log only)\\n\\nRESULT: T001 ready\"}}], \"agentId\": \"9f628ae2-02cb-4fc4-af5d-4178e4d08729\", \"isBackground\": false, \"durationMs\": \"34141\", \"backgroundReason\": \"SUBAGENT_BACKGROUND_REASON_UNSPECIFIED\"}}"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a18f31-d984-77e2-89bc-82a39629ef28",
+  "result": "pass",
+  "step": "install",
+  "command": "node /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/codex/plugin/scripts/install.mjs --codex --local --project /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/codex/quick/repo --hooks --no-color",
+  "output": "\u2726 GSD Path installer v1.7.0\n  project install into /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/codex/quick/repo\n\n  \u2713 codex: installed 16 shared skills to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/codex/quick/repo/.agents/skills\n  \u2713 project: copied AGENTS.md, WORKFLOW.md, .gsd-path/status_runtime.py, .gsd-path/runtime.json, .gsd-path/guard_hook.py, .gsd-path/git_guard.py, .codex/hooks.json, .git/hooks/pre-commit, .git/hooks/commit-msg, .git/hooks/pre-push to /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/codex/quick/repo\n\n  Done. Restart active agent sessions, then invoke the router explicitly.",
+  "host_version": "0.157.1",
+  "install_root": ".agents/skills",
+  "candidate": "e2dd08576d7486b302dc7a870a47aaa7f788089f",
+  "package_version": "1.7.0",
+  "exit_code": 0
+}

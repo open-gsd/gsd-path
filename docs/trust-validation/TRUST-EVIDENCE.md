@@ -1,6 +1,6 @@
 # GSD Path — Trust Evidence Log
 
-Current release evidence: [1.6.2 candidate](#release-evidence-2026-10-16--162).
+Current release evidence: [1.7.0 candidate](#release-evidence-2026-10-30--170).
 Earlier sections remain historical observations.
 
 **Date:** 2026-08-05 (reconciled 2026-08-11 — dispatch-smoke rows downgraded; see notes)  
@@ -400,7 +400,7 @@ receipts do not grant publication authority.
 
 ---
 
-## Release evidence (2026-10-16 — 1.6.2)
+## Release evidence (2026-10-16 — 1.6.2, historical)
 
 Candidate: `c14248da2eb5db1362175f50382af8ecb9fd1bc3`, main after the 1.6.2
 version change (PR #433). The release gate required a fresh run on every host
@@ -424,3 +424,35 @@ the runs. [Run notes](evidence/releases/1.6.2/notes/RUNS.md) list token usage
 and scopes, the owner-gate corrections, and the hardening gaps. The complete
 `verify:release` gate is required before publication; receipts do not grant
 publication authority.
+
+---
+
+## Release evidence (2026-10-30 — 1.7.0)
+
+Candidate: `e2dd08576d7486b302dc7a870a47aaa7f788089f`, prepared in PR #529.
+The merge commit of PR #529 has the identical product tree. The release gate
+required a fresh run on every host in the live-check scope and reused no
+earlier receipt. Runs began on 2026-10-30 UTC and continued on 2026-10-31 UTC.
+Codex, Claude Code, Grok, OpenCode, Antigravity, Cursor, and Kimi have
+validated current-candidate receipts under `evidence/releases/1.7.0/`. A fresh
+clone of each integrated local origin `main` passed the external widget
+acceptance check 6/6, 42/42 in total. See [HOST-MATRIX.md](HOST-MATRIX.md) for
+each receipt.
+
+Each receipt binds a native child to the landed task, isolated Task Verify,
+full-wave final review, committed archive, local-origin integration, and Git
+guard results. Claude Code and Cursor also passed native guard probes; the
+other five hosts used the declared Git-only tier. No candidate defect was
+found and the candidate source did not change during the runs. One Cursor
+attempt was invalid because it invented an owner ruling, and one Codex attempt
+was invalid because the evaluator supplied an invalid child identifier. Both
+are retained and supply no passing proof; the re-runs passed. Kimi recovered
+from provider timeouts.
+
+GitHub Copilot CLI, Muse Code, Qwen, Kiro, and Zed stay excluded from the
+live-check scope, as in the 2026-09-30 entry. Exclusion is not a live-test
+pass. Owner ruling on the release date: the changelog date must match the
+release tag commit date before publication. [Run notes](evidence/releases/1.7.0/notes/RUNS.md)
+list usage counters, the invalid attempts, the corrections, and each
+acceptance output. The complete `verify:release` gate is required before
+publication; receipts do not grant publication authority.

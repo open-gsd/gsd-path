@@ -7,7 +7,11 @@ and required live-check scope.
 The historical results below do not define the current required host set;
 see [Live-check scope](TRUST-VALIDATION-SPEC.md#live-check-scope).
 
-Release 1.6.2 uses frozen candidate `c14248da2eb5db1362175f50382af8ecb9fd1bc3`
+Release 1.7.0 uses frozen candidate `e2dd08576d7486b302dc7a870a47aaa7f788089f`
+prepared in PR #529. All seven required hosts ran fresh milestones on
+2026-10-30–31 UTC; receipts are in `evidence/releases/1.7.0/`.
+
+Release 1.6.2 used frozen candidate `c14248da2eb5db1362175f50382af8ecb9fd1bc3`
 from main on 2026-10-16, after the 1.6.2 version change (PR #433). Its receipts
 are in `evidence/releases/1.6.2/`. Release 1.6.1 used candidate
 `ec116bf9af69af2a1769d73b566b53834fa4c327`; its receipts are in
@@ -24,14 +28,14 @@ publication; see the [release contract](../../RELEASE.md#release-contract).
 
 | Host | Install | Native guard installed | Full live milestone | Candidate result |
 |---|---|---|---|---|
-| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | [codex.md](evidence/releases/1.6.2/codex.md) | **pass** on `c14248d` |
-| Claude Code | automated | fail-closed project hook + Git hooks | [claude.md](evidence/releases/1.6.2/claude.md) | **pass** on `c14248d` |
-| Grok | automated | not installed; Git hooks | [grok.md](evidence/releases/1.6.2/grok.md) | **pass** on `c14248d` |
-| OpenCode | automated | not installed; Git hooks | [opencode.md](evidence/releases/1.6.2/opencode.md) | **pass** on `c14248d` |
+| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | [codex.md](evidence/releases/1.7.0/codex.md) | **pass** on `e2dd0857` |
+| Claude Code | automated | fail-closed project hook + Git hooks | [claude.md](evidence/releases/1.7.0/claude.md) | **pass** on `e2dd0857` |
+| Grok | automated | not installed; Git hooks | [grok.md](evidence/releases/1.7.0/grok.md) | **pass** on `e2dd0857` |
+| OpenCode | automated | not installed; Git hooks | [opencode.md](evidence/releases/1.7.0/opencode.md) | **pass** on `e2dd0857` |
 | GitHub Copilot CLI | automated | not installed; Git hooks | not run: account quota exhausted | excluded at the maintainer's request until restored |
-| Antigravity CLI | automated | not installed; Git hooks | [antigravity.md](evidence/releases/1.6.2/antigravity.md) | **pass** on `c14248d` |
-| Cursor | automated | fail-closed project hook + Git hooks | [cursor.md](evidence/releases/1.6.2/cursor.md) | **pass** on `c14248d` |
-| Kimi Code | automated | not installed; Git hooks | [kimi.md](evidence/releases/1.6.2/kimi.md) | **pass** on `c14248d` |
+| Antigravity CLI | automated | not installed; Git hooks | [antigravity.md](evidence/releases/1.7.0/antigravity.md) | **pass** on `e2dd0857` |
+| Cursor | automated | fail-closed project hook + Git hooks | [cursor.md](evidence/releases/1.7.0/cursor.md) | **pass** on `e2dd0857` |
+| Kimi Code | automated | not installed; Git hooks | [kimi.md](evidence/releases/1.7.0/kimi.md) | **pass** on `e2dd0857` |
 | Qwen Code | automated | not installed; Git hooks | not run (API credits) | excluded at the maintainer's request |
 | Zed | automated | no native hook API; Git hooks | not run (API credits) | excluded at the maintainer's request |
 | Kiro | automated | not installed; Git hooks | not run (API credits) | excluded at the maintainer's request |
@@ -39,6 +43,18 @@ publication; see the [release contract](../../RELEASE.md#release-contract).
 
 Historical smoke evidence remains under `evidence/`; release receipts belong
 under `evidence/releases/<version>/` and are never inferred from smoke runs.
+
+## 1.7.0 run notes
+
+All seven required hosts completed fresh milestones and passed the external
+CLI acceptance check from clones of their integrated fixture origin/main.
+Each reused its full-wave final review and repeated project-Verify result at
+unchanged HEAD without another verification execution. Claude and Cursor
+proved native-hook enforcement; the other five used their declared Git-only
+tier. Invalid Cursor and Codex attempts were retained and supply no passing
+proof. Kimi recovered from provider timeouts. See [run notes](evidence/releases/1.7.0/notes/RUNS.md)
+for corrections, usage counters, and individual acceptance outputs. The
+publication workflow still owns the full release gate.
 
 ## 1.6.2 run notes
 

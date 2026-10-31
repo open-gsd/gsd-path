@@ -1,0 +1,755 @@
+{
+  "note": "Raw harness-reported counters. Host counter scopes differ and resumed runs may be cumulative; do not sum these into a session total. Null means the host did not report usage. Invalid attempts are retained locally and excluded here.",
+  "runs": [
+    {
+      "host": "codex",
+      "run": "run-20261030T234250916153Z",
+      "session_id": "01a18f31-d984-77e2-89bc-82a39629ef28",
+      "elapsed_seconds": 288.4142578749452,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 2619167,
+        "cached_input_tokens": 2525312,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 9086,
+        "reasoning_output_tokens": 501
+      }
+    },
+    {
+      "host": "codex",
+      "run": "run-20261030T234814251863Z",
+      "session_id": "01a18f31-d984-77e2-89bc-82a39629ef28",
+      "elapsed_seconds": 153.90895666601136,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 4070308,
+        "cached_input_tokens": 3958016,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 15093,
+        "reasoning_output_tokens": 995
+      }
+    },
+    {
+      "host": "codex",
+      "run": "run-20261030T235118872541Z",
+      "session_id": "01a18f31-d984-77e2-89bc-82a39629ef28",
+      "elapsed_seconds": 88.88367141690105,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 5790230,
+        "cached_input_tokens": 5641728,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 18313,
+        "reasoning_output_tokens": 1409
+      }
+    },
+    {
+      "host": "codex",
+      "run": "run-20261030T235331641085Z",
+      "session_id": "01a18f31-d984-77e2-89bc-82a39629ef28",
+      "elapsed_seconds": 470.5831794170663,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 11613512,
+        "cached_input_tokens": 11430912,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 28762,
+        "reasoning_output_tokens": 2349
+      }
+    },
+    {
+      "host": "codex",
+      "run": "run-20261031T000221080037Z",
+      "session_id": "01a18f31-d984-77e2-89bc-82a39629ef28",
+      "elapsed_seconds": 39.05697629204951,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 12397983,
+        "cached_input_tokens": 12212608,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 29878,
+        "reasoning_output_tokens": 2442
+      }
+    },
+    {
+      "host": "codex",
+      "run": "run-20261031T000351146225Z",
+      "session_id": "01a18f31-d984-77e2-89bc-82a39629ef28",
+      "elapsed_seconds": 124.0033350829035,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 14891006,
+        "cached_input_tokens": 14693120,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 34017,
+        "reasoning_output_tokens": 3067
+      }
+    },
+    {
+      "host": "claude",
+      "run": "run-20261030T232816771642Z",
+      "session_id": "aee52783-96ae-4bc1-942a-ea000886f633",
+      "elapsed_seconds": 256.2592822080478,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 18,
+        "cache_creation_input_tokens": 13600,
+        "cache_read_input_tokens": 1799060,
+        "output_tokens": 7740,
+        "output_tokens_details": {
+          "thinking_tokens": 1326
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 13600,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 1280,
+            "cache_read_input_tokens": 230941,
+            "cache_creation_input_tokens": 936,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 936
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "fallback_credit": null
+      }
+    },
+    {
+      "host": "claude",
+      "run": "run-20261030T233325601546Z",
+      "session_id": "aee52783-96ae-4bc1-942a-ea000886f633",
+      "elapsed_seconds": 46.90199445793405,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 8,
+        "cache_creation_input_tokens": 8026,
+        "cache_read_input_tokens": 702620,
+        "output_tokens": 4549,
+        "output_tokens_details": {
+          "thinking_tokens": 1305
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 8026,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 942,
+            "cache_read_input_tokens": 237232,
+            "cache_creation_input_tokens": 2671,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 2671
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "fallback_credit": null
+      }
+    },
+    {
+      "host": "claude",
+      "run": "run-20261030T233453473932Z",
+      "session_id": "aee52783-96ae-4bc1-942a-ea000886f633",
+      "elapsed_seconds": 83.0690164999105,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 14,
+        "cache_creation_input_tokens": 21503,
+        "cache_read_input_tokens": 1490996,
+        "output_tokens": 7297,
+        "output_tokens_details": {
+          "thinking_tokens": 1157
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 21503,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 1151,
+            "cache_read_input_tokens": 260885,
+            "cache_creation_input_tokens": 521,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 521
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "fallback_credit": null
+      }
+    },
+    {
+      "host": "claude",
+      "run": "run-20261030T233710778245Z",
+      "session_id": "aee52783-96ae-4bc1-942a-ea000886f633",
+      "elapsed_seconds": 398.3214942498598,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 22,
+        "cache_creation_input_tokens": 15449,
+        "cache_read_input_tokens": 3198607,
+        "output_tokens": 7568,
+        "output_tokens_details": {
+          "thinking_tokens": 637
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 15449,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 1972,
+            "cache_read_input_tokens": 326724,
+            "cache_creation_input_tokens": 749,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 749
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "fallback_credit": null
+      }
+    },
+    {
+      "host": "claude",
+      "run": "run-20261030T234715238655Z",
+      "session_id": "aee52783-96ae-4bc1-942a-ea000886f633",
+      "elapsed_seconds": 29.72028079186566,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 8,
+        "cache_creation_input_tokens": 3781,
+        "cache_read_input_tokens": 987310,
+        "output_tokens": 1687,
+        "output_tokens_details": {
+          "thinking_tokens": 39
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 3781,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 1016,
+            "cache_read_input_tokens": 330192,
+            "cache_creation_input_tokens": 1062,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 1062
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "fallback_credit": null
+      }
+    },
+    {
+      "host": "claude",
+      "run": "run-20261030T234814255015Z",
+      "session_id": "aee52783-96ae-4bc1-942a-ea000886f633",
+      "elapsed_seconds": 86.11253604199737,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 30,
+        "cache_creation_input_tokens": 14137,
+        "cache_read_input_tokens": 4753437,
+        "output_tokens": 5509,
+        "output_tokens_details": {
+          "thinking_tokens": 382
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 14137,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 1417,
+            "cache_read_input_tokens": 343579,
+            "cache_creation_input_tokens": 1812,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 1812
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard",
+        "fallback_credit": null
+      }
+    },
+    {
+      "host": "grok",
+      "run": "run-20261030T232818006894Z",
+      "session_id": "01a18f24-8846-7de0-90ea-356a00aec68f",
+      "elapsed_seconds": 633.3967285831459,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 287233,
+        "cache_read_input_tokens": 3827712,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 57488,
+        "reasoning_tokens": 40894,
+        "total_tokens": 4172433
+      }
+    },
+    {
+      "host": "grok",
+      "run": "run-20261030T233911099218Z",
+      "session_id": "01a18f24-8846-7de0-90ea-356a00aec68f",
+      "elapsed_seconds": 316.60610658302903,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 173465,
+        "cache_read_input_tokens": 4620160,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 19413,
+        "reasoning_tokens": 13317,
+        "total_tokens": 4813038
+      }
+    },
+    {
+      "host": "grok",
+      "run": "run-20261030T234715234633Z",
+      "session_id": "01a18f24-8846-7de0-90ea-356a00aec68f",
+      "elapsed_seconds": 578.0141432080418,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 181370,
+        "cache_read_input_tokens": 6969600,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 34958,
+        "reasoning_tokens": 23485,
+        "total_tokens": 7185928
+      }
+    },
+    {
+      "host": "grok",
+      "run": "run-20261030T235748148042Z",
+      "session_id": "01a18f24-8846-7de0-90ea-356a00aec68f",
+      "elapsed_seconds": 1771.395257250173,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 515889,
+        "cache_read_input_tokens": 15446016,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 111044,
+        "reasoning_tokens": 77388,
+        "total_tokens": 16072949
+      }
+    },
+    {
+      "host": "grok",
+      "run": "run-20261031T002848909342Z",
+      "session_id": "01a18f24-8846-7de0-90ea-356a00aec68f",
+      "elapsed_seconds": 103.19239933392964,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 23920,
+        "cache_read_input_tokens": 1911040,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 7057,
+        "reasoning_tokens": 5144,
+        "total_tokens": 1942017
+      }
+    },
+    {
+      "host": "grok",
+      "run": "run-20261031T003103838761Z",
+      "session_id": "01a18f24-8846-7de0-90ea-356a00aec68f",
+      "elapsed_seconds": 307.05947750015184,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 74620,
+        "cache_read_input_tokens": 1720448,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 11634,
+        "reasoning_tokens": 7749,
+        "total_tokens": 1806702
+      }
+    },
+    {
+      "host": "opencode",
+      "run": "run-20261030T232819440959Z",
+      "session_id": "ses_e70db6fe4ffeFyG2g1s7MGeZzn",
+      "elapsed_seconds": 601.8192837918177,
+      "exit_code": 0,
+      "reported_usage": {
+        "tokens": {
+          "total": 144860,
+          "input": 287,
+          "output": 492,
+          "reasoning": 273,
+          "cache": {
+            "write": 0,
+            "read": 143808
+          }
+        },
+        "cost": 0
+      }
+    },
+    {
+      "host": "opencode",
+      "run": "run-20261030T233909929720Z",
+      "session_id": "ses_e70db6fe4ffeFyG2g1s7MGeZzn",
+      "elapsed_seconds": 124.36281675007194,
+      "exit_code": 0,
+      "reported_usage": {
+        "tokens": {
+          "total": 154810,
+          "input": 276,
+          "output": 359,
+          "reasoning": 63,
+          "cache": {
+            "write": 0,
+            "read": 154112
+          }
+        },
+        "cost": 0
+      }
+    },
+    {
+      "host": "opencode",
+      "run": "run-20261030T234226292400Z",
+      "session_id": "ses_e70db6fe4ffeFyG2g1s7MGeZzn",
+      "elapsed_seconds": 163.4877527919598,
+      "exit_code": 0,
+      "reported_usage": {
+        "tokens": {
+          "total": 175053,
+          "input": 175,
+          "output": 426,
+          "reasoning": 52,
+          "cache": {
+            "write": 0,
+            "read": 174400
+          }
+        },
+        "cost": 0
+      }
+    },
+    {
+      "host": "opencode",
+      "run": "run-20261030T234715221688Z",
+      "session_id": "ses_e70db6fe4ffeFyG2g1s7MGeZzn",
+      "elapsed_seconds": 825.1063025409821,
+      "exit_code": 0,
+      "reported_usage": {
+        "tokens": {
+          "total": 233349,
+          "input": 201,
+          "output": 953,
+          "reasoning": 387,
+          "cache": {
+            "write": 0,
+            "read": 231808
+          }
+        },
+        "cost": 0
+      }
+    },
+    {
+      "host": "opencode",
+      "run": "run-20261031T000134192081Z",
+      "session_id": "ses_e70db6fe4ffeFyG2g1s7MGeZzn",
+      "elapsed_seconds": 118.93829545821063,
+      "exit_code": 0,
+      "reported_usage": {
+        "tokens": {
+          "total": 238928,
+          "input": 444,
+          "output": 698,
+          "reasoning": 410,
+          "cache": {
+            "write": 0,
+            "read": 237376
+          }
+        },
+        "cost": 0
+      }
+    },
+    {
+      "host": "opencode",
+      "run": "run-20261031T000351147884Z",
+      "session_id": "ses_e70db6fe4ffeFyG2g1s7MGeZzn",
+      "elapsed_seconds": 90.00747766694985,
+      "exit_code": 0,
+      "reported_usage": {
+        "tokens": {
+          "total": 243362,
+          "input": 205,
+          "output": 940,
+          "reasoning": 105,
+          "cache": {
+            "write": 0,
+            "read": 242112
+          }
+        },
+        "cost": 0
+      }
+    },
+    {
+      "host": "antigravity",
+      "run": "run-20261030T232820271491Z",
+      "session_id": "32bf63cc-5aac-4b4c-821f-108ceac3b020",
+      "elapsed_seconds": 560.773201166885,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 131566,
+        "output_tokens": 10811,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 1909772,
+        "total_tokens": 142377
+      }
+    },
+    {
+      "host": "antigravity",
+      "run": "run-20261030T233813315752Z",
+      "session_id": "32bf63cc-5aac-4b4c-821f-108ceac3b020",
+      "elapsed_seconds": 68.79476945893839,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 226284,
+        "output_tokens": 15116,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 2169927,
+        "total_tokens": 241400
+      }
+    },
+    {
+      "host": "antigravity",
+      "run": "run-20261030T234022893328Z",
+      "session_id": "32bf63cc-5aac-4b4c-821f-108ceac3b020",
+      "elapsed_seconds": 178.4270342090167,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 266672,
+        "output_tokens": 21413,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 3365612,
+        "total_tokens": 288085
+      }
+    },
+    {
+      "host": "antigravity",
+      "run": "run-20261030T234715223440Z",
+      "session_id": "32bf63cc-5aac-4b4c-821f-108ceac3b020",
+      "elapsed_seconds": 729.5079378748778,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 416827,
+        "output_tokens": 36441,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 10582581,
+        "total_tokens": 453268
+      }
+    },
+    {
+      "host": "antigravity",
+      "run": "run-20261031T000022163838Z",
+      "session_id": "32bf63cc-5aac-4b4c-821f-108ceac3b020",
+      "elapsed_seconds": 55.76120937499218,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 424570,
+        "output_tokens": 37853,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 11143467,
+        "total_tokens": 462423
+      }
+    },
+    {
+      "host": "antigravity",
+      "run": "run-20261031T000134189114Z",
+      "session_id": "32bf63cc-5aac-4b4c-821f-108ceac3b020",
+      "elapsed_seconds": 156.49692179216072,
+      "exit_code": 0,
+      "reported_usage": {
+        "input_tokens": 454562,
+        "output_tokens": 42923,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 13441798,
+        "total_tokens": 497485
+      }
+    },
+    {
+      "host": "cursor",
+      "run": "run-20261030T233326960302Z",
+      "session_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+      "elapsed_seconds": 235.28855599998496,
+      "exit_code": 0,
+      "reported_usage": {
+        "inputTokens": 56348,
+        "outputTokens": 12324,
+        "cacheReadTokens": 1176192,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "host": "cursor",
+      "run": "run-20261030T233814240856Z",
+      "session_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+      "elapsed_seconds": 51.024858084041625,
+      "exit_code": 0,
+      "reported_usage": {
+        "inputTokens": 9996,
+        "outputTokens": 6674,
+        "cacheReadTokens": 772928,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "host": "cursor",
+      "run": "run-20261030T233944828744Z",
+      "session_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+      "elapsed_seconds": 65.22294837492518,
+      "exit_code": 0,
+      "reported_usage": {
+        "inputTokens": 24548,
+        "outputTokens": 7621,
+        "cacheReadTokens": 2360768,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "host": "cursor",
+      "run": "run-20261030T234227478139Z",
+      "session_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+      "elapsed_seconds": 273.9109369169455,
+      "exit_code": 0,
+      "reported_usage": {
+        "inputTokens": 44680,
+        "outputTokens": 11747,
+        "cacheReadTokens": 5689600,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "host": "cursor",
+      "run": "run-20261030T234745164730Z",
+      "session_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+      "elapsed_seconds": 36.170025166124105,
+      "exit_code": 0,
+      "reported_usage": {
+        "inputTokens": 9914,
+        "outputTokens": 2885,
+        "cacheReadTokens": 1371680,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "host": "cursor",
+      "run": "run-20261030T234841092411Z",
+      "session_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+      "elapsed_seconds": 48.91395283304155,
+      "exit_code": 0,
+      "reported_usage": {
+        "inputTokens": 9908,
+        "outputTokens": 6266,
+        "cacheReadTokens": 1373696,
+        "cacheWriteTokens": 0
+      }
+    },
+    {
+      "host": "kimi",
+      "run": "run-20261030T232822558195Z",
+      "session_id": "session_844a491f-6359-4238-9371-d36e15f5062b",
+      "elapsed_seconds": 928.7149215838872,
+      "exit_code": 0,
+      "reported_usage": null
+    },
+    {
+      "host": "kimi",
+      "run": "run-20261030T234715223634Z",
+      "session_id": "session_844a491f-6359-4238-9371-d36e15f5062b",
+      "elapsed_seconds": 1045.4631225420162,
+      "exit_code": 0,
+      "reported_usage": null
+    },
+    {
+      "host": "kimi",
+      "run": "run-20261031T000506192254Z",
+      "session_id": "session_844a491f-6359-4238-9371-d36e15f5062b",
+      "elapsed_seconds": 226.3943310000468,
+      "exit_code": 0,
+      "reported_usage": null
+    },
+    {
+      "host": "kimi",
+      "run": "run-20261031T000931786450Z",
+      "session_id": "session_844a491f-6359-4238-9371-d36e15f5062b",
+      "elapsed_seconds": 1167.5010518750641,
+      "exit_code": 0,
+      "reported_usage": null
+    },
+    {
+      "host": "kimi",
+      "run": "run-20261031T002910414829Z",
+      "session_id": "session_844a491f-6359-4238-9371-d36e15f5062b",
+      "elapsed_seconds": 1313.1478251251392,
+      "exit_code": 0,
+      "reported_usage": null
+    },
+    {
+      "host": "kimi",
+      "run": "run-20261031T005134104655Z",
+      "session_id": "session_844a491f-6359-4238-9371-d36e15f5062b",
+      "elapsed_seconds": 250.73668920900673,
+      "exit_code": 0,
+      "reported_usage": null
+    }
+  ]
+}

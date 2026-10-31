@@ -1,0 +1,60 @@
+{
+  "verdict": "pass",
+  "checks": [
+    {
+      "arguments": [],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "0 widgets\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "3"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "3 widgets\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "--json"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "{\"widgets\": 0}\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "3",
+        "--json"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "{\"widgets\": 3}\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "--json",
+        "-2"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "stdout": "{\"widgets\": -2}\n",
+      "stderr": ""
+    },
+    {
+      "arguments": [
+        "invalid"
+      ],
+      "pass": true,
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "count.py: invalid count: 'invalid' (expected an integer)\n"
+    }
+  ],
+  "commit": "fde27900e2c51d43d6cfb9fdeeb3c14773da755a"
+}
