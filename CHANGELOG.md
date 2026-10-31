@@ -11,6 +11,27 @@ app and the daemon have their own file,
 [daemon/app/CHANGELOG.md](daemon/app/CHANGELOG.md). Release bookkeeping and
 test-only changes are not listed; the Git history has them.
 
+## [1.7.0] - 2026-10-30
+
+### Added
+- Publish runtime-store entries without installing them, and adopt approved successor runtimes on closed milestones.
+- Prepare member task environments with a declared command and retry tasks after an environment failure.
+- Recover member work that already reached its default branch, including published ancestors and rebase-merged pull requests.
+- Trace accepted task evidence through a generated evidence manifest.
+
+### Changed
+- Check task brief paths in batches and report progress during larger plans.
+- Record the actual verification directory and native agent in member task receipts.
+
+### Fixed
+- Resume patch work after a ship-stage review without losing its checkpoint.
+- Keep blocked plans and repair waves on the correct recovery route.
+- Require wave reviews to account for every task claim and authorize claim dispositions through owner corrections.
+- Preserve disabled hooks, permit safe read-only fetches, and tighten PowerShell and repository deletion guards.
+- Remove isolated worktrees without traversing symlinks or Windows junctions.
+- Pin sibling task files during member activation and resolve member markers in final-review sidecars.
+- Retry project verification after a host failure and run long verification scripts correctly on Windows.
+
 ## [1.6.2] - 2026-10-17
 
 ### Changed
