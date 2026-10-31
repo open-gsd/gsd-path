@@ -674,6 +674,75 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
     return joined
 
 
+# Same text and suffix as install.py, which writes the member hooks.
+MEMBER_HOOK_MARKER = "gsd-path member guard"
+CHAINED_HOOK_SUFFIX = ".gsd-path-chained"
+
+
+def _recorded(repo: Path, name: str) -> tuple[Path, pipeline_state.PipelineState, list[dict[str, str]], int]:
+    """The coordinator, its members, and the index of `name`, at a milestone boundary only."""
+    root, state = _coordinator(repo)
+    if state.phase in {"build", "ship"}:
+        raise MembersError("members change only at a milestone boundary, not during build or ship")
+    listed = read_members(root)
+    for index, member in enumerate(listed):
+        if member["name"] == name:
+            return root, state, listed, index
+    raise MembersError(f"member {name} is not in MEMBERS.md")
+
+
+def _member_hooks(checkout: Path) -> list[Path]:
+    """The member guard hooks `install.py --member-of` wrote in this checkout."""
+    hooks = Path(_git(checkout, "rev-parse", "--path-format=absolute", "--git-path", "hooks"))
+    if not hooks.is_dir():
+        return []
+    return sorted(
+        path for path in hooks.iterdir()
+        if not path.name.endswith(CHAINED_HOOK_SUFFIX) and not path.is_symlink() and path.is_file()
+        and MEMBER_HOOK_MARKER in path.read_text(encoding="utf-8", errors="replace")
+    )
+
+
+def remove_member(repo: Path, name: str) -> tuple[list[dict[str, str]], list[str]]:
+    """Drop `name` from MEMBERS.md; remove its marker and member hooks, and restore
+    each chained hook. Path branches, tags, and archived milestones stay as history.
+
+    The member is cleaned before MEMBERS.md changes, so a failed run can run again."""
+    root, state, listed, index = _recorded(repo, name)
+    if name in _task_members(root):
+        raise MembersError(f"task briefs name member {name}; change those tasks before removing it")
+    checkout = Path(listed.pop(index)["checkout"])
+    cleaned: list[str] = []
+    # A checkout that is gone has nothing to clean.
+    if checkout.is_dir() and not checkout.is_symlink():
+        marker_path = _marker_path(checkout)
+        marker = _read_marker(marker_path)
+        # A marker of another coordinator also owns the hooks: leave both.
+        if marker is None or (marker["project"], marker["name"]) == (state.project, name):
+            for hook in _member_hooks(checkout):
+                chained = hook.with_name(hook.name + CHAINED_HOOK_SUFFIX)
+                if chained.exists() or chained.is_symlink():
+                    os.replace(chained, hook)
+                else:
+                    hook.unlink()
+                cleaned.append(str(hook))
+            if marker is not None:
+                marker_path.unlink()
+                cleaned.append(str(marker_path))
+    _common.atomic_write(root / ".project" / MEMBERS_FILE, render(listed))
+    return listed, cleaned
+
+
+def set_integration(repo: Path, name: str, integration: str) -> list[dict[str, str]]:
+    """Change how ship lands the member `name`: direct, pull-request, or default."""
+    if integration not in INTEGRATIONS:
+        raise MembersError(f"integration must be one of {', '.join(INTEGRATIONS)}")
+    root, _, listed, index = _recorded(repo, name)
+    listed[index]["integration"] = integration
+    _common.atomic_write(root / ".project" / MEMBERS_FILE, render(listed))
+    return listed
+
+
 def validate_members(repo: Path) -> list[dict[str, str]]:
     root, state = _coordinator(repo)
     members = read_members(root)
@@ -728,6 +797,13 @@ def parser() -> argparse.ArgumentParser:
     detect.add_argument("--checkout", required=True, type=Path, help="repository to inspect")
     repair = commands.add_parser("repair", help="rewrite missing or stale member markers")
     repair.add_argument("--repo", required=True, type=Path, help="coordinator Git root")
+    remove = commands.add_parser("remove", help="remove one member, its marker, and its member hooks")
+    remove.add_argument("--repo", required=True, type=Path, help="coordinator Git root")
+    remove.add_argument("--name", required=True)
+    integration = commands.add_parser("set-integration", help="change how ship lands one member")
+    integration.add_argument("--repo", required=True, type=Path, help="coordinator Git root")
+    integration.add_argument("--name", required=True)
+    integration.add_argument("--integration", required=True, choices=INTEGRATIONS)
     return result
 
 
@@ -750,6 +826,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
         elif arguments.command == "repair":
             members = repair_members(arguments.repo)
+        elif arguments.command == "remove":
+            members, cleaned = remove_member(arguments.repo, arguments.name)
+            print(json.dumps({"members": members, "cleaned": cleaned}, sort_keys=True))
+            return 0
+        elif arguments.command == "set-integration":
+            members = set_integration(arguments.repo, arguments.name, arguments.integration)
         else:
             members = validate_members(arguments.repo)
     except (MembersError, OSError) as error:
