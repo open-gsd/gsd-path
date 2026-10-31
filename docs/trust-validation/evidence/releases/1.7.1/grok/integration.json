@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+  "result": "pass",
+  "step": "integration",
+  "command": "REPO=/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/grok/quick/repo\nRT=/Users/jeremymcspadden/.gsd-path/runtimes/e05c5aad5982108a3f3615d16754ab136883c6c461f7fb1eb3c1d869b9d5df31\npython3 -B \"$RT/archive_milestone.py\" validate-integrated --repo \"$REPO\" --slug widget-count\necho \"VALIDATE_INTEGRATED_EXIT:$?\"\necho '---WORKTREES---'\ngit -C \"$REPO\" worktree list --porcelain\necho '---REFS---'\ngit -C \"$REPO\" rev-parse HEAD\ngit -C \"$REPO\" rev-parse refs/tags/milestone/001-widget-count\ngit -C \"$REPO\" rev-parse refs/tags/milestone/001-widget-count^{}\ngit -C \"$REPO\" log -1 --format='%H%n%s%n%b' f6ed65e9921a31d5d5ce38b1cdce1cbe67ed608b\necho '---STATUS---'\ngit -C \"$REPO\" status --porcelain --untracked-files=all\npython3 -B - <<'PY'\nimport hashlib, subprocess\nfrom pathlib import Path\nrepo = \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/grok/quick/repo\"\nroot = Path(repo) / \".project/archive/001-widget-count\"\nfor name in (\"guards.json\", \"trust-run-manifest.json\"):\n    blob = subprocess.check_output([\"git\",\"-C\",repo,\"rev-parse\",f\"HEAD:.project/archive/001-widget-count/{name}\"], text=True).strip()\n    work = hashlib.sha256((root/name).read_bytes()).hexdigest()\n    print(name, \"worktree\", work, \"gitblob\", blob)\nPY\nrm -f /tmp/gsd-path-ship-msg.txt",
+  "output": "exit: 0\n{\"archive\": \".project/archive/001-widget-count\", \"base\": \"f6ed65e9921a31d5d5ce38b1cdce1cbe67ed608b\", \"commit\": \"9b389bdfab27e5474d1e9452a83db201efec411f\", \"integrate\": \"f6ed65e9921a31d5d5ce38b1cdce1cbe67ed608b\", \"landing\": \"f6ed65e9921a31d5d5ce38b1cdce1cbe67ed608b\", \"mode\": \"direct\", \"tag\": \"milestone/001-widget-count\"}\nVALIDATE_INTEGRATED_EXIT:0\n---WORKTREES---\nworktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/grok/quick/repo\nHEAD 9b389bdfab27e5474d1e9452a83db201efec411f\nbranch refs/heads/gsd-path/M001\n\n---REFS---\n9b389bdfab27e5474d1e9452a83db201efec411f\n9078cf202e58baf2f0ff6799fab4baf7c771f887\nf6ed65e9921a31d5d5ce38b1cdce1cbe67ed608b\nf6ed65e9921a31d5d5ce38b1cdce1cbe67ed608b\nintegrate: M001 \u2014 merge gsd-path/M001 into main\nArchive: .project/archive/001-widget-count\nShip: 9b389bdfab27e5474d1e9452a83db201efec411f\nDefault: main\nBranch: gsd-path/M001\n\n---STATUS---\nguards.json worktree b36fdd3c6312803d0f8057fcfecefa65e3a18115eb1c413c35409fa375c963d8 gitblob 561728c8592b09761f30cc2f86d656c2d533cc2f\ntrust-run-manifest.json worktree 4ac81ea44d0c13abcfc30789e5f4773787345edfcad793c6ca91124692e24224 gitblob f8808ba68b8d179d0de9a45018424c5597be3c8d\n",
+  "fixture_bundle": "grok/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-count/trust-run-manifest.json",
+  "ship_commit": "9b389bdfab27e5474d1e9452a83db201efec411f",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "27e7194d5fb33021f374b3a93f4a948a472fcdb1",
+  "integration_commit": "f6ed65e9921a31d5d5ce38b1cdce1cbe67ed608b",
+  "milestone_tag": "milestone/001-widget-count"
+}

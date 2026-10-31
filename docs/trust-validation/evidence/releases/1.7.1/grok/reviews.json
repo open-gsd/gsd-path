@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a19238-e69b-7fd3-87d1-09c3e0479b62",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/e05c5aad5982108a3f3615d16754ab136883c6c461f7fb1eb3c1d869b9d5df31/check_handoffs.py final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d/grok/quick/repo; echo \"EXIT:$?\"",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nWave verdict: pass\nCycle: 1\nDepth: full\nTasks reviewed: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 29b77639219695faed90cba90429ed4d2b125fb1\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 710f7756776cefa1bbc66e1c1b26957f9bd978a4",
+  "wave_review_artifact": ".project/archive/001-widget-count/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-widget-count/review/FINAL.md"
+}
