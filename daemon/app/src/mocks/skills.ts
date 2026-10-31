@@ -153,14 +153,27 @@ function watched(root: string | undefined): ProjectSetup {
   return project;
 }
 
-function projectOp(body: { root?: string; op?: string; dry_run?: boolean; member?: string }) {
+const added: Record<string, Member[]> = {}; // members added in this session to a project that had none
+
+function projectOp(body: { root?: string; op?: string; dry_run?: boolean; member?: string; name?: string; checkout?: string;
+  integration?: string; create?: string; visibility?: string }) {
   const project = watched(body.root), op = body.op ?? "", coordinator = project.root === "/work/gsd-path";
   if (busy) throw new Error("operation in progress");
   if (op === "members") {
     if (project.root === "/work/notes") {
       return { ok: false, members: [], error: "error: member field-notes-web: marker is missing or stale; run members.py repair --repo /work/notes" };
     }
-    return { ok: true, members: coordinator ? members : [], error: null };
+    return { ok: true, members: coordinator ? members : added[project.root] ?? [], error: null };
+  }
+  if (op === "member-add") {
+    if (body.dry_run) throw new Error("adding a member has no preview; members.py add checks every rule before it writes");
+    const list = coordinator ? members : (added[project.root] ??= []);
+    return slow(() => {
+      if (list.some((entry) => entry.name === body.name)) return { ok: false, stdout_tail: "", error: `error: member already recorded: ${body.name}` };
+      list.push({ name: body.name!, checkout: body.checkout!, remote: `git@github.com:${body.create ?? "acme/" + body.name}.git`,
+        integration: body.integration ?? "default", marker: { current: true, reason: null }, hooks: false });
+      return { ok: true, stdout_tail: JSON.stringify({ members: list.map(({ name, checkout }) => ({ name, checkout })) }), error: null };
+    });
   }
   if (op === "doctor") {
     return slow(() => project.hooks
@@ -177,7 +190,7 @@ function projectOp(body: { root?: string; op?: string; dry_run?: boolean; member
   }
   const what = { "hooks-init": "add the guard hooks", "hooks-refresh": "refresh the guard hooks", "hooks-refresh-full": "refresh the guard hooks",
     "runtime-restore": "restore the runtime", "member-hooks": "install the member hooks" }[op];
-  if (!what) throw new Error("op must be one of: hooks-init, hooks-refresh, hooks-refresh-full, runtime-restore, doctor, members, member-hooks, member-repair");
+  if (!what) throw new Error("op must be one of: hooks-init, hooks-refresh, hooks-refresh-full, runtime-restore, doctor, members, member-add, member-hooks, member-repair");
   const item = members.find((entry) => entry.checkout === body.member);
   if (op === "member-hooks" && (!coordinator || !item)) throw new Error("member is not a recorded member of this project");
   const where = item?.checkout ?? project.root;

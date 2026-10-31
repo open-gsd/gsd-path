@@ -362,5 +362,50 @@ class BoardMemberTests(Case):
         fetch.assert_not_called()
 
 
+class MemberAddTests(Case):
+    """Add member: the app sends the form, members.py add owns every rule."""
+
+    def test_add_runs_members_add_with_each_field(self):
+        self.answers[("members.py", "add")] = (0, json.dumps(self.members), "")
+        result = self.run_op(op="member-add", name=" api ", checkout=self.member, integration="pull-request")
+        self.assertEqual(result, {"ok": True, "stdout_tail": json.dumps(self.members), "error": None})
+        self.assertEqual(self.helper_args(), [["add", "--repo", self.root, "--name=api", f"--checkout={self.member}",
+                                               "--integration=pull-request"]])
+
+    def test_a_new_github_repository_passes_create_and_visibility(self):
+        self.run_op(op="member-add", name="web", checkout="~/work/web", create="acme/web", visibility="private")
+        self.assertEqual(self.helper_args(), [["add", "--repo", self.root, "--name=web",
+                                               f"--checkout={os.path.expanduser('~/work/web')}", "--integration=default",
+                                               "--create=acme/web", "--visibility=private"]])
+
+    def test_a_value_that_looks_like_an_option_stays_a_value(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+        import members
+        self.run_op(op="member-add", name="--create=evil/repo", checkout="--visibility=public")
+        parsed = members.parser().parse_args(self.helper_args()[0])
+        self.assertEqual((parsed.name, str(parsed.checkout)), ("--create=evil/repo", "--visibility=public"))
+        self.assertIsNone(parsed.create)
+        self.assertIsNone(parsed.visibility)
+
+    def test_a_missing_or_non_text_field_runs_nothing(self):
+        for body, text in (({"checkout": self.member}, "name is required"), ({"name": "api"}, "checkout is required"),
+                           ({"name": "  ", "checkout": self.member}, "name is required"),
+                           ({"name": "api", "checkout": self.member, "create": ["acme/web"]}, "create must be text")):
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, text):
+                self.run_op(op="member-add", **body)
+        self.assertEqual(self.calls, [])
+
+    def test_add_has_no_preview(self):
+        with self.assertRaisesRegex(ValueError, "no preview"):
+            self.run_op(op="member-add", name="api", checkout=self.member, dry_run=True)
+        self.assertEqual(self.calls, [])
+
+    def test_a_refused_add_returns_the_helper_text(self):
+        self.answers[("members.py", "add")] = (1, "", "error: members change only at a milestone boundary, not during build or ship\n")
+        result = self.run_op(op="member-add", name="api", checkout=self.member)
+        self.assertFalse(result["ok"])
+        self.assertIn("milestone boundary", result["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

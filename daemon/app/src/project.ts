@@ -240,3 +240,22 @@ export function repoRows(p: Project): RepoRow[] {
     }),
   ];
 }
+
+/** The "Add member" form. `repo` and `visibility` count only for a new GitHub repository. */
+export type MemberForm = { name: string; checkout: string; integration: string; create: boolean; repo: string; visibility: string };
+export const MEMBER_INTEGRATIONS = ["default", "direct", "pull-request"];
+export const MEMBER_VISIBILITIES = ["private", "internal", "public"];
+export const emptyMemberForm = (): MemberForm =>
+  ({ name: "", checkout: "", integration: "default", create: false, repo: "", visibility: "private" });
+
+/** The member-add request and its confirm text, or the first field to fix. members.py checks the rest. */
+export function memberAdd(form: MemberForm): { body: Record<string, string>; confirm: string } | { error: string } {
+  const name = form.name.trim(), checkout = form.checkout.trim(), repo = form.repo.trim();
+  if (!name) return { error: t("setupCard.memberNeedsName") };
+  if (!checkout) return { error: t("setupCard.memberNeedsCheckout") };
+  if (form.create && !/^[^/\s]+\/[^/\s]+$/.test(repo)) return { error: t("setupCard.memberNeedsRepo") };
+  const body: Record<string, string> = { name, checkout, integration: form.integration };
+  if (!form.create) return { body, confirm: t("setupCard.addExistingText", { name, checkout }) };
+  return { body: { ...body, create: repo, visibility: form.visibility },
+    confirm: t("setupCard.addCreateText", { name, checkout, repo, visibility: form.visibility }) };
+}
