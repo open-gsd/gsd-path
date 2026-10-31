@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { asking, blocked, building, shipped, status } from "./fixtures";
-import { doctorReport, facts, memberRows, milestoneRows, nowBox, phaseTrack, setupRows, usageTiles } from "./project";
+import { doctorReport, facts, memberRows, milestoneRows, nowBox, phaseTrack, repoRows, setupRows, usageTiles } from "./project";
+import { DASH } from "./status";
 import type { ProjectSetup } from "./skills";
 
 const NOW = Date.parse(status.generated_at!);
@@ -183,5 +184,32 @@ describe("memberRows", () => {
   });
   it("offers both actions when the marker is stale and the hooks are missing", () => {
     expect(memberRows([member("api", false, false)], [])[0].actions).toEqual(["repair", "hooks"]);
+  });
+});
+
+describe("repositories in this milestone", () => {
+  const task = (id: string, status: string, repo?: string) => ({ id, title: id, wave: 1, status, files: [], repo });
+  const lock = [{ name: "api", branch: "gsd-path/demo-M004", base: "a".repeat(40) }, { name: "web", branch: "gsd-path/demo-M004", base: "c".repeat(40) }];
+
+  it("is empty for a single-repo milestone", () => {
+    expect(repoRows({ ...building, tasks: [task("T1", "done"), task("T2", "pending")] })).toEqual([]);
+  });
+  it("counts tasks per repository and shows the locked branch and base", () => {
+    const p = { ...building, branch: "gsd-path/M004", member_lock: lock,
+      tasks: [task("T1", "done"), task("T2", "done", "api"), task("T3", "pending", "api"), task("T4", "pending", "docs")] };
+    expect(repoRows(p)).toEqual([
+      { name: "This project", tasks: "1/1", branch: "gsd-path/M004", base: DASH, close: null },
+      { name: "api", tasks: "1/2", branch: "gsd-path/demo-M004", base: "aaaaaaa", close: null },
+      { name: "web", tasks: DASH, branch: "gsd-path/demo-M004", base: "ccccccc", close: null },
+      // Named by a task before build locks it.
+      { name: "docs", tasks: "0/1", branch: DASH, base: DASH, close: null },
+    ]);
+  });
+  it("shows each member's close state during ship", () => {
+    const p = { ...building, member_lock: lock, tasks: [], member_close: [
+      { name: "api", status: "integrated", merge: "b".repeat(40), tag: "milestone/demo-004-x" }, { name: "web", status: "pending", merge: null, tag: null }] };
+    const [, api, web] = repoRows(p);
+    expect(api.close).toEqual({ label: "Integrated", tone: "ok", detail: "bbbbbbb · milestone/demo-004-x" });
+    expect(web.close).toEqual({ label: "Closing", tone: "acc", detail: null });
   });
 });

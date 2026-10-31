@@ -14,6 +14,8 @@ class TaskSummary:
     wave: Optional[int] = None
     status: Optional[str] = None
     files: List[str] = field(default_factory=list)
+    # The member repository a multi-repo task changes; None means the coordinator.
+    repo: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -22,6 +24,7 @@ class TaskSummary:
             "wave": self.wave,
             "status": self.status,
             "files": list(self.files),
+            "repo": self.repo,
         }
 
     @classmethod
@@ -32,6 +35,7 @@ class TaskSummary:
             wave=data.get("wave"),
             status=data.get("status"),
             files=list(data.get("files") or []),
+            repo=data.get("repo"),
         )
 
 
@@ -82,6 +86,10 @@ class ProjectStatus:
     phases: Optional[List[str]] = None
     # gsd-pi and gsd-core records, state file first ([{path, label}]); None for GSD Path.
     record_files: Optional[List[dict]] = None
+    # Multi-repo: the member lock of this milestone ([{name, branch, base}]; None when no
+    # member is locked) and its member-close rows ([{name, status, merge, tag, ...}]).
+    member_lock: Optional[List[dict]] = None
+    member_close: List[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -128,6 +136,8 @@ class ProjectStatus:
             "attention": list(self.attention),
             "phases": list(self.phases) if self.phases is not None else None,
             "record_files": list(self.record_files) if self.record_files is not None else None,
+            "member_lock": list(self.member_lock) if self.member_lock is not None else None,
+            "member_close": list(self.member_close),
         }
 
     @classmethod
@@ -177,6 +187,8 @@ class ProjectStatus:
             attention=list(data.get("attention") or []),
             phases=list(data["phases"]) if data.get("phases") is not None else None,
             record_files=list(data["record_files"]) if data.get("record_files") is not None else None,
+            member_lock=list(data["member_lock"]) if data.get("member_lock") is not None else None,
+            member_close=list(data.get("member_close") or []),
         )
 
 

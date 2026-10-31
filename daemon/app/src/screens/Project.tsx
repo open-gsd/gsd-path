@@ -2,7 +2,7 @@
 import { Fragment, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { t } from "../i18n";
-import { facts, milestoneRows, nowBox, phaseTrack, usageTiles } from "../project";
+import { facts, milestoneRows, nowBox, phaseTrack, repoRows, usageTiles } from "../project";
 import { filesHash, statsHash } from "../route";
 import { api } from "../shell";
 import { DASH, duration, flavorOf, healthTone, idOf, stateFileOf, int, money, nameOf, shortDate, shortTime, tokens } from "../status";
@@ -59,6 +59,7 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
   const Setup = flavorOf(p) ? NoSetup : SetupCard;
   const box = nowBox(p), tiles = usageTiles(p), sp = p.spend;
   const tasks = p.tasks ?? [], criteria = p.criteria ?? [], reviews = p.reviews ?? [], ledger = p.ledger ?? [];
+  const repos = repoRows(p);
   const answers = p.answers ?? [], attention = p.attention ?? [];
   const events = activity.filter((event) => (event.id ?? event.root) === idOf(p)).slice(0, 30);
   const section = (title: string, count: string | number, rows: unknown[], table: ReactNode) =>
@@ -131,6 +132,11 @@ export function ProjectPage({ project: p, now, stamp, skills }: { project: Proje
           {section(t("projectPage.successCriteria"), t("projectPage.criteriaMetCount", { met: criteria.filter((c) => c.verdict === "met").length, total: criteria.length }), criteria,
             <Table head={[t("projectPage.id"), t("projectPage.criterion"), t("projectPage.verdict")]}
               rows={criteria.map((c) => [<span className="mono id">{c.id || DASH}</span>, c.text, <Verdict value={c.verdict} />])} />)}
+          {section(t("repos.title"), repos.length, repos,
+            <Table head={[t("repos.repository"), t("board.col.tasks"), t("repos.branch"), t("repos.base"), t("repos.close")]} rows={repos.map((repo) => [
+              repo.name, <span className="whole">{repo.tasks}</span>, <span className="mono">{repo.branch}</span>, <span className="mono whole">{repo.base}</span>,
+              repo.close ? <span className="whole"><span className={`pill ${repo.close.tone}`}>{repo.close.label}</span>{repo.close.detail && <div className="meta mono">{repo.close.detail}</div>}</span> : DASH,
+            ])} />)}
           {section(t("projectPage.tasksAndFiles"), t("projectPage.tasksCount", { done: p.tasks_done ?? 0, total: p.tasks_total || tasks.length }), tasks,
             <Table head={[t("projectPage.id"), t("projectPage.task"), t("projectPage.waveCol"), t("board.col.status"), t("projectPage.files")]} rows={tasks.map((task) => [
               <span className="mono id">{task.id}</span>, task.title,

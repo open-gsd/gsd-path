@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -389,6 +390,63 @@ class ParseTaskTests(unittest.TestCase):
 
     def test_parse_roadmap_missing(self) -> None:
         self.assertEqual(probe.parse_roadmap(self.root / "nope.md"), [])
+
+
+class MemberProgressTests(unittest.TestCase):
+    """A coordinator's milestone across repositories: task repos, the member lock, and member close."""
+
+    LOCK = {"schema": "gsd-path/member-lock/v1",
+            "members": [{"name": "api", "branch": "gsd-path/demo-M001", "base": "a" * 40}]}
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / "demo"
+        make_project(self.root)
+        self.project_dir = self.root / ".project"
+
+    def write_json(self, path: Path, data) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+    def test_a_task_names_its_repository_and_a_task_without_one_has_none(self) -> None:
+        path = make_task(self.project_dir, "T009", "api-task", wave=1, status="pending")
+        path.write_text(path.read_text(encoding="utf-8").replace("wave: 1\n", "wave: 1\nrepo: api\n"), encoding="utf-8")
+        tasks = {task.id: task for task in probe.probe_project(self.root, enrich=False).tasks}
+        self.assertEqual((tasks["T009"].repo, tasks["T001"].repo), ("api", None))
+        self.assertEqual(tasks["T009"].to_dict()["repo"], "api")
+
+    def test_build_reads_the_member_lock_and_no_close_rows(self) -> None:
+        self.write_json(self.project_dir / "build" / "members.json", self.LOCK)
+        status = probe.probe_project(self.root, enrich=False)
+        self.assertEqual(status.member_lock, self.LOCK["members"])
+        self.assertEqual(status.member_close, [])
+        self.assertEqual(ProjectStatus.from_dict(status.to_dict()).member_lock, self.LOCK["members"])
+
+    def test_a_missing_or_foreign_lock_is_none(self) -> None:
+        self.assertIsNone(probe.probe_project(self.root, enrich=False).member_lock)
+        for text in ("{not json", json.dumps({"schema": "other/v1", "members": []}), json.dumps({"schema": "gsd-path/member-lock/v1"})):
+            with self.subTest(text=text):
+                lock = self.project_dir / "build" / "members.json"
+                lock.parent.mkdir(parents=True, exist_ok=True)
+                lock.write_text(text, encoding="utf-8")
+                self.assertIsNone(probe.probe_project(self.root, enrich=False).member_lock)
+
+    def test_ship_reads_the_archived_lock_and_the_member_close_journal(self) -> None:
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        archive = ".project/archive/001-demo-ms"
+        state = (self.project_dir / "STATE.md").read_text(encoding="utf-8")
+        (self.project_dir / "STATE.md").write_text(
+            state.replace("phase: build          # v2 tokens", "phase: ship").replace("archive: null", f"archive: {archive}"),
+            encoding="utf-8")
+        self.write_json(self.root / archive / "build" / "members.json", self.LOCK)
+        rows = [{"name": "api", "status": "integrated", "merge": "b" * 40, "tag": "milestone/demo-001-demo-ms"}]
+        self.write_json(self.root / ".git" / "gsd-path" / "member-close" / "001-demo-ms.json",
+                        {"schema": "gsd-path/member-close/v1", "members": rows})
+        status = probe.probe_project(self.root, enrich=False)
+        self.assertEqual((status.phase, status.archive), ("ship", archive))
+        self.assertEqual(status.member_lock, self.LOCK["members"])
+        self.assertEqual(status.member_close, rows)
 
 
 class ProbeProjectTests(unittest.TestCase):

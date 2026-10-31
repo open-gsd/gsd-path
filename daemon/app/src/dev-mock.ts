@@ -7,6 +7,7 @@ import { mockSkills } from "./mocks/skills";
 import { mockStats } from "./mocks/stats";
 import { building, status } from "./fixtures";
 import type { Launch, Shell } from "./shell";
+import type { Project } from "./status";
 
 const launch = (over: Partial<Launch> = {}): Launch => ({
   action: "start", port: 8765, version: "0.2.0", autostart_ok: true, problems: [], legacy: [], replaced: null,
@@ -49,14 +50,22 @@ const state = STATES[query.get("state") ?? "ready"] ?? STATES.ready;
 if (query.has("done")) localStorage.setItem("gsd-path.setup-done", "1");
 else localStorage.removeItem("gsd-path.setup-done");
 
+// ?multirepo makes /work/gsd-path a coordinator in ship: tasks in two member repos, the lock, and close rows.
+const multirepo = (p: Project): Project => p.root !== "/work/gsd-path" ? p : {
+  ...p, tasks: (p.tasks ?? []).map((task) => task.id === "T001" ? task : { ...task, repo: task.id === "T002" ? "gsd-path-daemon" : "gsd-path-app" }),
+  member_lock: [{ name: "gsd-path-daemon", branch: "gsd-path/gsd-path-M004", base: "4f2c9d1e8a" }, { name: "gsd-path-app", branch: "gsd-path/gsd-path-M004", base: "77ab03c5e1" }],
+  member_close: [{ name: "gsd-path-daemon", status: "integrated", merge: "9be1c2d3f4", tag: "milestone/gsd-path-004-daemon" },
+    { name: "gsd-path-app", status: "pending", merge: null, tag: null }] };
+const base = query.has("multirepo") ? { ...status, projects: status.projects.map(multirepo) } : status;
+
 // The daemon's read endpoints, by path (without the query).
 const API: Record<string, unknown> = {
   // ?flavors adds a gsd-core card in the GSD Path folder: one card per framework.
-  "/status": query.has("flavors") ? { ...status, projects: [...status.projects, {
+  "/status": query.has("flavors") ? { ...base, projects: [...base.projects, {
     ...building, id: "/work/gsd-path::gsd-core", flavor: "gsd-core", health: "amber",
     phases: ["discuss", "research", "plan", "execute", "verify"], phase: "execute",
     workflow: { state: "active", label: "In execute" },
-    attention: [{ kind: "question", label: "Phase 02 needs a human check", ref: "02-VERIFICATION.md" }] }] } : status,
+    attention: [{ kind: "question", label: "Phase 02 needs a human check", ref: "02-VERIFICATION.md" }] }] } : base,
   "/api/refresh": { ok: true },
   "/activity": { events: [
     { root: "/work/gsd-path", at: "2026-09-29T03:58:00+00:00", type: "phase-changed", detail: "plan → build" },
