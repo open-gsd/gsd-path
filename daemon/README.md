@@ -212,7 +212,11 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   supported coding agent and whether its command is on this computer.
 - `POST /api/project/op` — `{root, op, dry_run?, member?, hosts?}` for a watched
   project. `op` is `hooks-init`, `hooks-refresh`, `hooks-refresh-full`,
-  `runtime-restore`, `doctor`, `members`, `member-hooks`, or `member-repair`.
+  `runtime-restore`, `doctor`, `members`, `member-add`, `member-hooks`, or
+  `member-repair`. `member-add` takes `name`, `checkout`, `integration?`, and
+  for a new GitHub repository `create` (`owner/name`) and `visibility`; it runs
+  `members.py add` with each value in one `--flag=value` argument and has no
+  preview.
   Each runs one helper from the plugin source (`install.py` or `members.py`)
   and returns its output. The daemon adds two rules of its own. `hooks-init`
   passes `hosts` (host ids) to the installer; with no `hosts`, it uses the

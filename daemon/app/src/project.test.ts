@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { asking, blocked, building, shipped, status } from "./fixtures";
-import { doctorReport, facts, memberRows, milestoneRows, nowBox, phaseTrack, setupRows, usageTiles } from "./project";
+import { doctorReport, emptyMemberForm, facts, memberAdd, memberRows, milestoneRows, nowBox, phaseTrack, setupRows, usageTiles } from "./project";
+import type { MemberForm } from "./project";
 import type { ProjectSetup } from "./skills";
 
 const NOW = Date.parse(status.generated_at!);
@@ -183,5 +184,34 @@ describe("memberRows", () => {
   });
   it("offers both actions when the marker is stale and the hooks are missing", () => {
     expect(memberRows([member("api", false, false)], [])[0].actions).toEqual(["repair", "hooks"]);
+  });
+});
+
+describe("add member form", () => {
+  const form = (over: Partial<MemberForm> = {}): MemberForm => ({ ...emptyMemberForm(), name: " api ", checkout: " /work/api ", ...over });
+
+  it("sends the trimmed fields for an existing checkout and names both places it writes", () => {
+    const result = memberAdd(form({ integration: "pull-request", repo: "ignored/repo" }));
+    expect(result).toEqual({
+      body: { name: "api", checkout: "/work/api", integration: "pull-request" },
+      confirm: "Add api at /work/api as a member. This writes .project/MEMBERS.md in this project and a member marker in the Git folder of api. Members change only between milestones.",
+    });
+  });
+  it("adds the repository and visibility for a new GitHub repository and says it cannot be undone", () => {
+    const result = memberAdd(form({ create: true, repo: " acme/api ", visibility: "public" }));
+    expect(result).toEqual({
+      body: { name: "api", checkout: "/work/api", integration: "default", create: "acme/api", visibility: "public" },
+      confirm: "Create the public GitHub repository acme/api, clone it to /work/api, and add it as member api. The app cannot delete the GitHub repository later.",
+    });
+  });
+  it("names the first field to fix and sends nothing", () => {
+    expect(memberAdd(form({ name: "  " }))).toEqual({ error: "Enter a member name." });
+    expect(memberAdd(form({ checkout: "" }))).toEqual({ error: "Enter the checkout folder." });
+    for (const repo of ["", "acme", "acme/api/extra", "acme /api"]) {
+      expect(memberAdd(form({ create: true, repo }))).toEqual({ error: "Enter the new repository as owner/name." });
+    }
+  });
+  it("starts private, so a new repository is never public by default", () => {
+    expect(emptyMemberForm()).toMatchObject({ integration: "default", create: false, visibility: "private" });
   });
 });
