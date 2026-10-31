@@ -5372,14 +5372,14 @@ def _committed_ship_active(repo: Path) -> bool:
     return fields.get("phase") == "ship" and fields.get("status") == "active"
 
 
-# The STATE Log tail that sanctions a build checkpoint past a HEAD that is
+# The STATE Log events that sanction a build checkpoint past a HEAD that is
 # still ship/active: the blocked final review went through the patch plan
-# (reopened, then approved) and build started again (#526).
-_PATCH_REENTRY_LOG = (
-    ("plan", "patch plan reopened"),
-    ("plan", "patch plan approved"),
-    ("build", "build started"),
-)
+# (reopened, then approved) and build started again (#526). The plan stay may
+# hold other plan events between reopen and approval, such as a blocked patch
+# planner and its `planning resumed` (#531).
+_PATCH_REENTRY_OPEN = ("plan", "patch plan reopened")
+_PATCH_REENTRY_APPROVED = ("plan", "patch plan approved")
+_PATCH_REENTRY_STARTED = ("build", "build started")
 
 
 def _patch_reentry_build_active(repo: Path) -> bool:
@@ -5410,10 +5410,20 @@ def _patch_reentry_build_active(repo: Path) -> bool:
         match = re.fullmatch(r"- \d{4}-\d{2}-\d{2} — (\S+) — (.+)", line)
         if match:
             events.append((match.group(1), match.group(2)))
-    # The sanctioned sequence appears in order, as the Log tail of this
-    # milestone's patch loop; the final event must be the build restart.
-    last = len(_PATCH_REENTRY_LOG)
-    return len(events) >= last and tuple(events[-last:]) == _PATCH_REENTRY_LOG
+    # The final event must be the build restart and the one before it the
+    # patch approval. Every event is logged under the phase it leaves the
+    # track in, so the run of `plan` events ending at that approval is the
+    # current stay in plan; its first event is the transition into plan and
+    # must be the patch reopen. `planning resumed` after a blocked patch
+    # planner stays inside that run, as in check_handoffs (#531).
+    if len(events) < 3 or events[-1] != _PATCH_REENTRY_STARTED:
+        return False
+    if events[-2] != _PATCH_REENTRY_APPROVED:
+        return False
+    start = len(events) - 2
+    while start > 0 and events[start - 1][0] == "plan":
+        start -= 1
+    return events[start] == _PATCH_REENTRY_OPEN
 
 
 def checkpoint(
