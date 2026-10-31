@@ -31,9 +31,9 @@ is the source of truth for live milestone proof and each host's guard tier.
 **Recent highlights**
 - scope reviews to agreed acceptance criteria
 - accept a resumed patch planner's re-entry checkpoint
-- Align FULL and WORKFLOW deep-review rule with INTENT request
-- Document resumed-planner patch re-entry Log rule
-- update release notes for v1.7.0
+- Point current-release docs at 1.7.1 evidence
+- complete 1.7.1 release trust evidence
+- record Cursor proof and pending 1.7.1 release checks
 
 <!-- /release-docs -->
 
