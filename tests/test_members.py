@@ -11,6 +11,7 @@ from typing import Optional
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import _common
 import archive_milestone
 import check_handoffs
 import lean_verification
@@ -709,7 +710,7 @@ class MemberTests(unittest.TestCase):
 
     def test_remove_works_when_the_member_checkout_is_gone(self) -> None:
         web = self.joined("web")
-        shutil.rmtree(web)
+        _common.rmtree_force(web)
         removed = self.run_members("remove", "--name", "web")
         self.assertEqual(removed.returncode, 0, removed.stderr)
         self.assertEqual(json.loads(removed.stdout), {"members": [], "cleaned": []})
