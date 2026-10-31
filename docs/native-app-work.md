@@ -155,6 +155,5 @@ can run in parallel. A6 comes last. Until A4b lands, setup has four steps.
 
 ## Out of scope
 
-- Joining a member from the app (the router owns joining).
 - Advancing any pipeline phase from the app.
 - A mobile or web-hosted dashboard.
