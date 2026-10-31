@@ -155,6 +155,35 @@ class WatcherTests(unittest.TestCase):
         watcher.poll_once()
         self.assertEqual(calls, [str(self.project), str(self.project)])
 
+    def test_reprobes_when_ship_writes_the_member_close_journal(self) -> None:
+        # The journal lives in the Git common dir and ship never touches .project for it.
+        import json
+        import subprocess
+        make_project(self.project)
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        archive = ".project/archive/001-demo-ms"
+        (self.project / ".project" / "STATE.md").write_bytes(
+            STATE.format(phase="ship", status="active").replace("archive: null", f"archive: {archive}").encode("utf-8"))
+        lock = self.project / archive / "build" / "members.json"
+        lock.parent.mkdir(parents=True)
+        lock.write_text(json.dumps({"schema": "gsd-path/member-lock/v1",
+                                    "members": [{"name": "web", "branch": "b", "base": "c" * 40}]}), encoding="utf-8")
+        journal = self.project / ".git" / "gsd-path" / "member-close" / "001-demo-ms.json"
+        journal.parent.mkdir(parents=True)
+
+        def write_close(state: str) -> None:
+            journal.write_text(json.dumps({"schema": "gsd-path/member-close/v1",
+                                           "members": [{"name": "web", "status": state}]}), encoding="utf-8")
+
+        write_close("pending")
+        watcher = self.watcher()
+        watcher.poll_once(scan_sessions=False)
+        self.assertEqual(watcher.projects[str(self.project)].member_close[0]["status"], "pending")
+        touch(self.project)
+        write_close("integrated")
+        watcher.poll_once(scan_sessions=False)
+        self.assertEqual(watcher.projects[str(self.project)].member_close[0]["status"], "integrated")
+
     def test_reprobes_after_project_install(self) -> None:
         make_project(self.project)
         watcher = self.watcher()

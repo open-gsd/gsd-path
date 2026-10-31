@@ -90,6 +90,8 @@ class ProjectStatus:
     # member is locked) and its member-close rows ([{name, status, merge, tag, ...}]).
     member_lock: Optional[List[dict]] = None
     member_close: List[dict] = field(default_factory=list)
+    # The member-close journal path; not served, the watcher keys on its mtime.
+    member_close_journal: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
