@@ -5491,13 +5491,20 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
         self.git(repo, "push", "-q", "origin", "--delete", "gsd-path/M001")
         return landing
 
-    def integrate_rebase_merge(self, *, moved: bool, forge: bool = False) -> None:
+    def integrate_rebase_merge(self, *, moved: bool, forge: bool = False, closeout: bool = False) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             repo = root / "primary"
             repo.mkdir()
             self.make_publishable_bound_repo(repo, root / "origin.git")
             self.enable_pull_request_integration(repo)
+            if closeout:
+                pin = repo / ".gsd-path/runtime.json"
+                pin.parent.mkdir()
+                pin.write_text(json.dumps({"schema": "gsd-path/runtime/v1", "digest": "a" * 64}))
+                self.git(repo, "add", ".gsd-path/runtime.json")
+                self.git(repo, "commit", "-q", "-m", "chore: select runtime")
+                self.restamp_final_review(repo)
             archive_name, ship_sha = self.ship_canonical_bound(repo)
             self.git(repo, "push", "-q", "origin", "gsd-path/M001")
             landing = self.rebase_merge(repo, ship_sha, moved=moved, forge=forge)
@@ -5529,7 +5536,61 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             repository, command = github()
             with repository, command:
                 validated = integration.validate_integrated(repo, "demo")
+                if closeout:
+                    state_bytes = (repo / ".project/STATE.md").read_bytes()
+                    maintenance = root / "maintenance"
+                    self.git(repo, "worktree", "add", "-b", "maintenance", str(maintenance), landing)
+                    target_pin = json.dumps({"schema": "gsd-path/runtime/v1", "digest": "b" * 64})
+                    (maintenance / ".gsd-path/runtime.json").write_text(target_pin)
+                    self.git(maintenance, "add", ".gsd-path/runtime.json")
+                    self.git(maintenance, "commit", "-q", "-m", "chore: upgrade runtime pin")
+                    base = self.git(maintenance, "rev-parse", "HEAD").stdout.strip()
+                    self.git(maintenance, "push", "-q", "origin", "HEAD:refs/heads/main")
+                    pin.write_text(json.dumps({"schema": "gsd-path/runtime/v1", "digest": "c" * 64}))
+                    (repo / "unrelated.txt").write_text("keep")
+                    with self.assertRaisesRegex(pipeline_git.PipelineGitError, "outside the runtime pin"):
+                        pipeline_git.closeout_main(repo, ship_sha, base)
+                    (repo / "unrelated.txt").unlink()
+                    self.git(repo, "add", ".gsd-path/runtime.json")
+                    with self.assertRaisesRegex(pipeline_git.PipelineGitError, "staged changes"):
+                        pipeline_git.closeout_main(repo, ship_sha, base)
+                    self.git(repo, "restore", "--staged", ".gsd-path/runtime.json")
+                    main_worktree = root / "main-worktree"
+                    self.git(repo, "worktree", "add", str(main_worktree), "main")
+                    with self.assertRaisesRegex(pipeline_git.PipelineGitError, "another worktree"):
+                        pipeline_git.closeout_main(repo, ship_sha, base)
+                    self.git(repo, "worktree", "remove", str(main_worktree))
+                    refs_before = self.git(repo, "show-ref").stdout
+                    preview = pipeline_git.closeout_main(repo, ship_sha, base)
+                    self.assertEqual(self.git(repo, "show-ref").stdout, refs_before)
+                    with self.assertRaisesRegex(pipeline_git.PipelineGitError, "changed since preview"):
+                        pipeline_git.closeout_main(repo, ship_sha, base, apply=True, runtime_pin_sha="0" * 64)
+                    published_before = self.git(repo, "ls-remote", "origin").stdout
+                    original_run_git = pipeline_git._run_git
+
+                    def interrupted(project, *args, **kwargs):
+                        if args == ("switch", "main"):
+                            raise pipeline_git.PipelineGitError("interrupted before switch")
+                        return original_run_git(project, *args, **kwargs)
+
+                    with mock.patch.object(pipeline_git, "_run_git", side_effect=interrupted):
+                        with self.assertRaisesRegex(pipeline_git.PipelineGitError, "interrupted before switch"):
+                            pipeline_git.closeout_main(repo, ship_sha, base, apply=True,
+                                runtime_pin_sha=preview["runtime_pin_sha"])
+                    for _ in range(2):
+                        done = pipeline_git.closeout_main(repo, ship_sha, base, apply=True,
+                            runtime_pin_sha=preview["runtime_pin_sha"])
+                        self.assertEqual(done["status"], "complete")
+                    self.assertEqual(self.git(repo, "branch", "--show-current").stdout.strip(), "main")
+                    self.assertEqual(self.git(repo, "status", "--porcelain").stdout, "")
+                    self.assertEqual(pin.read_text(), target_pin)
+                    self.assertEqual(self.git(repo, "rev-parse", "gsd-path/M001").stdout.strip(), ship_sha)
+                    self.assertEqual(self.git(repo, "ls-remote", "origin").stdout, published_before)
+                    self.assertEqual((repo / ".project/STATE.md").read_bytes(), state_bytes)
             self.assertEqual(validated["landing"], landing)
+
+    def test_closeout_main_after_rebase_preserves_milestone_and_publication(self) -> None:
+        self.integrate_rebase_merge(moved=True, closeout=True)
 
     def test_pull_request_integration_accepts_rebase_merge(self) -> None:
         self.integrate_rebase_merge(moved=False)
