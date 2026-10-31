@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "32bf63cc-5aac-4b4c-821f-108ceac3b020",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/antigravity/quick/repo/.agents/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/antigravity/quick/repo --task-id T001",
+  "output": "commit 849b9e80fe4d6b31aa49d2f17c507bc3e8b97ad6\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Oct 30 18:53:07 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Oct 30 18:53:07 2026 -0500\n\n    T001: Extend count.py CLI for --json and int() forms with one-line error handling and add real-CLI stdlib tests\n    \n    Task: .project/tasks/T001-extend-count-cli-and-tests.md\n    Base: e0b29783ac1e8b57cce8f8860928e2b4612057a6\n    Files:\n    - .project/tasks/T001-extend-count-cli-and-tests.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-extend-count-cli-and-tests.md |  24 +++-\n count.py                                          |  42 ++++++-\n test_count.py                                     | 137 ++++++++++++++++++++++\n 3 files changed, 196 insertions(+), 7 deletions(-)",
+  "fixture_bundle": "antigravity/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-counter-cli/trust-run-manifest.json",
+  "fixture_base_commit": "e0b29783ac1e8b57cce8f8860928e2b4612057a6",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/090406bacba5da8ea777b82877dae80a504db062dc178839d3b48bd6e09a6226/d157e8c9e4ba22b9159c46b65e51392b790b5adad8c03716c9d5adc1f38fa28f/verify/task-t001-verify",
+  "landing_commit": "849b9e80fe4d6b31aa49d2f17c507bc3e8b97ad6",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

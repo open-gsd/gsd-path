@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a18f24-8846-7de0-90ea-356a00aec68f",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/grok/quick/repo/.grok/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/grok/quick/repo --task-id T001",
+  "output": "commit c609825a4aff943e271719ed2d23a220e564e1cd\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Oct 30 19:11:43 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Oct 30 19:11:43 2026 -0500\n\n    T001: Teach count.py the human line, JSON, and invalid-input failure\n    \n    Task: .project/tasks/T001-widget-count.md\n    Base: 2b698bc154585f78bb355f5bf05d623aefda869c\n    Files:\n    - .project/tasks/T001-widget-count.md\n    - count.py\n    - tests/test_count.py\n\n .project/tasks/T001-widget-count.md |  15 ++++--\n count.py                            |  29 +++++++++-\n tests/test_count.py                 | 105 ++++++++++++++++++++++++++++++++++++\n 3 files changed, 144 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "grok/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-count/trust-run-manifest.json",
+  "fixture_base_commit": "2b698bc154585f78bb355f5bf05d623aefda869c",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/8e17e8d0589f7a1ae3983fa9ea7ce7512531d62de0c1ab7cb4977d85d94fdbf0/0711803c2d416d2d5d1d85d2f8a965bb9d267168994acac5fc0c0f4f7c44fb37/verify/task-t001-verify",
+  "landing_commit": "c609825a4aff943e271719ed2d23a220e564e1cd",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}

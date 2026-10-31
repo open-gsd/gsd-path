@@ -1,0 +1,57 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "aee52783-96ae-4bc1-942a-ea000886f633",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Agent",
+  "child_api": "Agent",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "run": "run-20261030T233710778245Z",
+    "tool_use": {
+      "id": "toolu_011FRGKaHiwPEpY2Cb9fZ8Vq",
+      "name": "Agent",
+      "input": {
+        "description": "build_T001",
+        "subagent_type": "general-purpose",
+        "run_in_background": true
+      },
+      "prompt_sha256": "aa9d5b3b166212c43d591c47bc7a9944dcb730e5eb097f5ce1ae5119f3a2b218"
+    },
+    "task_id": "aabad97d502b6950d",
+    "task_started": {
+      "type": "system",
+      "subtype": "task_started",
+      "task_id": "aabad97d502b6950d",
+      "run_id": "0mvvm4zju-5fe7c988",
+      "tool_use_id": "toolu_011FRGKaHiwPEpY2Cb9fZ8Vq",
+      "description": "build_T001",
+      "subagent_type": "general-purpose",
+      "is_backgrounded": true,
+      "spawn_depth": 1,
+      "task_type": "local_agent",
+      "uuid": "4345b115-6551-4e2d-a54c-9bf3ece7b53e",
+      "session_id": "aee52783-96ae-4bc1-942a-ea000886f633"
+    },
+    "task_notification": {
+      "tool_use_id": "toolu_011FRGKaHiwPEpY2Cb9fZ8Vq",
+      "task_id": "aabad97d502b6950d",
+      "status": "completed",
+      "summary": "T001 is ready.\n\nVerify passed: `python3 -m unittest -v tests/test_count.py` ran 8 tests, all OK. `python3 -m unittest discover -s tests -v` also passed, 8 tests OK. The tests run the real `count.py` as a subprocess. They cover AC1\u2013AC4 and the held-out E3 and E7 checks.\n\nInvalid input gives empty stdout, exit code 2, and one `count.py: error: ...` stderr line that names the bad argument.\n\nFiles changed:\n- /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/claude/quick/repo/count.py\n- /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/claude/quick/repo/tests/test_count.py (new)\n- /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/claude/quick/repo/.project/tasks/T001-count-json-cli.md (Log entry appended only)\n\nRESULT: T001 ready"
+    },
+    "tool_result": {
+      "tool_use_id": "toolu_011FRGKaHiwPEpY2Cb9fZ8Vq",
+      "is_error": false,
+      "content": [
+        {
+          "type": "text",
+          "text": "Async agent launched successfully. (This tool result is internal metadata \u2014 never quote or paste any part of it, including the agentId below, into a user-facing reply.)\nagentId: aabad97d502b6950d (internal ID - do not mention to user. Use SendMessage with to: 'aabad97d502b6950d', summary: '<5-10 word recap>' to continue this agent.)\nThe agent is working in the background. You will be notified automatically when it completes. You know nothing about its results until that notification arrives \u2014 do not report, assume, or predict them; continue other work or respond to the user in the meantime.\nDo not duplicate this agent's work \u2014 avoid working with the same files or topics it is using.\noutput_file: /private/tmp/claude-501/-Users-jeremymcspadden-orca-evaluations-gsd-path-release-1-7-0-e2dd0857-claude-quick-repo/aee52783-96ae-4bc1-942a-ea000886f633/tasks/aabad97d502b6950d.output\nDo NOT Read or tail this file via the shell tool \u2014 it is the full subagent JSONL transcript and reading it will overflow your context. If the user asks for progress, say the agent is still running; you'll get a completion notification."
+        }
+      ]
+    }
+  }
+}

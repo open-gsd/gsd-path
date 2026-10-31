@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/97c12323d6c9828b5814ee1b3a8ab72240e28dda8c2db46058a7ce9388ab6c7a/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/cursor/quick/repo --slug count-cli",
+  "output": "{\"archive\": \".project/archive/001-count-cli\", \"base\": \"334b42faee3b7a10983ee007e9939911504d607b\", \"commit\": \"6d4f25b1504262d6d1875525306a7b3d01a494bd\", \"integrate\": \"334b42faee3b7a10983ee007e9939911504d607b\", \"landing\": \"334b42faee3b7a10983ee007e9939911504d607b\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-cli\"}\n",
+  "fixture_bundle": "cursor/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli/trust-run-manifest.json",
+  "ship_commit": "6d4f25b1504262d6d1875525306a7b3d01a494bd",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "b4fb2d433ded3eca31a04932a6c94830e753544b",
+  "integration_commit": "334b42faee3b7a10983ee007e9939911504d607b",
+  "milestone_tag": "milestone/001-count-cli"
+}

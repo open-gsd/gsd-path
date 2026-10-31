@@ -1,0 +1,34 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a18f31-d984-77e2-89bc-82a39629ef28",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "collaboration.spawn_agent",
+  "child_api": "collaboration.spawn_agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "spawn_call": {
+      "call_id": "call_2ae6cbf0a5b44bfaa3b8bdcf54ea0b76",
+      "name": "spawn_agent",
+      "namespace": "collaboration",
+      "arguments": {
+        "task_name": "build_t001",
+        "agent_type": "worker",
+        "fork_turns": "none"
+      }
+    },
+    "spawn_output": "{\"task_name\":\"/root/build_t001\"}",
+    "list_agents_states": [
+      {
+        "agent_name": "/root/build_t001",
+        "agent_status": {
+          "completed": "T001 ready. Verify: `python3 -B -m unittest -v test_count.py` passed all 5 tests; `git diff --check` passed.\nChanged: `count.py`, `test_count.py`, `.project/tasks/T001-widget-counter-cli.md` (Log only).\nLog records 16 CLI walkthrough observations. Authoritative isolated Verify remains with the orchestrator.\nRESULT: T001 ready"
+        }
+      }
+    ]
+  }
+}

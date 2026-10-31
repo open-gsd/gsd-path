@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "32bf63cc-5aac-4b4c-821f-108ceac3b020",
+  "result": "pass",
+  "step": "archive",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/97c12323d6c9828b5814ee1b3a8ab72240e28dda8c2db46058a7ce9388ab6c7a/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/antigravity/quick/repo",
+  "output": "Command exited with code 0.\n\nCommand output:\n{\"archive\": \".project/archive/001-widget-counter-cli\", \"commit\": \"de025d8cc2ebb002e694abbc6d3b35e508ca151c\"}\r\n",
+  "archive_path": ".project/archive/001-widget-counter-cli",
+  "validation_exit_code": 0
+}

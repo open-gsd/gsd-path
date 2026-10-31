@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "b5d7bdf6-39c5-4b8c-9a58-7729bce21c42",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/cursor/quick/repo/.cursor/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.0-e2dd0857/cursor/quick/repo --task-id T001",
+  "output": "commit b9158b946c360851856c5771bf7a0177678826c6\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Fri Oct 30 18:45:15 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Fri Oct 30 18:45:15 2026 -0500\n\n    T001: Implement count.py CLI contract and real-CLI tests\n    \n    Task: .project/tasks/T001-count-cli.md\n    Base: d505d1b272f8f03a7af27897aaf4679a5d1860a7\n    Files:\n    - .project/tasks/T001-count-cli.md\n    - count.py\n    - tests/test_count_cli.py\n\n .project/tasks/T001-count-cli.md | 49 ++++++++++++++++++--\n count.py                         | 44 +++++++++++++++++-\n tests/test_count_cli.py          | 97 ++++++++++++++++++++++++++++++++++++++++\n 3 files changed, 185 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "cursor/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli/trust-run-manifest.json",
+  "fixture_base_commit": "d505d1b272f8f03a7af27897aaf4679a5d1860a7",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/7f39e92f93211cca42852a85756ee6a13bcd54129b6d64f23a8936231af7f538/e47ca57f904a952c475ec26496579b7c80987b93ef163b35007f3864488a49e6/verify/task-t001-verify",
+  "landing_commit": "b9158b946c360851856c5771bf7a0177678826c6",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}
