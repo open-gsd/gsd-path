@@ -52,8 +52,9 @@ the plugin and the app, and see project stats.
   POST that needs the token, so no GET returns env content. The env routes
   exist only on a daemon started with `--require-token`; a daemon without
   the flag refuses them with a reason. Multi-repo
-  actions are member hook install and marker repair; joining a member stays
-  in the router.
+  actions are adding a member, member hook install, and marker repair (owner
+  ruling 2026-10-31; this replaces "joining a member stays in the router").
+  `members.py add` owns every joining rule.
 - **Updates.** The app updates through the Tauri updater from `latest.json`
   on the fixed `app-latest` GitHub pre-release. CI replaces that asset after
   each `app-v*` release. Tauri requires signed update artifacts; the key is a

@@ -2,16 +2,15 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { t } from "../i18n";
-import { doctorReport, memberRows, setupRows } from "../project";
-import type { Member, SetupRow } from "../project";
+import { browsedCheckout, doctorReport, emptyMemberForm, MEMBER_INTEGRATIONS, MEMBER_VISIBILITIES, memberAdd, memberRows, setupRows } from "../project";
+import type { Member, MemberForm, SetupRow } from "../project";
 import { envHash, projectHash } from "../route";
-import { api } from "../shell";
+import { api, pickFolder } from "../shell";
 import { targetVersion } from "../skills";
 import type { OpResult, UninstallPlan } from "../skills";
 import { applyUninstall, message, planUninstall, projectOp } from "../skillsApi";
 import type { usePlugin } from "../skillsApi";
 import type { Project } from "../status";
-import { CopyButton } from "../ui";
 import { Output, PlanBox } from "./SkillsParts";
 import "./setup.css";
 import "./skills.css";
@@ -30,10 +29,11 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
   const [ask, setAsk] = useState<Ask | null>(null);
   const [note, setNote] = useState<Note | null>(null);
   const [removal, setRemoval] = useState<UninstallPlan | null>(null);
+  const [adding, setAdding] = useState<MemberForm | null>(null); // the open "Add member" form
 
   const loadMembers = () => projectOp<Members>(p.root, "members").then(setMembers, (failed) => setMembers({ ok: false, error: message(failed) }));
   useEffect(() => {
-    setMembers(null); setDoctor(null); setAsk(null); setNote(null); setRemoval(null);
+    setMembers(null); setDoctor(null); setAsk(null); setNote(null); setRemoval(null); setAdding(null);
     loadMembers();
   }, [p.root]);
 
@@ -81,6 +81,27 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
     setAsk({ at, label: t("setupCard.repair"), output: false, apply: () => projectOp(p.root, "member-repair"),
       text: t("setupCard.repairText") });
   };
+  // members.py add has no dry run, so the confirm text says what it writes (and what it creates on GitHub).
+  const addMember = (form: MemberForm) => {
+    const request = memberAdd(form);
+    if ("error" in request) return setNote({ at: "add", ok: false, text: request.error });
+    setNote(null);
+    setAsk({ at: "add", label: form.create ? t("setupCard.createAndAdd") : t("setupCard.addMember"), output: false, text: request.confirm, apply: async () => {
+      const result = await projectOp(p.root, "member-add", request.body);
+      if (result.ok) setAdding(null);
+      return result;
+    } });
+  };
+  const edit = (change: Partial<MemberForm>) => {
+    if (!adding) return;
+    setAdding({ ...adding, ...change });
+    if (ask?.at === "add") setAsk(null); // the confirm text is about the old values
+    if (note?.at === "add") setNote(null);
+  };
+  // The OS folder dialog. A cancel changes nothing.
+  const browse = () => pickFolder().then((picked) => { if (picked && adding) edit(browsedCheckout(adding, picked)); },
+    (failed) => setNote({ at: "add", ok: false, text: message(failed) }));
+  const field = (key: keyof MemberForm) => (event: { target: { value: string } }) => edit({ [key]: event.target.value });
   const planRemoval = () => guard("remove", async () => setRemoval((await planUninstall({ scope: "project", root: p.root })).plan));
   const remove = () => guard("remove", async () => {
     const result = await applyUninstall({ scope: "project", root: p.root });
@@ -139,7 +160,7 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
       ))}
     </div>
 
-    {members && (!members.ok || list.length > 0) && (
+    {members && (
       <div className="card setup-card">
         <div className="setup-card-head">{t("setupCard.memberRepos")} <span>coordinator · .project/MEMBERS.md</span></div>
         {!members.ok && (
@@ -149,6 +170,7 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
             {under("members")}
           </div>
         )}
+        {members.ok && !list.length && <div className="setup-row sub">{t("setupCard.noMembers")}</div>}
         {list.map((member) => (
           <div key={member.checkout} className="setup-row">
             <div className="grow">
@@ -168,9 +190,47 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
             {under(member.checkout)}
           </div>
         ))}
-        <div className="setup-foot-note">
-          <span className="grow">{t("setupCard.joiningNote1")}<span className="mono">/path</span>{t("setupCard.joiningNote2")}<span className="mono">members add</span>{t("setupCard.joiningNote3")}</span>
-          <CopyButton text="/path" label={t("trayPop.copyPath")} className="btn tiny" />
+        <div className="setup-row">
+          {adding ? (
+            <form className="member-add" onSubmit={(event) => { event.preventDefault(); addMember(adding); }}>
+              <label className="sk-field">{t("setupCard.memberName")}
+                <input value={adding.name} disabled={!!busy} spellCheck={false} onChange={field("name")} />
+              </label>
+              <label className="sk-field">{adding.create ? t("setupCard.memberCloneInto") : t("setupCard.memberCheckout")}
+                <span className="member-browse">
+                  <input className="mono" value={adding.checkout} disabled={!!busy} spellCheck={false} placeholder="~/github/acme/api" onChange={field("checkout")} />
+                  <button type="button" className="btn small" disabled={!!busy} onClick={browse}>{t("setupCard.browse")}</button>
+                </span>
+              </label>
+              <label className="sk-field">{t("setupCard.memberIntegration")}
+                <select value={adding.integration} disabled={!!busy} onChange={field("integration")}>
+                  {MEMBER_INTEGRATIONS.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </label>
+              <label className="member-add-new">
+                <input type="checkbox" checked={adding.create} disabled={!!busy} onChange={(event) => edit({ create: event.target.checked })} />
+                {t("setupCard.memberNew")}
+              </label>
+              {adding.create && <>
+                <label className="sk-field">{t("setupCard.memberRepo")}
+                  <input className="mono" value={adding.repo} disabled={!!busy} spellCheck={false} placeholder="acme/api" onChange={field("repo")} />
+                </label>
+                <label className="sk-field">{t("setupCard.memberVisibility")}
+                  <select value={adding.visibility} disabled={!!busy} onChange={field("visibility")}>
+                    {MEMBER_VISIBILITIES.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </label>
+              </>}
+              {ask?.at !== "add" && <span className="actions">
+                <button type="submit" className="btn small primary" disabled={!!busy}>{t("setupCard.addMember")}</button>
+                <button type="button" className="btn small" onClick={() => { setAdding(null); setNote(null); }}>{t("updates.cancel")}</button>
+              </span>}
+            </form>
+          ) : <>
+            <span className="grow" />
+            <button className="btn small" disabled={!!busy} onClick={() => { setNote(null); setAdding(emptyMemberForm()); }}>{t("setupCard.addMember")}</button>
+          </>}
+          {under("add")}
         </div>
       </div>
     )}

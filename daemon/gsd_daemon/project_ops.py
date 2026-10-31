@@ -9,6 +9,7 @@ without hosts uses the agents installed on this computer.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import List
@@ -27,7 +28,7 @@ INSTALLER_OPS = {
 }
 # The installer refuses these on the old .gsd-path/runtime/ layout until it is migrated.
 HOOK_OPS = ("hooks-init", "hooks-refresh", "hooks-refresh-full")
-OPS = (*INSTALLER_OPS, "members", "member-hooks", "member-repair")
+OPS = (*INSTALLER_OPS, "members", "member-add", "member-hooks", "member-repair")
 # Same text as MEMBER_HOOK_MARKER in install.py, which writes these hooks.
 MEMBER_HOOK_MARKER = "gsd-path member guard"
 NO_AGENT_ERROR = "No agent has GSD Path skills installed on this computer. Install the skills for an agent first."
@@ -62,6 +63,33 @@ def _members(plugin, root: str) -> dict:
     return result
 
 
+def _member_add_args(root: str, body: dict) -> List[str]:
+    """`members.py add` arguments from the request. members.py checks every rule.
+
+    Each value goes in one `--flag=value` argument, so a value that starts with
+    "-" stays a value and cannot become another option.
+    """
+    fields = {key: body.get(key) for key in ("name", "checkout", "integration", "create", "visibility")}
+    for key, value in fields.items():
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{key} must be text")
+    for key in ("name", "checkout"):
+        if not (fields[key] or "").strip():
+            raise ValueError(f"{key} is required")
+    checkout = os.path.expanduser(fields["checkout"].strip())
+    if not os.path.isabs(checkout):
+        raise ValueError("checkout must be a full folder path; enter one or use Browse")
+    args = ["add", "--repo", root, f"--name={fields['name'].strip()}",
+            f"--checkout={checkout}",
+            f"--integration={fields['integration'] or 'default'}"]
+    # Greenfield: members.py creates the GitHub repository and clones it to the checkout.
+    if fields["create"]:
+        args.append(f"--create={fields['create'].strip()}")
+    if fields["visibility"]:
+        args.append(f"--visibility={fields['visibility']}")
+    return args
+
+
 def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
     preview: List[str] = ["--dry-run"] if body.get("dry_run") else []
     if op in INSTALLER_OPS:
@@ -86,6 +114,11 @@ def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
         return result
     if op == "members":
         return _members(plugin, root)
+    if op == "member-add":
+        if preview:
+            raise ValueError("adding a member has no preview; members.py add checks every rule before it writes")
+        rc, stdout, stderr = _members_helper(plugin, *_member_add_args(root, body))
+        return {"ok": rc == 0, "stdout_tail": _tail(stdout), "error": (_tail(stderr) or _tail(stdout)) if rc else None}
     if op == "member-repair":
         if preview:
             raise ValueError("member repair has no preview; it rewrites only missing or stale markers")
@@ -99,7 +132,7 @@ def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
 
 
 def run(handler, body: dict) -> dict:
-    """POST /api/project/op ``{root, op, dry_run?, member?, hosts?}``."""
+    """POST /api/project/op ``{root, op, dry_run?, member?, hosts?, name?, checkout?, integration?, create?, visibility?}``."""
     root, op = body.get("root"), body.get("op")
     if not is_path_card(handler.watcher.projects, root):
         raise ValueError("root is not a watched project")
