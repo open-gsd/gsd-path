@@ -155,9 +155,9 @@ as stated in Lookahead mode.
    - Require a `Review depth` value (`full`, `deep`, or `verify-only`) on
      every wave. Wave 1 and any wave touching authentication, authorization,
      payments, data migration, or concurrency requires `full` or `deep`;
-     this includes quick-lane single waves. The planner assigns `deep`
-     sparingly to waves where a wrong merge is irreversible or
-     security-critical.
+     this includes quick-lane single waves. Use `full` unless INTENT.md
+     records an explicit user request for adversarial review; risk alone
+     does not authorize `deep`.
    - When INTENT.md `Surfaces:` is not `none`, require a PLAN.md
      `## Surface contract` block per named surface with its Criteria, Entry,
      States, Walkthrough, and the task that delivers it. Those criteria must be

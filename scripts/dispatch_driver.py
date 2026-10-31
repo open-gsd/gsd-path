@@ -1461,6 +1461,9 @@ def review_brief(state: Dict[str, object], options: argparse.Namespace, primary:
         f"You are the reviewer for GSD Path wave {wave}, cycle {cycle}; logical task name "
         f"{state['task_id']}. Mode: wave" + (f"; lens: {lens}." if lens else "."),
         f"Read the reviewer role brief first and follow it exactly: {options.role_brief}",
+        "Validate the agreed acceptance contract. "
+        "Block only on a named unmet requirement or missing required evidence. "
+        "Do not search for improvements or expand the agreed contract.",
         f"Template (use only this): {options.template}",
         f"AGENTS.md: {agents if agents.exists() else 'absent'}",
         f"Repository root, read-only: {primary}",
@@ -1478,6 +1481,8 @@ def review_brief(state: Dict[str, object], options: argparse.Namespace, primary:
                      f"landing commit {task['commit']}")
     if previous is not None:
         lines.append(f"Previous cycle review to re-check: {previous}")
+        lines.append("Re-check repaired failures and affected passes only. "
+                     "Reuse settled evidence for unaffected criteria.")
     if options.repair_evidence:
         lines.append(f"Repair evidence receipt (re-review after a proven repair): {options.repair_evidence}")
     if final_scope:

@@ -35,8 +35,9 @@ Project verify: `<command that installs dependencies, builds + tests the whole p
 Goal: <what this wave proves; if it fails, what changes>
 Review depth: full   <!-- full | deep | verify-only. Wave 1 and auth/payments/
                           data migration/concurrency waves must be full or
-                          deep. Assign deep sparingly: irreversible or
-                          security-critical merges. -->
+                          deep. Use full unless the user explicitly requested
+                          adversarial review, recorded in INTENT.md. Risk alone
+                          does not authorize deep. -->
 
 <!-- No task table. Task id, title, deps, and files live only in each
      `tasks/T###-slug.md` frontmatter; `wave: N` there assigns it here. -->
