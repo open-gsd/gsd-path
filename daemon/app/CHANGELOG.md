@@ -9,7 +9,9 @@ The app has its own version and `app-v<version>` tags, separate from the
 ### Added
 - "Add member" on the project page joins a repository to the project as a
   multi-repo member: an existing checkout, or a new GitHub repository that
-  the app creates and clones (private by default). The confirm step says
+  the app creates and clones (private by default). "Browse…" picks the
+  folder with the system dialog: the checkout itself, or for a new
+  repository the parent folder to clone into. The confirm step says
   what is written, and for a new repository that the app cannot delete it.
   `members.py add` checks every rule, for example that members change only
   between milestones.

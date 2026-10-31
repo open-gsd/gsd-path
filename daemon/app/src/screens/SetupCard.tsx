@@ -2,10 +2,10 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { t } from "../i18n";
-import { doctorReport, emptyMemberForm, MEMBER_INTEGRATIONS, MEMBER_VISIBILITIES, memberAdd, memberRows, setupRows } from "../project";
+import { browsedCheckout, doctorReport, emptyMemberForm, MEMBER_INTEGRATIONS, MEMBER_VISIBILITIES, memberAdd, memberRows, setupRows } from "../project";
 import type { Member, MemberForm, SetupRow } from "../project";
 import { envHash, projectHash } from "../route";
-import { api } from "../shell";
+import { api, pickFolder } from "../shell";
 import { targetVersion } from "../skills";
 import type { OpResult, UninstallPlan } from "../skills";
 import { applyUninstall, message, planUninstall, projectOp } from "../skillsApi";
@@ -98,6 +98,9 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
     if (ask?.at === "add") setAsk(null); // the confirm text is about the old values
     if (note?.at === "add") setNote(null);
   };
+  // The OS folder dialog. A cancel changes nothing.
+  const browse = () => pickFolder().then((picked) => { if (picked && adding) edit(browsedCheckout(adding, picked)); },
+    (failed) => setNote({ at: "add", ok: false, text: message(failed) }));
   const field = (key: keyof MemberForm) => (event: { target: { value: string } }) => edit({ [key]: event.target.value });
   const planRemoval = () => guard("remove", async () => setRemoval((await planUninstall({ scope: "project", root: p.root })).plan));
   const remove = () => guard("remove", async () => {
@@ -193,8 +196,11 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
               <label className="sk-field">{t("setupCard.memberName")}
                 <input value={adding.name} disabled={!!busy} spellCheck={false} onChange={field("name")} />
               </label>
-              <label className="sk-field">{t("setupCard.memberCheckout")}
-                <input className="mono" value={adding.checkout} disabled={!!busy} spellCheck={false} placeholder="~/github/acme/api" onChange={field("checkout")} />
+              <label className="sk-field">{adding.create ? t("setupCard.memberCloneInto") : t("setupCard.memberCheckout")}
+                <span className="member-browse">
+                  <input className="mono" value={adding.checkout} disabled={!!busy} spellCheck={false} placeholder="~/github/acme/api" onChange={field("checkout")} />
+                  <button type="button" className="btn small" disabled={!!busy} onClick={browse}>{t("setupCard.browse")}</button>
+                </span>
               </label>
               <label className="sk-field">{t("setupCard.memberIntegration")}
                 <select value={adding.integration} disabled={!!busy} onChange={field("integration")}>

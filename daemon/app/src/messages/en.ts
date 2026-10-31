@@ -503,6 +503,8 @@ export const en = {
   "setupCard.noMembers": "No member repositories. Add one to run milestones across several repositories from this project.",
   "setupCard.memberName": "Member name",
   "setupCard.memberCheckout": "Checkout folder",
+  "setupCard.memberCloneInto": "Clone into folder",
+  "setupCard.browse": "Browse…",
   "setupCard.memberIntegration": "Integration",
   "setupCard.memberNew": "Create a new GitHub repository",
   "setupCard.memberRepo": "GitHub repository (owner/name)",

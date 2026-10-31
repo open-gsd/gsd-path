@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asking, blocked, building, shipped, status } from "./fixtures";
-import { doctorReport, emptyMemberForm, facts, memberAdd, memberRows, milestoneRows, nowBox, phaseTrack, setupRows, usageTiles } from "./project";
+import { browsedCheckout, doctorReport, emptyMemberForm, facts, memberAdd, memberRows, milestoneRows, nowBox, phaseTrack, setupRows, usageTiles } from "./project";
 import type { MemberForm } from "./project";
 import type { ProjectSetup } from "./skills";
 
@@ -213,5 +213,19 @@ describe("add member form", () => {
   });
   it("starts private, so a new repository is never public by default", () => {
     expect(emptyMemberForm()).toMatchObject({ integration: "default", create: false, visibility: "private" });
+  });
+});
+
+describe("browse for the member folder", () => {
+  it("uses the picked folder as the checkout and its name as an empty member name", () => {
+    expect(browsedCheckout(emptyMemberForm(), "/Users/me/work/api")).toEqual({ checkout: "/Users/me/work/api", name: "api" });
+    expect(browsedCheckout({ ...emptyMemberForm(), name: "backend" }, "/Users/me/work/api/")).toEqual({ checkout: "/Users/me/work/api/" });
+    expect(browsedCheckout(emptyMemberForm(), "C:\\work\\api")).toEqual({ checkout: "C:\\work\\api", name: "api" });
+  });
+  it("for a new repository treats the pick as the parent and clones into the repository name", () => {
+    const form = { ...emptyMemberForm(), create: true, repo: "acme/web" };
+    expect(browsedCheckout(form, "/Users/me/work")).toEqual({ checkout: "/Users/me/work/web", name: "web" });
+    expect(browsedCheckout({ ...form, repo: "", name: "site" }, "/Users/me/work/")).toEqual({ checkout: "/Users/me/work/site" });
+    expect(browsedCheckout({ ...form, repo: "" }, "/Users/me/work")).toEqual({ checkout: "/Users/me/work" });
   });
 });

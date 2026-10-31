@@ -505,6 +505,8 @@ export const zh: Record<keyof typeof en, string> = {
   "setupCard.noMembers": "没有成员仓库。添加成员后，可在此项目中跨多个仓库运行里程碑。",
   "setupCard.memberName": "成员名称",
   "setupCard.memberCheckout": "检出文件夹",
+  "setupCard.memberCloneInto": "克隆到文件夹",
+  "setupCard.browse": "浏览…",
   "setupCard.memberIntegration": "集成方式",
   "setupCard.memberNew": "新建 GitHub 仓库",
   "setupCard.memberRepo": "GitHub 仓库（owner/name）",
