@@ -148,6 +148,24 @@ class MemberInstallTests(unittest.TestCase):
         self.assertIn("members.py repair", blocked.stderr)
         self.assertEqual(ran.read_text(encoding="utf-8"), "ran\n", "a blocked guard must not run the chained hook")
 
+    def test_remove_deletes_member_hooks_and_restores_chained_hooks(self) -> None:
+        self.assertEqual((members.MEMBER_HOOK_MARKER, members.CHAINED_HOOK_SUFFIX),
+                         (install.MEMBER_HOOK_MARKER, install.CHAINED_HOOK_SUFFIX))
+        original = '#!/bin/sh\necho ran >> "$(git rev-parse --git-dir)/chained-ran"\n'
+        executable(self.hooks / "pre-commit", original)
+        self.installed()
+        removed = subprocess.run(
+            [sys.executable, str(MEMBERS), "remove", "--repo", str(self.coordinator), "--name", "web"],
+            encoding="utf-8", errors="replace", capture_output=True, check=False,
+        )
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertEqual(sorted(path.name for path in self.hooks.iterdir()), ["pre-commit"])
+        self.assertEqual((self.hooks / "pre-commit").read_text(encoding="utf-8"), original)
+        # Without the marker a member hook would refuse every commit; the restored hook runs instead.
+        committed = self.change()
+        self.assertEqual(committed.returncode, 0, committed.stderr)
+        self.assertEqual((self.member / ".git" / "chained-ran").read_text(encoding="utf-8"), "ran\n")
+
     def test_dry_run_writes_nothing(self) -> None:
         executable(self.hooks / "pre-commit", "#!/bin/sh\nexit 0\n")
         self.join()

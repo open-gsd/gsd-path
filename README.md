@@ -408,6 +408,10 @@ offline submodule recipe.
   repository uses `main`). For optional
   guard hooks, install them in the member with
   `npx @opengsd/gsd-path@latest --member-of <coordinator> --project <member>`.
+- Also at a milestone boundary, `members.py set-integration` changes a
+  member's integration mode, and `members.py remove` takes a member out. Remove
+  deletes the member marker and member guard hooks and keeps Path branches,
+  tags, and archived milestones.
 - The planner gives each member task `repo: <member>`; one task changes one
   repo. Project Verify runs from the coordinator and reaches a member as
   `../<member>`.

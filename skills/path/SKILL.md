@@ -263,6 +263,16 @@ subcommand for it yet).
   new member repository uses `main`.
 - After adding a member, tell the user to install its guard hooks:
   `npx @opengsd/gsd-path@latest --member-of <absolute-root> --project <member checkout>`.
+- To change how ship lands a member, run
+  `python3 <members.py> set-integration --repo <absolute-root> --name <name> --integration <mode>`.
+- To remove a member, confirm the name with the user, then run
+  `python3 <members.py> remove --repo <absolute-root> --name <name>`. It
+  refuses while a task brief names the member. It deletes the member marker
+  and the member guard hooks (a chained hook gets its old name back) and
+  keeps Path branches, tags, and archived milestones as history. Leftover
+  `gsd-path/<project>-*` branches make a later `add` of the same repository
+  refuse until they are deleted. To use Path hooks of its own in that
+  repository, install them there again.
 - `python3 <members.py> validate --repo <absolute-root>` checks every member;
   `repair` rewrites stale markers; `detect --checkout <path>` reports whether a
   repository is a member and of which coordinator.

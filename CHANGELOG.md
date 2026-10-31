@@ -11,6 +11,11 @@ app and the daemon have their own file,
 [daemon/app/CHANGELOG.md](daemon/app/CHANGELOG.md). Release bookkeeping and
 test-only changes are not listed; the Git history has them.
 
+## [Unreleased]
+
+### Added
+- Remove a member repository with `members.py remove`, and change a member's integration mode with `members.py set-integration`.
+
 ## [1.7.1] - 2026-10-31
 
 ### Changed
