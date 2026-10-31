@@ -963,5 +963,81 @@
     "elapsed_seconds": 66.8346752920188,
     "requested_model": "google/gemini-pro-latest",
     "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T164632470706Z",
+    "session_id": null,
+    "exit_code": -15,
+    "elapsed_seconds": 228.82994754216634,
+    "requested_model": "openai/gpt-6.1-sol",
+    "usage": null
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T165025419375Z",
+    "session_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+    "exit_code": 0,
+    "elapsed_seconds": 62.65498916688375,
+    "requested_model": "openai/gpt-6.1-sol",
+    "usage": {
+      "tokens": {
+        "total": 93777,
+        "input": 793,
+        "output": 440,
+        "reasoning": 0,
+        "cache": {
+          "write": 0,
+          "read": 92544
+        }
+      },
+      "cost": 0
+    }
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T165136807116Z",
+    "session_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+    "exit_code": 0,
+    "elapsed_seconds": 21.855077375192195,
+    "requested_model": "openai/gpt-6.1-sol",
+    "usage": {
+      "tokens": {
+        "total": 94150,
+        "input": 181,
+        "output": 145,
+        "reasoning": 0,
+        "cache": {
+          "write": 0,
+          "read": 93824
+        }
+      },
+      "cost": 0
+    }
+  },
+  {
+    "host": "opencode",
+    "attempt": "opencode",
+    "run": "run-20261031T165257942224Z",
+    "session_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+    "exit_code": 0,
+    "elapsed_seconds": 114.63259004219435,
+    "requested_model": "openai/gpt-6.1-sol",
+    "usage": {
+      "tokens": {
+        "total": 105652,
+        "input": 306,
+        "output": 386,
+        "reasoning": 0,
+        "cache": {
+          "write": 0,
+          "read": 104960
+        }
+      },
+      "cost": 0
+    }
   }
 ]

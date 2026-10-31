@@ -7,7 +7,11 @@ and required live-check scope.
 The historical results below do not define the current required host set;
 see [Live-check scope](TRUST-VALIDATION-SPEC.md#live-check-scope).
 
-Release 1.7.0 uses frozen candidate `e2dd08576d7486b302dc7a870a47aaa7f788089f`
+Release 1.7.1 uses frozen candidate `ab909c7ddd43a178305672e74f48a6d3d5624e62`
+prepared in PR #536. All seven required hosts ran fresh milestones on
+2026-10-31 UTC; receipts are in `evidence/releases/1.7.1/`.
+
+Release 1.7.0 used frozen candidate `e2dd08576d7486b302dc7a870a47aaa7f788089f`
 prepared in PR #529. All seven required hosts ran fresh milestones on
 2026-10-30–31 UTC; receipts are in `evidence/releases/1.7.0/`.
 
@@ -28,14 +32,14 @@ publication; see the [release contract](../../RELEASE.md#release-contract).
 
 | Host | Install | Native guard installed | Full live milestone | Candidate result |
 |---|---|---|---|---|
-| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | [codex.md](evidence/releases/1.7.0/codex.md) | **pass** on `e2dd0857` |
-| Claude Code | automated | fail-closed project hook + Git hooks | [claude.md](evidence/releases/1.7.0/claude.md) | **pass** on `e2dd0857` |
-| Grok | automated | not installed; Git hooks | [grok.md](evidence/releases/1.7.0/grok.md) | **pass** on `e2dd0857` |
-| OpenCode | automated | not installed; Git hooks | [opencode.md](evidence/releases/1.7.0/opencode.md) | **pass** on `e2dd0857` |
+| Codex | automated | git-only tier: the `--ignore-user-config` harness run has no native hook, so Git hooks carry it | [codex.md](evidence/releases/1.7.1/codex.md) | **pass** on `ab909c7d` |
+| Claude Code | automated | fail-closed project hook + Git hooks | [claude.md](evidence/releases/1.7.1/claude.md) | **pass** on `ab909c7d` |
+| Grok | automated | not installed; Git hooks | [grok.md](evidence/releases/1.7.1/grok.md) | **pass** on `ab909c7d` |
+| OpenCode | automated | not installed; Git hooks | [opencode.md](evidence/releases/1.7.1/opencode.md) | **pass** on `ab909c7d` |
 | GitHub Copilot CLI | automated | not installed; Git hooks | not run: account quota exhausted | excluded at the maintainer's request until restored |
-| Antigravity CLI | automated | not installed; Git hooks | [antigravity.md](evidence/releases/1.7.0/antigravity.md) | **pass** on `e2dd0857` |
-| Cursor | automated | fail-closed project hook + Git hooks | [cursor.md](evidence/releases/1.7.0/cursor.md) | **pass** on `e2dd0857` |
-| Kimi Code | automated | not installed; Git hooks | [kimi.md](evidence/releases/1.7.0/kimi.md) | **pass** on `e2dd0857` |
+| Antigravity CLI | automated | not installed; Git hooks | [antigravity.md](evidence/releases/1.7.1/antigravity.md) | **pass** on `ab909c7d` |
+| Cursor | automated | fail-closed project hook + Git hooks | [cursor.md](evidence/releases/1.7.1/cursor.md) | **pass** on `ab909c7d` |
+| Kimi Code | automated | not installed; Git hooks | [kimi.md](evidence/releases/1.7.1/kimi.md) | **pass** on `ab909c7d` |
 | Qwen Code | automated | not installed; Git hooks | not run (API credits) | excluded at the maintainer's request |
 | Zed | automated | no native hook API; Git hooks | not run (API credits) | excluded at the maintainer's request |
 | Kiro | automated | not installed; Git hooks | not run (API credits) | excluded at the maintainer's request |
@@ -43,6 +47,18 @@ publication; see the [release contract](../../RELEASE.md#release-contract).
 
 Historical smoke evidence remains under `evidence/`; release receipts belong
 under `evidence/releases/<version>/` and are never inferred from smoke runs.
+
+## 1.7.1 run notes
+
+All seven required hosts completed fresh milestones and passed 42 external
+CLI acceptance checks from clones of their integrated fixture origins. Each
+reused its final review and project Verify result at unchanged HEAD. Claude
+and Cursor proved native guard enforcement; the other hosts retained their
+declared Git-only tier. Invalid attempts and provider failures remain
+recorded. OpenCode recovered through refreshed OpenAI OAuth and a fresh
+native conversation on the same fixture, preserving the original child and
+verification records. See [run notes](evidence/releases/1.7.1/notes/RUNS.md).
+The publication workflow still owns the full release gate.
 
 ## 1.7.0 run notes
 

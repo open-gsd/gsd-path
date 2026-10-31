@@ -1,0 +1,45 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Task",
+  "child_api": "Task",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "Task",
+    "run": "run-20261031T140706312671Z",
+    "parent_session": "ses_e6dc70908ffe5URo2hXe6BquUf",
+    "call_id": "call_cc71cdf3553b4b01973c99c2",
+    "task_state": "completed",
+    "child_session": "ses_e6db4e235ffefbwLxVwUaSu12g",
+    "input": {
+      "description": "build_t001",
+      "subagent_type": "general"
+    },
+    "prompt_sha256": "028465f6048172cac6abfdfa7e6b2ac84ba586eb7dd8c9b74a2d95f593d3e59d",
+    "output": "<task id=\"ses_e6db4e235ffefbwLxVwUaSu12g\" state=\"completed\">\n<task_result>\nT001 ready \u2014 implemented `--json` flag (once, before/after count), int()-compatible validation with clean one-line stderr errors (exit 2, empty stdout), frozen `{n} widgets` wording, and 23 stdlib subprocess CLI tests including E7 parsed-object JSON assertions; Verify green.\n\nChanged paths:\n- `count.py`\n- `test_count.py`\n- `.project/tasks/T001-extend-count-cli.md` (Log append only)\n\nRESULT: T001 ready\n</task_result>\n</task>",
+    "metadata": {
+      "parentSessionId": "ses_e6dc70908ffe5URo2hXe6BquUf",
+      "sessionId": "ses_e6db4e235ffefbwLxVwUaSu12g",
+      "model": {
+        "modelID": "glm-5.3",
+        "providerID": "zai-coding-plan"
+      },
+      "truncated": false
+    },
+    "session_row": {
+      "id": "ses_e6db4e235ffefbwLxVwUaSu12g",
+      "parent_id": "ses_e6dc70908ffe5URo2hXe6BquUf",
+      "title": "build_t001 (@general subagent)",
+      "agent": "general",
+      "model": "{\"id\":\"glm-5.3\",\"providerID\":\"zai-coding-plan\",\"variant\":\"default\"}",
+      "time_created": 1793455758794,
+      "time_updated": 1793456037183
+    }
+  }
+}

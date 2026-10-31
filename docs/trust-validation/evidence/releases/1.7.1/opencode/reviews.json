@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_e6d215f46ffeZLGCD6bMNYPgjT",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/e05c5aad5982108a3f3615d16754ab136883c6c461f7fb1eb3c1d869b9d5df31/check_handoffs.py final --repo \"$PWD\" && wc -l .project/build/verify-ledger.jsonl && python3 -c \"import json;[print(json.loads(l).get('command','?')[:60], '| reused' if json.loads(l).get('rerun') is None else '') for l in open('.project/build/verify-ledger.jsonl')]\" 2>/dev/null; head -30 .project/review/FINAL.md",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: 16e1636e73ff99c9e9255d2d264787795f536f14\nReview scope: final\n\nWave verdict: pass\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: 897abcdc54564e6ed102aa25e22fada69d10ac18\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: 16e1636e73ff99c9e9255d2d264787795f536f14",
+  "wave_review_artifact": ".project/archive/001-extend-count-cli/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-extend-count-cli/review/FINAL.md"
+}

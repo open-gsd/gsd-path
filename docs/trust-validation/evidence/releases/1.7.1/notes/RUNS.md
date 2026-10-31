@@ -5,7 +5,8 @@ Source base: `ac5ce7bed64c9c7fb5225f22ac60552674ecb7e0`.
 Runs began on 2026-10-31 UTC.
 Run root: `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.7.1-ab909c7d`.
 
-Status: six receipts validated; OpenCode needs a working provider. Unpublished.
+Status: all seven required receipts validated; 42 external checks passed.
+Publication remains pending the evidence PR and release workflow.
 
 Completed hosts used the pinned local installation in a fresh fixture,
 real native children, serial task execution with isolated Verify, full-wave
@@ -23,6 +24,7 @@ integrated origin/main. Repeated prepare-final reused existing results.
 | Kimi Code | 0.43.0 | [pass](../kimi.md) | [6 passed](kimi-oracle.json) |
 | Grok | 1.0.70 | [pass](../grok.md) | [6 passed](grok-oracle.json) |
 | Cursor | 2026.10.22-27dcf5f | [pass](../cursor.md) | [6 passed](cursor-oracle.json) |
+| OpenCode | 1.18.25 | [pass](../opencode.md) | [6 passed](opencode-oracle.json) |
 
 ## Retained unsuccessful attempts and corrections
 
@@ -56,8 +58,14 @@ integrated origin/main. Repeated prepare-final reused existing results.
   OpenRouter Opus 5.5 and GPT-6.1 returned no events for 487 and 501 seconds.
   Both were stopped with FINAL, gap, and ledger unchanged. Google then
   rejected its key as reported leaked. No host tool ran in those attempts.
-  The three-round fuse stopped further retries; a working connection remains
-  required. Six completed hosts passed 36 external checks.
+  The three-round fuse stopped further retries until the owner refreshed
+  OpenAI OAuth. A fresh native connection probe returned OK. The original
+  conversation remained silent after refresh and was stopped unchanged.
+  OpenCode continued the same fixture from its canonical files in fresh
+  native conversation `ses_e6d215f46ffeZLGCD6bMNYPgjT`, preserving original
+  child evidence from `ses_e6dc70908ffe5URo2hXe6BquUf`. It proved cached
+  reuse without another test or ledger entry, then completed canonical
+  archive and integration. No pipeline state was hand-repaired.
 - Cursor plan wording briefly confused the logical task name with an opaque
   native ID after an ambiguous evaluator prompt. It was corrected before
   plan approval and dispatch.
