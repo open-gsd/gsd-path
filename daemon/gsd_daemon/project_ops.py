@@ -31,6 +31,7 @@ OPS = (*INSTALLER_OPS, "members", "member-hooks", "member-repair")
 # Same text as MEMBER_HOOK_MARKER in install.py, which writes these hooks.
 MEMBER_HOOK_MARKER = "gsd-path member guard"
 NO_AGENT_ERROR = "No agent has GSD Path skills installed on this computer. Install the skills for an agent first."
+NO_SOURCE_ERROR = "plugin source is not installed yet; install or update the skills first"
 
 
 class Busy(Exception):
@@ -38,7 +39,6 @@ class Busy(Exception):
 
 
 def _members_helper(plugin, *args: str):
-    plugin.ensure_source()
     return plugin.runner([sys.executable, str(plugin.src_dir / "scripts" / "members.py"), *args])
 
 
@@ -70,9 +70,11 @@ def board_members(plugin, root: str) -> dict:
     members_file = Path(root) / ".project" / "MEMBERS.md"
     if not members_file.exists() and not members_file.is_symlink():
         return {}
+    if not (plugin.src_dir / "scripts" / "members.py").is_file():
+        return {"members": [], "members_error": NO_SOURCE_ERROR}
     try:
         result = _members(plugin, root)
-    except Exception as error:  # a missing plugin source or unexpected helper output
+    except Exception as error:  # a helper that cannot run or unexpected helper output
         return {"members": [], "members_error": str(error)}
     return {"members": result["members"], "members_error": result["error"]}
 
@@ -99,6 +101,7 @@ def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
         if migrated:
             result["stdout_tail"] = "\n".join(part for part in (migrated["stdout_tail"], result["stdout_tail"]) if part)
         return result
+    plugin.ensure_source()
     if op == "members":
         return _members(plugin, root)
     if op == "member-repair":

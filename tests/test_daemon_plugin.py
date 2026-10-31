@@ -685,9 +685,10 @@ class EndpointTests(unittest.TestCase):
     def test_api_plugin_status_lists_a_coordinators_members(self):
         members_file = self.project / ".project" / "MEMBERS.md"
         members_file.write_text("# Members\n", encoding="utf-8")
-        source_git = self.manager.src_dir / ".git"
-        made_source = not source_git.exists()
-        source_git.mkdir(parents=True, exist_ok=True)
+        members_py = self.manager.src_dir / "scripts" / "members.py"
+        made_source = not members_py.exists()
+        members_py.parent.mkdir(parents=True, exist_ok=True)
+        members_py.touch()
         member = {"name": "api", "checkout": "/work/api", "remote": "git@x:api.git", "integration": "default"}
         old_runner = self.manager.runner
         self.manager.runner = FakeRunner([(0, json.dumps({"members": [member]}), ""),
@@ -698,7 +699,7 @@ class EndpointTests(unittest.TestCase):
             self.manager.runner = old_runner
             members_file.unlink()
             if made_source:
-                source_git.rmdir()
+                members_py.unlink()
         self.assertEqual(status, 200)
         project = payload["projects"][0]
         self.assertEqual([(row["name"], row["marker"]) for row in project["members"]],

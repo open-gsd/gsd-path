@@ -313,6 +313,11 @@ class MemberTests(Case):
 class BoardMemberTests(Case):
     """The board reads each coordinator's members from the plugin status."""
 
+    def setUp(self):
+        super().setUp()
+        (self.plugin.src_dir / "scripts").mkdir(parents=True)
+        (self.plugin.src_dir / "scripts" / "members.py").write_text("", encoding="utf-8")
+
     def write_members_file(self):
         (Path(self.root) / ".project").mkdir(parents=True)
         (Path(self.root) / ".project" / "MEMBERS.md").write_text("# Members\n", encoding="utf-8")
@@ -340,9 +345,21 @@ class BoardMemberTests(Case):
 
     def test_a_helper_that_cannot_run_returns_the_error_instead_of_raising(self):
         self.write_members_file()
-        with mock.patch.object(self.plugin, "ensure_source", side_effect=RuntimeError("could not clone the gsd-path repository")):
+        with mock.patch.object(self.plugin, "runner", side_effect=OSError("python not found")):
             result = project_ops.board_members(self.plugin, self.root)
-        self.assertEqual(result, {"members": [], "members_error": "could not clone the gsd-path repository"})
+        self.assertEqual(result, {"members": [], "members_error": "python not found"})
+
+    def test_a_coordinator_without_the_plugin_source_reports_it_and_fetches_nothing(self):
+        self.write_members_file()
+        (self.plugin.src_dir / "scripts" / "members.py").unlink()
+        git_calls = []
+        self.plugin.git_runner = lambda argv, cwd=None: git_calls.append(argv) or (0, "", "")
+        with mock.patch.object(self.plugin, "_fetch_release") as fetch:
+            result = project_ops.board_members(self.plugin, self.root)
+        self.assertEqual(result, {"members": [], "members_error": project_ops.NO_SOURCE_ERROR})
+        self.assertEqual(self.calls, [])
+        self.assertEqual(git_calls, [])
+        fetch.assert_not_called()
 
 
 if __name__ == "__main__":
