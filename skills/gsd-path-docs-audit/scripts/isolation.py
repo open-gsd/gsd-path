@@ -5372,16 +5372,6 @@ def _committed_ship_active(repo: Path) -> bool:
     return fields.get("phase") == "ship" and fields.get("status") == "active"
 
 
-# The STATE Log tail that sanctions a build checkpoint past a HEAD that is
-# still ship/active: the blocked final review went through the patch plan
-# (reopened, then approved) and build started again (#526).
-_PATCH_REENTRY_LOG = (
-    ("plan", "patch plan reopened"),
-    ("plan", "patch plan approved"),
-    ("build", "build started"),
-)
-
-
 def _patch_reentry_build_active(repo: Path) -> bool:
     """True when the worktree STATE is the sanctioned patch-re-entry build.
 
@@ -5389,8 +5379,12 @@ def _patch_reentry_build_active(repo: Path) -> bool:
     (ship/active) on purpose: the patch plan runs uncommitted and the patch
     build's own checkpoint commits the artifacts (SHIP.md). This reads the
     worktree STATE the checkpoint is about to commit and accepts only the
-    documented sequence — a hand-flipped build/active during final review
-    carries no such Log tail and stays refused (#429, #526).
+    documented shape: the Log ends with the build restart, the event before
+    it closes the plan stay with the patch approval, and that stay opened
+    with `patch plan reopened` — a resumed planner logs `patch planning
+    blocked` and `planning resumed` inside the same stay (#531). A
+    hand-flipped build/active during final review carries no such Log tail
+    and stays refused (#429, #526).
     """
 
     state = repo / ".project" / "STATE.md"
@@ -5410,10 +5404,20 @@ def _patch_reentry_build_active(repo: Path) -> bool:
         match = re.fullmatch(r"- \d{4}-\d{2}-\d{2} — (\S+) — (.+)", line)
         if match:
             events.append((match.group(1), match.group(2)))
-    # The sanctioned sequence appears in order, as the Log tail of this
-    # milestone's patch loop; the final event must be the build restart.
-    last = len(_PATCH_REENTRY_LOG)
-    return len(events) >= last and tuple(events[-last:]) == _PATCH_REENTRY_LOG
+    # The final event must be the build restart, the event before it must
+    # close the plan stay with the patch approval, and that stay must open
+    # with the reopen; every plan event between them (a blocked, resumed
+    # planner) stays inside the run (#531).
+    if len(events) < 2 or events[-1] != ("build", "build started"):
+        return False
+    if events[-2] != ("plan", "patch plan approved"):
+        return False
+    stay = 0
+    for phase, _event in reversed(events[:-1]):
+        if phase != "plan":
+            break
+        stay += 1
+    return events[-(stay + 1)] == ("plan", "patch plan reopened")
 
 
 def checkpoint(
