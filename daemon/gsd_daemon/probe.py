@@ -193,8 +193,8 @@ def _members_json(path: Path, schema: str) -> Optional[List[dict]]:
     return [row for row in data["members"] if isinstance(row, dict)]
 
 
-def member_progress(root: str, archive: Optional[str]) -> Tuple[Optional[List[dict]], List[dict]]:
-    """The milestone's member lock and member-close rows, read-only.
+def member_progress(root: str, archive: Optional[str]) -> Tuple[Optional[List[dict]], List[dict], Optional[str]]:
+    """The milestone's member lock, member-close rows, and close journal path, read-only.
 
     Build keeps the lock in .project/build; ship moves it into the archive. The
     member-close journal sits in the Git common dir, named after the archive.
@@ -203,12 +203,12 @@ def member_progress(root: str, archive: Optional[str]) -> Tuple[Optional[List[di
     if lock is None and archive:
         lock = _members_json(Path(root) / archive / "build" / "members.json", MEMBER_LOCK_SCHEMA)
     if not lock or not archive:
-        return lock, []
+        return lock, [], None
     common = gitinfo._git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
     if not common:
-        return lock, []
+        return lock, [], None
     journal = Path(common) / "gsd-path" / "member-close" / f"{Path(archive).name}.json"
-    return lock, _members_json(journal, MEMBER_CLOSE_SCHEMA) or []
+    return lock, _members_json(journal, MEMBER_CLOSE_SCHEMA) or [], str(journal)
 
 
 def parse_plan(path: Union[str, Path]) -> Dict[int, str]:
@@ -917,7 +917,7 @@ def probe_project(root: Union[str, Path], enrich: bool = True) -> ProjectStatus:
                     status.git["dirty"] = bool(status.git["dirty"])
             status.status_source = "runtime"
     status.answers = _collect_answers(project_dir / "discuss" / "ANSWERS.md", runtime_pending)
-    status.member_lock, status.member_close = member_progress(root, status.archive)
+    status.member_lock, status.member_close, status.member_close_journal = member_progress(root, status.archive)
     status.workflow = gap or workflow_projection(payload)
     status.attention = compute_attention(status)
     if status.workflow["state"] == "unverified":
