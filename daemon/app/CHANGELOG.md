@@ -51,6 +51,12 @@ The app has its own version and `app-v<version>` tags, separate from the
 - The Tasks table no longer squeezes short columns, such as task ID and
   wave, to one character per line. Task file paths wrap at `/`.
 
+### Fixed
+- Release and framework update checks work when the daemon runs under a
+  python.org macOS Python with no CA certificates installed. The daemon then
+  also trusts the macOS system roots (`/etc/ssl/cert.pem`); certificate checks
+  stay on.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
