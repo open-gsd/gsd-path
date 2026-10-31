@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asking, blocked, building, shipped, status } from "./fixtures";
-import { browsedCheckout, doctorReport, emptyMemberForm, facts, memberAdd, memberRows, milestoneRows, nowBox, phaseTrack, repoRows, setupRows, usageTiles } from "./project";
+import { browsedCheckout, doctorReport, editMember, emptyMemberForm, facts, memberAdd, memberRows, milestoneRows, nowBox, phaseTrack, repoRows, setupRows, usageTiles } from "./project";
 import type { MemberForm } from "./project";
 import { DASH } from "./status";
 import type { ProjectSetup } from "./skills";
@@ -258,10 +258,25 @@ describe("browse for the member folder", () => {
     expect(browsedCheckout({ ...emptyMemberForm(), name: "backend" }, "/Users/me/work/api/")).toEqual({ checkout: "/Users/me/work/api/" });
     expect(browsedCheckout(emptyMemberForm(), "C:\\work\\api")).toEqual({ checkout: "C:\\work\\api", name: "api" });
   });
-  it("for a new repository treats the pick as the parent and clones into the repository name", () => {
+  it("for a new repository keeps the pick as the parent and clones into the repository name", () => {
     const form = { ...emptyMemberForm(), create: true, repo: "acme/web" };
-    expect(browsedCheckout(form, "/Users/me/work")).toEqual({ checkout: "/Users/me/work/web", name: "web" });
-    expect(browsedCheckout({ ...form, repo: "", name: "site" }, "/Users/me/work/")).toEqual({ checkout: "/Users/me/work/site" });
-    expect(browsedCheckout({ ...form, repo: "" }, "/Users/me/work")).toEqual({ checkout: "/Users/me/work" });
+    const browse = (f: MemberForm, picked: string) => editMember(f, browsedCheckout(f, picked));
+    expect(browse(form, "/Users/me/work")).toMatchObject({ checkout: "/Users/me/work/web", name: "" });
+    expect(browse({ ...form, repo: "", name: "site" }, "/Users/me/work/")).toMatchObject({ checkout: "/Users/me/work/site" });
+  });
+  it("never uses the bare parent and follows the repository typed or changed after Browse", () => {
+    let form = editMember({ ...emptyMemberForm(), create: true }, browsedCheckout({ ...emptyMemberForm(), create: true }, "/Users/me/new"));
+    expect(form.checkout).toBe("");
+    form = editMember(form, { repo: "acme/web" });
+    expect(form.checkout).toBe("/Users/me/new/web");
+    form = editMember(form, { repo: "acme/site" });
+    expect(form.checkout).toBe("/Users/me/new/site");
+    form = editMember(form, { repo: "", name: "api" });
+    expect(form.checkout).toBe("/Users/me/new/api");
+  });
+  it("a typed checkout replaces the browsed parent", () => {
+    const browsed = editMember({ ...emptyMemberForm(), create: true }, { parent: "/Users/me/new" });
+    const typed = editMember(browsed, { checkout: "/elsewhere/web" });
+    expect(editMember(typed, { repo: "acme/other" })).toMatchObject({ checkout: "/elsewhere/web", parent: "" });
   });
 });

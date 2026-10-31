@@ -241,12 +241,12 @@ export function repoRows(p: Project): RepoRow[] {
   ];
 }
 
-/** The "Add member" form. `repo` and `visibility` count only for a new GitHub repository. */
-export type MemberForm = { name: string; checkout: string; integration: string; create: boolean; repo: string; visibility: string };
+/** The "Add member" form. `repo`, `visibility` and the browsed `parent` count only for a new GitHub repository. */
+export type MemberForm = { name: string; checkout: string; integration: string; create: boolean; repo: string; visibility: string; parent: string };
 export const MEMBER_INTEGRATIONS = ["default", "direct", "pull-request"];
 export const MEMBER_VISIBILITIES = ["private", "internal", "public"];
 export const emptyMemberForm = (): MemberForm =>
-  ({ name: "", checkout: "", integration: "default", create: false, repo: "", visibility: "private" });
+  ({ name: "", checkout: "", integration: "default", create: false, repo: "", visibility: "private", parent: "" });
 
 /** The member-add request and its confirm text, or the first field to fix. members.py checks the rest. */
 export function memberAdd(form: MemberForm): { body: Record<string, string>; confirm: string } | { error: string } {
@@ -261,12 +261,20 @@ export function memberAdd(form: MemberForm): { body: Record<string, string>; con
     confirm: t("setupCard.addCreateText", { name, checkout, repo, visibility: form.visibility }) };
 }
 
-/** The form fields a picked folder fills. For a new repository the pick is the parent folder: the clone
- *  goes into a folder named after the repository (or the member). An empty member name takes the folder name. */
+/** The form fields a picked folder fills. For an existing checkout the pick is the checkout, and an empty
+ *  member name takes the folder name. For a new repository the pick is the parent folder (see `editMember`). */
 export function browsedCheckout(form: MemberForm, picked: string): Partial<MemberForm> {
-  const leaf = form.create ? (form.repo.trim().split("/")[1] || form.name.trim()) : "";
-  const checkout = leaf ? picked.replace(/[\\/]+$/, "") + "/" + leaf : picked;
-  // A picked parent with no clone folder yet names nothing.
-  const folder = form.create && !leaf ? "" : checkout.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
-  return form.name.trim() || !folder ? { checkout } : { checkout, name: folder };
+  if (form.create) return { parent: picked };
+  const folder = picked.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+  return form.name.trim() || !folder ? { checkout: picked } : { checkout: picked, name: folder };
+}
+
+/** The form after a change. For a new repository with a browsed parent, the checkout is always
+ *  <parent>/<repository name> (or the member name), so the clone never goes into the parent itself.
+ *  Typing the checkout drops the parent. */
+export function editMember(form: MemberForm, change: Partial<MemberForm>): MemberForm {
+  const next = { ...form, ...("checkout" in change ? { parent: "" } : {}), ...change };
+  if (!next.create || !next.parent) return next;
+  const leaf = next.repo.trim().split("/")[1] || next.name.trim();
+  return { ...next, checkout: leaf ? next.parent.replace(/[\\/]+$/, "") + "/" + leaf : "" };
 }

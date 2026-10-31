@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { t } from "../i18n";
-import { browsedCheckout, doctorReport, emptyMemberForm, MEMBER_INTEGRATIONS, MEMBER_VISIBILITIES, memberAdd, memberRows, setupRows } from "../project";
+import { browsedCheckout, doctorReport, editMember, emptyMemberForm, MEMBER_INTEGRATIONS, MEMBER_VISIBILITIES, memberAdd, memberRows, setupRows } from "../project";
 import type { Member, MemberForm, SetupRow } from "../project";
 import { envHash, projectHash } from "../route";
 import { api, pickFolder } from "../shell";
@@ -94,7 +94,7 @@ export function SetupCard({ project: p, skills, children }: { project: Project; 
   };
   const edit = (change: Partial<MemberForm>) => {
     if (!adding) return;
-    setAdding({ ...adding, ...change });
+    setAdding(editMember(adding, change));
     if (ask?.at === "add") setAsk(null); // the confirm text is about the old values
     if (note?.at === "add") setNote(null);
   };
