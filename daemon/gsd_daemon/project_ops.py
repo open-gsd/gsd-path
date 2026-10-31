@@ -76,8 +76,11 @@ def _member_add_args(root: str, body: dict) -> List[str]:
     for key in ("name", "checkout"):
         if not (fields[key] or "").strip():
             raise ValueError(f"{key} is required")
+    checkout = os.path.expanduser(fields["checkout"].strip())
+    if not os.path.isabs(checkout):
+        raise ValueError("checkout must be a full folder path; enter one or use Browse")
     args = ["add", "--repo", root, f"--name={fields['name'].strip()}",
-            f"--checkout={os.path.expanduser(fields['checkout'].strip())}",
+            f"--checkout={checkout}",
             f"--integration={fields['integration'] or 'default'}"]
     # Greenfield: members.py creates the GitHub repository and clones it to the checkout.
     if fields["create"]:

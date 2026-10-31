@@ -329,9 +329,9 @@ class MemberAddTests(Case):
     def test_a_value_that_looks_like_an_option_stays_a_value(self):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
         import members
-        self.run_op(op="member-add", name="--create=evil/repo", checkout="--visibility=public")
+        self.run_op(op="member-add", name="--create=evil/repo", checkout=self.member)
         parsed = members.parser().parse_args(self.helper_args()[0])
-        self.assertEqual((parsed.name, str(parsed.checkout)), ("--create=evil/repo", "--visibility=public"))
+        self.assertEqual((parsed.name, str(parsed.checkout)), ("--create=evil/repo", self.member))
         self.assertIsNone(parsed.create)
         self.assertIsNone(parsed.visibility)
 
@@ -341,6 +341,12 @@ class MemberAddTests(Case):
                            ({"name": "api", "checkout": self.member, "create": ["acme/web"]}, "create must be text")):
             with self.subTest(body=body), self.assertRaisesRegex(ValueError, text):
                 self.run_op(op="member-add", **body)
+        self.assertEqual(self.calls, [])
+
+    def test_a_relative_checkout_runs_nothing(self):
+        for checkout in ("api", "work/api", "./api"):
+            with self.subTest(checkout=checkout), self.assertRaisesRegex(ValueError, "full folder path"):
+                self.run_op(op="member-add", name="api", checkout=checkout, create="acme/api")
         self.assertEqual(self.calls, [])
 
     def test_add_has_no_preview(self):

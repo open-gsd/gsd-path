@@ -513,6 +513,7 @@ export const zh: Record<keyof typeof en, string> = {
   "setupCard.memberVisibility": "可见性",
   "setupCard.memberNeedsName": "请输入成员名称。",
   "setupCard.memberNeedsCheckout": "请输入检出文件夹。",
+  "setupCard.memberNeedsFullPath": "请输入完整的文件夹路径，或使用浏览。",
   "setupCard.memberNeedsRepo": "请按 owner/name 输入新仓库。",
   "setupCard.addExistingText": "将 {checkout} 处的 {name} 添加为成员。这会写入此项目的 .project/MEMBERS.md，并在 {name} 的 Git 文件夹中写入成员标记。成员只能在里程碑之间变更。",
   "setupCard.addCreateText": "创建 {visibility} GitHub 仓库 {repo}，克隆到 {checkout}，并添加为成员 {name}。应用之后无法删除该 GitHub 仓库。",
