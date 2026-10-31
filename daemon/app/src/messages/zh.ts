@@ -529,6 +529,7 @@ export const zh: Record<keyof typeof en, string> = {
   "setupCard.memberNeedsRepo": "请按 owner/name 输入新仓库。",
   "setupCard.addExistingText": "将 {checkout} 处的 {name} 添加为成员。这会写入此项目的 .project/MEMBERS.md，并在 {name} 的 Git 文件夹中写入成员标记。成员只能在里程碑之间变更。",
   "setupCard.addCreateText": "创建 {visibility} GitHub 仓库 {repo}，克隆到 {checkout}，并添加为成员 {name}。应用之后无法删除该 GitHub 仓库。",
+  "setupCard.removeMemberText": "从此项目移除 {name}。这会重写 .project/MEMBERS.md，并删除 {name} 中的成员标记和成员钩子；被它们包装的钩子会恢复原名。Path 分支、标签和已完成的里程碑会保留。成员只能在里程碑之间变更。",
   "setupCard.removePath": "从此项目移除 Path",
   "setupCard.remove": "移除",
   "setupAgents.title": "你的编码代理",

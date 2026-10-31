@@ -181,6 +181,17 @@ function projectOp(body: { root?: string; op?: string; dry_run?: boolean; member
       : { ok: false, argv: installer("--doctor"), stdout_tail: `note: project: runtime ${project.runtime_version}`,
         error: `project: guard hooks are not installed — run --hooks-init --project "${project.root}"` });
   }
+  if (op === "member-remove" || op === "member-integration") {
+    if (body.dry_run) throw new Error(`${op} has no preview; members.py checks every rule before it writes`);
+    const list = coordinator ? members : (added[project.root] ??= []);
+    return slow(() => {
+      const index = list.findIndex((entry) => entry.name === body.name);
+      if (index < 0) return { ok: false, stdout_tail: "", error: `error: member ${body.name} is not in MEMBERS.md` };
+      if (op === "member-remove") list.splice(index, 1);
+      else list[index].integration = body.integration!;
+      return { ok: true, stdout_tail: JSON.stringify({ members: list.map(({ name, integration }) => ({ name, integration })) }), error: null };
+    });
+  }
   if (op === "member-repair") {
     if (body.dry_run) throw new Error("member repair has no preview; it rewrites only missing or stale markers");
     return slow(() => {
@@ -190,7 +201,7 @@ function projectOp(body: { root?: string; op?: string; dry_run?: boolean; member
   }
   const what = { "hooks-init": "add the guard hooks", "hooks-refresh": "refresh the guard hooks", "hooks-refresh-full": "refresh the guard hooks",
     "runtime-restore": "restore the runtime", "member-hooks": "install the member hooks" }[op];
-  if (!what) throw new Error("op must be one of: hooks-init, hooks-refresh, hooks-refresh-full, runtime-restore, doctor, members, member-add, member-hooks, member-repair");
+  if (!what) throw new Error("op must be one of: hooks-init, hooks-refresh, hooks-refresh-full, runtime-restore, doctor, members, member-add, member-remove, member-integration, member-hooks, member-repair");
   const item = members.find((entry) => entry.checkout === body.member);
   if (op === "member-hooks" && (!coordinator || !item)) throw new Error("member is not a recorded member of this project");
   const where = item?.checkout ?? project.root;

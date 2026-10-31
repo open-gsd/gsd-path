@@ -25,6 +25,11 @@ The app has its own version and `app-v<version>` tags, separate from the
   what is written, and for a new repository that the app cannot delete it.
   `members.py add` checks every rule, for example that members change only
   between milestones.
+- Each member row on the project page has an integration selector and a
+  Remove action. A mode change runs at once; Remove asks first and says
+  what it deletes (the member marker and member hooks) and what stays
+  (Path branches, tags, and finished milestones). `members.py` checks every
+  rule.
 - The Projects board lists gsd-pi (`.gsd/`) and gsd-core (`.planning/`)
   projects. A folder with more than one framework shows one card per
   framework, with a framework badge. These cards are read-only.

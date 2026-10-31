@@ -241,6 +241,13 @@ export function repoRows(p: Project): RepoRow[] {
   ];
 }
 
+/** The member-remove request and its confirm text. members.py checks every rule. */
+export const memberRemove = (name: string) => ({ body: { name }, confirm: t("setupCard.removeMemberText", { name }) });
+
+/** The member-integration request, or null when the mode stays the same. */
+export const memberIntegration = (member: { name: string; integration: string }, integration: string) =>
+  integration === member.integration ? null : { name: member.name, integration };
+
 /** The "Add member" form. `repo`, `visibility` and the browsed `parent` count only for a new GitHub repository. */
 export type MemberForm = { name: string; checkout: string; integration: string; create: boolean; repo: string; visibility: string; parent: string };
 export const MEMBER_INTEGRATIONS = ["default", "direct", "pull-request"];

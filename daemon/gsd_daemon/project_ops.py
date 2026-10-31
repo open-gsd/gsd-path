@@ -28,7 +28,7 @@ INSTALLER_OPS = {
 }
 # The installer refuses these on the old .gsd-path/runtime/ layout until it is migrated.
 HOOK_OPS = ("hooks-init", "hooks-refresh", "hooks-refresh-full")
-OPS = (*INSTALLER_OPS, "members", "member-add", "member-hooks", "member-repair")
+OPS = (*INSTALLER_OPS, "members", "member-add", "member-remove", "member-integration", "member-hooks", "member-repair")
 # Same text as MEMBER_HOOK_MARKER in install.py, which writes these hooks.
 MEMBER_HOOK_MARKER = "gsd-path member guard"
 NO_AGENT_ERROR = "No agent has GSD Path skills installed on this computer. Install the skills for an agent first."
@@ -107,6 +107,18 @@ def _member_add_args(root: str, body: dict) -> List[str]:
     return args
 
 
+def _member_change_args(root: str, op: str, body: dict) -> List[str]:
+    """`members.py remove` or `set-integration` arguments, each value in one `--flag=value` argument."""
+    keys = ("name", "integration") if op == "member-integration" else ("name",)
+    for key in keys:
+        if not isinstance(body.get(key), str) or not body[key].strip():
+            raise ValueError(f"{key} is required")
+    args = ["remove" if op == "member-remove" else "set-integration", "--repo", root, f"--name={body['name'].strip()}"]
+    if op == "member-integration":
+        args.append(f"--integration={body['integration'].strip()}")
+    return args
+
+
 def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
     preview: List[str] = ["--dry-run"] if body.get("dry_run") else []
     if op in INSTALLER_OPS:
@@ -132,10 +144,11 @@ def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
     plugin.ensure_source()
     if op == "members":
         return _members(plugin, root)
-    if op == "member-add":
+    if op in ("member-add", "member-remove", "member-integration"):
         if preview:
-            raise ValueError("adding a member has no preview; members.py add checks every rule before it writes")
-        rc, stdout, stderr = _members_helper(plugin, *_member_add_args(root, body))
+            raise ValueError(f"{op} has no preview; members.py checks every rule before it writes")
+        args = _member_add_args(root, body) if op == "member-add" else _member_change_args(root, op, body)
+        rc, stdout, stderr = _members_helper(plugin, *args)
         return {"ok": rc == 0, "stdout_tail": _tail(stdout), "error": (_tail(stderr) or _tail(stdout)) if rc else None}
     if op == "member-repair":
         if preview:
@@ -150,7 +163,9 @@ def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
 
 
 def run(handler, body: dict) -> dict:
-    """POST /api/project/op ``{root, op, dry_run?, member?, hosts?, name?, checkout?, integration?, create?, visibility?}``."""
+    """POST /api/project/op ``{root, op, dry_run?, member?, hosts?, name?, checkout?, integration?, create?, visibility?}``.
+
+    ``member-remove`` takes ``name``; ``member-integration`` takes ``name`` and ``integration``."""
     root, op = body.get("root"), body.get("op")
     if not is_path_card(handler.watcher.projects, root):
         raise ValueError("root is not a watched project")

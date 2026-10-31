@@ -54,7 +54,9 @@ the plugin and the app, and see project stats.
   the flag refuses them with a reason. Multi-repo
   actions are adding a member, member hook install, and marker repair (owner
   ruling 2026-10-31; this replaces "joining a member stays in the router").
-  `members.py add` owns every joining rule.
+  `members.py add` owns every joining rule. A member row also changes the
+  member's integration mode (`members.py set-integration`) and removes the
+  member (`members.py remove`, after a confirm).
 - **Updates.** The app updates through the Tauri updater from `latest.json`
   on the fixed `app-latest` GitHub pre-release. CI replaces that asset after
   each `app-v*` release. Tauri requires signed update artifacts; the key is a
