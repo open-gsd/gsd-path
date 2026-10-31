@@ -415,7 +415,10 @@ dispatch contract and perform steps 1–5 by hand.
      stages `.project/review/wave-N.cycleC.md` there; the
      orchestrator validates it, atomically copies it to the primary canonical
      path, and only then retires that sidecar with `retire`.
-   - `deep`: spawn two independent reviewers in parallel, each with a fresh
+   - `deep`: require an explicit user request for adversarial review recorded
+     in INTENT.md. Risk alone does not authorize it; without the request,
+     return the plan to its owner for `full` review selection before dispatch.
+     Spawn two independent reviewers in parallel, each with a fresh
      isolated context and its own verify sidecar from `isolate-verify` at the
      recorded review base (`--name wave-<N>-cycle-<C>-contract` and
      `wave-<N>-cycle-<C>-adversarial`). Supply both every task path, its
@@ -427,9 +430,10 @@ dispatch contract and perform steps 1–5 by hand.
      check every acceptance criterion,
      owned INTENT success criterion, and interface contract. The adversarial
      lens — logical task name
-     `review_wave_<wave>_cycle_<cycle>_adversarial` — tries to kill the work:
-     security holes, unhandled edge cases, failure modes, data-loss and
-     concurrency risks, and missing error handling. Each stages its own file
+     `review_wave_<wave>_cycle_<cycle>_adversarial` — exercises failure paths
+     required by the agreed contract. Every blocker needs a named unmet
+     requirement with checked evidence or missing required proof. Neither
+     lens searches for improvements or expands the contract. Each stages its own file
      in its own worktree — `.project/review/wave-N.cycleC.contract.md` and
      `.project/review/wave-N.cycleC.adversarial.md`; the orchestrator validates
      each, atomically copies both to their primary canonical paths, and only

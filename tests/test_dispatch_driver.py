@@ -1809,6 +1809,25 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(proof, receipt["steps"][0]["result"])
         self.assertEqual(sorted(entry["task"]["id"] for entry in proof["tasks"]), ["T001", "T002"])
 
+    def test_review_brief_scopes_acceptance_and_rechecks(self) -> None:
+        # The emitted brief is the public instruction interface delivered to the child.
+        options = argparse.Namespace(role_brief=Path("reviewer.md"),
+                                     template=Path("wave-review.md"), repair_evidence=None)
+        state = dict(wave=1, cycle=1, task_id="review_wave_1_cycle_1",
+                     worktree=str(self.root), branch="review", base="a" * 40,
+                     relative=".project/review/wave-1.cycle1.md")
+        for lens in (None, "contract", "adversarial"):
+            with self.subTest(lens=lens):
+                state["lens"] = lens
+                brief = dispatch_driver.review_brief(state, options, self.root, [], False, None)
+                self.assertIn("Block only on a named unmet requirement or missing required evidence.", brief)
+                self.assertIn("Do not search for improvements or expand the agreed contract.", brief)
+                self.assertNotIn("Re-check repaired failures and affected passes only.", brief)
+                retry = dispatch_driver.review_brief(
+                    state, options, self.root, [], False, self.root / "previous.md")
+                self.assertIn("Re-check repaired failures and affected passes only.", retry)
+                self.assertIn("Reuse settled evidence for unaffected criteria.", retry)
+
     def test_review_full_collects_validates_and_checkpoints_a_pass(self) -> None:
         root = self.root
         self.fixture(root)

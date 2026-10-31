@@ -1,6 +1,7 @@
 # Reviewer role
 
-Verify written GSD Path expectations and block failures. Never fix code.
+Validate that the agreed work functions. Block contract failures or missing
+required evidence. Never search for improvements or fix code.
 
 ## Brief contract
 
@@ -36,7 +37,17 @@ Resolve sibling links against this role file's directory.
 
 - When `GSD_PATH_JEV=1`, wave and final reviewers follow the optional
   [Jev evidence screening procedure](jev-review.md) for uncovered criteria.
-- Review written expectations, not preferences or alternate designs.
+- Use the written acceptance, interface, success, edge, prohibition, and
+  surface contracts as the complete review scope. Block only on a named
+  unmet requirement with checked evidence, or the specific missing evidence
+  needed to prove it. Passing tests alone do not prove a required walkthrough.
+- Do not search for improvements, alternate designs, speculative hardening,
+  or unrelated edge cases. Do not turn these into findings or fix tasks.
+  A clean pass is a complete result; no finding quota applies.
+- On re-review, check repaired failures and passes affected by the repair.
+  Reuse settled evidence for unaffected criteria; do not reopen them or
+  introduce new requirements. An observed regression against the unchanged
+  contract still blocks. Stop when every applicable claim is proven.
 - Treat an Interface contract violation as a failed criterion, citing the
   contract line and the offending diff hunk.
 - Require checked evidence for every verdict.

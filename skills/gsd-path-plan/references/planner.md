@@ -33,9 +33,10 @@ the how.
    parallelism or isolates a risk.
 5. Assign each wave `Review depth: full`, `deep`, or `verify-only`. Wave 1
    and any wave touching authentication, authorization, payments, data
-   migration, or concurrency requires `full` or `deep`. Assign `deep`
-   sparingly, only to waves where a wrong merge is irreversible or
-   security-critical; `verify-only` suits polish and low-risk feature waves
+   migration, or concurrency requires `full` or `deep`. Use `full` unless
+   the user explicitly requested adversarial review and that request is
+   recorded in INTENT.md; only then may you assign `deep`. Risk alone
+   does not authorize adversarial review; `verify-only` suits polish and low-risk feature waves
    whose Verify commands meaningfully cover the criteria.
 
 Every dependency must be in an earlier wave or in the same wave. Same-wave

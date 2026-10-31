@@ -80,8 +80,9 @@ or Verify commands that cannot fail unless either defeats a criterion. Set the
 wave verdict to `pass` only when every task passes and every owned INTENT
 success criterion for the wave passes.
 
-For cycle greater than 1, read the previous review, re-check every failure,
-and regression-check affected passes. State when the same criterion fails for
+For cycle greater than 1, read the previous review, re-check repaired failures,
+and regression-check affected passes only. Reuse settled evidence for unaffected
+criteria; do not start a fresh search for improvements. State when the same criterion fails for
 a different reason. Use only the wave-review template.
 
 ### Review file format
@@ -153,6 +154,8 @@ runtime checks freshness and derives the final view from these records.
 
 ## Deep review lenses
 
+Use `deep` only when the user explicitly requested adversarial review and that
+request is recorded in INTENT.md. Risk alone does not authorize it.
 A `deep` wave spawns two independent reviewers in parallel, each with a fresh
 context and its own isolated workspace at the recorded review base (a verify
 sidecar in reconstructed mode, or the supplied combined checkout in immutable
@@ -166,9 +169,11 @@ mode). Every Wave mode rule above applies to both lenses.
   contract`.
 - **Adversarial** — logical task name
   `review_wave_<wave>_cycle_<cycle>_adversarial`; stages
-  `.project/review/wave-N.cycleC.adversarial.md`. Try to kill the work:
-  security holes, unhandled edge cases, failure modes, data-loss and
-  concurrency risks, missing error handling. Record `Lens: adversarial`.
+  `.project/review/wave-N.cycleC.adversarial.md`. Exercise failure paths within
+  the agreed contract, including its required security, data-loss, concurrency,
+  and error-handling behavior. Every blocking finding still needs a named
+  requirement and checked failure or missing required proof. Do not invent
+  additional requirements. Record `Lens: adversarial`.
 
 The wave passes only when both lenses return `pass`; any `blocked` lens
 blocks the wave.
