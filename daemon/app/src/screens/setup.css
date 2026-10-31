@@ -57,3 +57,7 @@ button.step:disabled{cursor:default}
 .member-add input.mono{font-family:var(--mono);font-size:12.5px}
 .member-add-new{display:flex;align-items:center;gap:8px;font-size:13px;grid-column:1/-1}
 .member-add .actions{grid-column:1/-1;display:flex;gap:8px}
+.member-browse{display:flex;gap:6px;min-width:0}
+.member-add .member-browse input{flex:1;min-width:0;width:auto}
+.member-add>*{min-width:0}
+.member-browse .btn{flex:none}

@@ -259,3 +259,13 @@ export function memberAdd(form: MemberForm): { body: Record<string, string>; con
   return { body: { ...body, create: repo, visibility: form.visibility },
     confirm: t("setupCard.addCreateText", { name, checkout, repo, visibility: form.visibility }) };
 }
+
+/** The form fields a picked folder fills. For a new repository the pick is the parent folder: the clone
+ *  goes into a folder named after the repository (or the member). An empty member name takes the folder name. */
+export function browsedCheckout(form: MemberForm, picked: string): Partial<MemberForm> {
+  const leaf = form.create ? (form.repo.trim().split("/")[1] || form.name.trim()) : "";
+  const checkout = leaf ? picked.replace(/[\\/]+$/, "") + "/" + leaf : picked;
+  // A picked parent with no clone folder yet names nothing.
+  const folder = form.create && !leaf ? "" : checkout.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+  return form.name.trim() || !folder ? { checkout } : { checkout, name: folder };
+}
