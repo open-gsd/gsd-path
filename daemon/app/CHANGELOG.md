@@ -7,6 +7,10 @@ The app has its own version and `app-v<version>` tags, separate from the
 ## [Unreleased]
 
 ### Added
+- A multi-repo project page has a "Repositories" section for the current
+  milestone: tasks done per repository, each member's locked branch and
+  base, and during ship each member's close state (Closing, or Integrated
+  with its merge and tag). It is read-only.
 - The Projects board lists gsd-pi (`.gsd/`) and gsd-core (`.planning/`)
   projects. A folder with more than one framework shows one card per
   framework, with a framework badge. These cards are read-only.

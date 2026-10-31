@@ -31,7 +31,11 @@ export type Project = {
   project?: string | null; repository?: string | null; project_root?: string | null; worktree_root?: string | null;
   milestone?: string | null; phase?: string | null; status?: string | null; branch?: string | null;
   integration?: string | null;
-  tasks?: { id: string; title: string | null; wave: number | null; status: string | null; files: string[] }[];
+  /** `repo` names the member repository a multi-repo task changes; null or missing means this project. */
+  tasks?: { id: string; title: string | null; wave: number | null; status: string | null; files: string[]; repo?: string | null }[];
+  /** Multi-repo: this milestone's member lock (null when no member is locked) and its ship close rows. Older daemons omit both. */
+  member_lock?: { name: string; branch: string; base: string }[] | null;
+  member_close?: { name: string; status: string; merge?: string | null; tag?: string | null }[];
   tasks_done?: number; tasks_total?: number; current_wave?: number | null; waves?: Record<string, string>;
   roadmap_milestones?: Milestone[];
   next_milestone?: { milestone?: string | null; status?: string | null; phase?: string | null } | null;

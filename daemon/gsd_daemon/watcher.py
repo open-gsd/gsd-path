@@ -36,18 +36,13 @@ class Watcher:
         current: Dict[str, ProjectStatus] = {}
         for root, flavor in pairs:
             key = flavors.project_id(root, flavor)
-            # The project install decides the workflow status and changes
-            # without touching .project, so it is part of the cache key.
-            mtime = (probe.tree_mtime(Path(root) / ".project"),
-                     probe.tree_mtime(Path(root) / ".gsd-path" / "status_runtime.py"),
-                     probe.tree_mtime(Path(root) / ".gsd-path" / "runtime.json")) if flavor == PATH_FLAVOR \
-                else (probe.tree_mtime(flavors.state_dir(root, flavor), flavors.SKIP[flavor]),)
             old = self.projects.get(key)
+            mtime = self._cache_key(root, flavor, old)
             if old is not None and any(mtime) and self._mtimes.get(key) == mtime:
                 current[key] = old
                 continue
             status = self._probe(root, flavor)
-            self._mtimes[key] = mtime
+            self._mtimes[key] = self._cache_key(root, flavor, status)
             current[key] = status
             if old is None:
                 events.append({
@@ -75,6 +70,19 @@ class Watcher:
                 status.spend = previous.spend if previous is not None else None
         self.projects = current
         return events
+
+    @staticmethod
+    def _cache_key(root: str, flavor: str, status: Optional[ProjectStatus]) -> Tuple[Optional[float], ...]:
+        if flavor != PATH_FLAVOR:
+            return (probe.tree_mtime(flavors.state_dir(root, flavor), flavors.SKIP[flavor]),)
+        # The project install decides the workflow status and changes without
+        # touching .project, and ship writes the member-close journal in the Git
+        # common dir, so both are part of the cache key.
+        journal = status.member_close_journal if status is not None else None
+        return (probe.tree_mtime(Path(root) / ".project"),
+                probe.tree_mtime(Path(root) / ".gsd-path" / "status_runtime.py"),
+                probe.tree_mtime(Path(root) / ".gsd-path" / "runtime.json"),
+                probe.tree_mtime(Path(journal)) if journal else None)
 
     def _attach_spend(self, current: Dict[str, ProjectStatus]) -> None:
         """Usage from host session logs changes without touching .project, so
