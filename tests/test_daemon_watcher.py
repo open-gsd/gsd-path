@@ -155,6 +155,26 @@ class WatcherTests(unittest.TestCase):
         watcher.poll_once()
         self.assertEqual(calls, [str(self.project), str(self.project)])
 
+    def test_reprobes_after_a_write_during_the_probe(self) -> None:
+        from unittest import mock
+        from gsd_daemon import probe
+        make_project(self.project)
+        real_probe = probe.probe_project
+        task = self.project / ".project" / "tasks" / "T002-two.md"
+
+        def probe_then_write(root: str):
+            status = real_probe(root)
+            touch(self.project)
+            task.write_bytes(TASK.format(task_id="T002", status="done").encode("utf-8"))
+            return status
+
+        watcher = self.watcher()
+        with mock.patch.object(probe, "probe_project", side_effect=probe_then_write):
+            watcher.poll_once(scan_sessions=False)
+        stale = watcher.projects[str(self.project)]
+        watcher.poll_once(scan_sessions=False)
+        self.assertIsNot(watcher.projects[str(self.project)], stale)
+
     def test_reprobes_when_ship_writes_the_member_close_journal(self) -> None:
         # The journal lives in the Git common dir and ship never touches .project for it.
         import json

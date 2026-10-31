@@ -42,7 +42,7 @@ class Watcher:
                 current[key] = old
                 continue
             status = self._probe(root, flavor)
-            self._mtimes[key] = self._cache_key(root, flavor, status)
+            self._mtimes[key] = mtime
             current[key] = status
             if old is None:
                 events.append({
