@@ -16,6 +16,9 @@ test-only changes are not listed; the Git history has them.
 ### Added
 - Remove a member repository with `members.py remove`, and change a member's integration mode with `members.py set-integration`.
 
+### Fixed
+- Link the installed `WORKFLOW.md` to GitHub so its links resolve in consuming projects. Existing installs keep their copy; see [UPDATE.md](UPDATE.md) to adopt it.
+
 ## [1.7.1] - 2026-10-31
 
 ### Changed

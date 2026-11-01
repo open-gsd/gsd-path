@@ -80,6 +80,10 @@ node scripts/install.mjs --claude --project "$(pwd)" --hooks
 
 [HOOKS.md](HOOKS.md)
 
+Install and commit the project files before moving to step 3 — the inspect
+phase freezes the docs inventory when it first runs, and files installed
+afterwards miss the first audit.
+
 ---
 
 ## 3. Invoke the router
