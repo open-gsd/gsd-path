@@ -18,6 +18,7 @@ test-only changes are not listed; the Git history has them.
 
 ### Fixed
 - Link the installed `WORKFLOW.md` to GitHub so its links resolve in consuming projects. Existing installs keep their copy; see [UPDATE.md](UPDATE.md) to adopt it.
+- Land and recover tasks that declare non-ASCII paths, such as `docs/4-决策/x.md`, without a `core.quotePath` workaround.
 
 ## [1.7.1] - 2026-10-31
 

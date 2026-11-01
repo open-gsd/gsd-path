@@ -1527,6 +1527,33 @@ class IsolationTests(unittest.TestCase):
                 status_before,
             )
 
+    def test_land_accepts_declared_non_ascii_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            # The reporter's default config: git C-quotes non-ASCII paths in
+            # listings unless told otherwise (#545).
+            git(repo, "config", "core.quotepath", "true")
+            declared = "docs/4-决策/0007-notes.md"
+            task = TASK_FILE.replace("  - src/app.py\n", f"  - {declared}\n")
+            self.write(repo, ".project/tasks/T001.md", task)
+            git(repo, "commit", "-q", "-am", "declare non-ascii file")
+            base = git(repo, "rev-parse", "HEAD")
+            isolation.isolate_task(repo, base, "T001", 1)
+            self.write(repo, declared, "notes\n")
+            isolation.land(
+                repo,
+                repo,
+                base,
+                "T001",
+                "add greeting",
+                ".project/tasks/T001.md",
+                [declared],
+            )
+            self.assertIn(declared, git(repo, "log", "-1", "--format=%b"))
+            self.assertIn(declared, isolation.committed_paths_since(repo, base))
+
     def test_allowed_changes_accept_files_under_a_declared_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
