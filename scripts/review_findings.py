@@ -35,7 +35,6 @@ DEFAULT_PROJECT_DIR = ".project"
 DEFAULT_MAX_REVIEW_CYCLES = 3
 CONFIG_KEYS = ("max_review_cycles", "wave_budget", "review_panel", "finding_skeptics")
 CONFIG_LINE = re.compile(r"^-\s*(?P<key>[A-Za-z0-9_-]+):\s*(?P<value>.*?)\s*$")
-COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 PLAN_WAVE_HEADING = re.compile(r"(?m)^## Wave (?P<wave>\d+) — (?P<title>.+)$")
 TASK_FILE_NAME = re.compile(r"^(?P<id>T\d{3})-[a-z0-9][a-z0-9-]*\.md$")
 WAVE_TASK_HEADING = re.compile(
@@ -60,7 +59,8 @@ def _normalize(text: str) -> str:
 
 
 def _strip_comments(text: str) -> str:
-    return COMMENT_PATTERN.sub("", text)
+    # Code-span-preserving, shared with every criteria comparison (#548).
+    return _common.strip_html_comments(text)
 
 
 def _section(text: str, heading: str) -> Optional[str]:

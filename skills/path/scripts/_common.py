@@ -284,6 +284,34 @@ def quotes_criterion(quote: str, criterion: str) -> bool:
     return " ".join(quote.split()) in {" ".join(form.split()) for form in forms}
 
 
+_COMMENT_OR_CODE_SPAN = re.compile(
+    r"(?<!`)(?<!\\)(`+)(?!`)(?:(?!\1)[^\n])*?\1|<!--.*?-->", re.DOTALL
+)
+
+
+def strip_html_comments(text: str) -> str:
+    """Remove HTML comments, keeping inline code spans verbatim.
+
+    A criterion may quote a Path marker comment as inline code; the naive
+    ``<!--.*?-->`` regex ate it on whichever side was stripped, so gates
+    that stripped one side and read the other raw compared different
+    texts (#548). One span-preserving stripper on every side keeps
+    verbatim quotes equal everywhere; a comment outside a code span
+    still strips. An opener never starts inside a longer backtick run or
+    behind an escaped backtick, matching CommonMark's span openers.
+    """
+    return _COMMENT_OR_CODE_SPAN.sub(
+        lambda match: match.group(0) if match.group(1) else "", text
+    )
+
+
+def strip_code_spans(text: str) -> str:
+    """Remove inline code spans, keeping HTML comments intact."""
+    return _COMMENT_OR_CODE_SPAN.sub(
+        lambda match: "" if match.group(1) else match.group(0), text
+    )
+
+
 def quoted_criterion(item: str, criteria: Sequence[str]) -> Optional[Tuple[int, int]]:
     """Index of the criterion quoted at the start of `item`, and where the quote ends.
 

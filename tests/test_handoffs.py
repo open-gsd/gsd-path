@@ -2824,6 +2824,71 @@ Tasks reviewed: 2
                 ):
                     validate()
 
+    def test_reviews_bind_criterion_quoting_marker_comments_as_code(self) -> None:
+        # A criterion may quote a Path marker comment as inline code; the
+        # comment is text, not markup, so the verbatim quote binds (#548).
+        criterion = (
+            "`AGENTS.md` points outside `<!-- gsd-path:begin -->` to "
+            "`<!-- gsd-path:end -->`."
+        )
+        for phase in ("wave", "final"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_handoff(root)
+                if phase == "wave":
+                    relative = self.write_wave_review(root)
+                    validate = lambda: check_handoffs.validate_wave(root, review=relative)
+                else:
+                    self.write_state(root, "ship", "active")
+                    self.write_final_review(root)
+                    relative = ".project/review/FINAL.md"
+                    validate = lambda: check_handoffs.validate_final(root)
+                intent = root / ".project/intent/INTENT.md"
+                intent.write_bytes(intent.read_text(encoding="utf-8").replace(
+                    "1. The demo command prints hello.",
+                    f"1. {criterion}",
+                ).encode("utf-8"))
+                review = root / relative
+                original = review.read_text(encoding="utf-8")
+                review.write_bytes(original.replace(
+                    "### SC1 — The demo command prints hello.",
+                    f"### SC1 — {criterion}",
+                ).encode("utf-8"))
+                self.assertEqual(validate()["verdict"], "pass")
+                # A heading that drops the marker comments quotes a different
+                # criterion and no longer binds.
+                stripped = criterion.replace("<!-- gsd-path:begin -->", "").replace(
+                    "<!-- gsd-path:end -->", ""
+                )
+                review.write_bytes(original.replace(
+                    "### SC1 — The demo command prints hello.",
+                    f"### SC1 — {stripped}",
+                ).encode("utf-8"))
+                with self.assertRaisesRegex(
+                    check_handoffs.HandoffError, "SC1 heading text differs from INTENT.md"
+                ):
+                    validate()
+
+    def test_comment_stripper_keeps_code_spans_within_one_line(self) -> None:
+        from scripts._common import strip_code_spans, strip_html_comments
+
+        # A stray backtick does not pair with one on a later line, so the
+        # comment between them still strips and a placeholder stays visible.
+        stray = "1. Don't use ` here.\n<!-- hint: write criteria -->\n2. Run `make`.\n"
+        self.assertEqual(
+            strip_html_comments(stray), "1. Don't use ` here.\n\n2. Run `make`.\n"
+        )
+        self.assertIn("<placeholder>", strip_code_spans("a ` b\n<placeholder>\n`c`"))
+        self.assertEqual(
+            strip_html_comments("text `<!-- x -->` more"), "text `<!-- x -->` more"
+        )
+        issue = (
+            "`AGENTS.md` outside `<!-- gsd-path:begin -->` to "
+            "`<!-- gsd-path:end -->`."
+        )
+        self.assertEqual(strip_html_comments(issue), issue)
+        self.assertEqual(strip_html_comments("a <!-- x --> b"), "a  b")
+
     def test_reviews_bind_intent_criterion_with_sub_bullet_continuations(self) -> None:
         joined = (
             "At a store with a due review: - The board lists the store. "
