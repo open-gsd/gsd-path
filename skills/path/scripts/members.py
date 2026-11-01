@@ -95,6 +95,13 @@ def _remote_identity(remote: str) -> Optional[tuple[str, str]]:
     return match.group(1).lower(), match.group(2).removesuffix(".git").lower()
 
 
+def _is_git_root(checkout: Path) -> bool:
+    if not checkout.is_dir() or checkout.is_symlink():
+        return False
+    result = _common.run_git(checkout, "rev-parse", "--show-toplevel")
+    return result.returncode == 0 and Path(result.stdout.strip()).resolve() == checkout.resolve()
+
+
 def _common_dir(checkout: Path) -> Path:
     return Path(_git(checkout, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
 
@@ -713,8 +720,8 @@ def remove_member(repo: Path, name: str) -> tuple[list[dict[str, str]], list[str
         raise MembersError(f"task briefs name member {name}; change those tasks before removing it")
     checkout = Path(listed.pop(index)["checkout"])
     cleaned: list[str] = []
-    # A checkout that is gone has nothing to clean.
-    if checkout.is_dir() and not checkout.is_symlink():
+    # A checkout that is gone, or is no longer its own Git repository, has nothing to clean.
+    if _is_git_root(checkout):
         marker_path = _marker_path(checkout)
         marker = _read_marker(marker_path)
         # A marker of another coordinator also owns the hooks: leave both.

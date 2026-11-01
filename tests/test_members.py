@@ -715,6 +715,17 @@ class MemberTests(unittest.TestCase):
         self.assertEqual(removed.returncode, 0, removed.stderr)
         self.assertEqual(json.loads(removed.stdout), {"members": [], "cleaned": []})
 
+    def test_remove_works_when_the_member_checkout_is_no_longer_a_git_repository(self) -> None:
+        web = self.joined("web")
+        _common.rmtree_force(web / ".git")
+        git(self.root, "init", "-q", "-b", "main")
+        parent_hook = self.root / ".git" / "hooks" / "pre-commit"
+        parent_hook.write_bytes(f"#!/bin/sh\n# {members.MEMBER_HOOK_MARKER}\n".encode("utf-8"))
+        removed = self.run_members("remove", "--name", "web")
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertEqual(json.loads(removed.stdout), {"members": [], "cleaned": []})
+        self.assertTrue(parent_hook.is_file())
+
     def test_remove_leaves_the_marker_of_another_coordinator(self) -> None:
         web = self.joined("web")
         foreign = {"schema": "gsd-path/member/v1", "coordinator": str(self.root / "other"),
