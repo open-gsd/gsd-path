@@ -1466,6 +1466,153 @@ def _strictly_inside(candidate, root):
         return any(_same_existing_path(ancestor, root) for ancestor in candidate.parents)
 
 
+TASK_BRANCH_PREFIX = "gsd-path-task/"
+TASK_AUTHORIZATION_PREFIX = "refs/gsd-path/task-authorizations/"
+TASK_ID_SHAPE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
+
+
+def _read_only_git(directory, *arguments):
+    """Read-only git lookup for guard decisions; callers handle failure."""
+    return subprocess.run(
+        ["git", "-c", "core.quotepath=false", "-C", str(directory), *arguments],
+        capture_output=True, encoding="utf-8", errors="replace", check=False,
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+    )
+
+
+def _worktree_entries(checkout):
+    """(path, branch) for every worktree registered in checkout's repo."""
+    listing = _read_only_git(checkout, "worktree", "list", "--porcelain")
+    if listing.returncode != 0:
+        return None
+    entries = []
+    for block in listing.stdout.split("\n\n"):
+        path = None
+        branch = None
+        for line in block.splitlines():
+            if line.startswith("worktree "):
+                path = line[len("worktree "):]
+            elif line.startswith("branch "):
+                branch = line[len("branch "):]
+        if path is not None:
+            entries.append((Path(path).resolve(strict=False), branch))
+    return entries
+
+
+def _task_id_for(checkout, entries):
+    """The task id when a registered worktree sits on gsd-path-task/<id>."""
+    for path, branch in entries:
+        if path != checkout:
+            continue
+        if branch is None or not branch.startswith("refs/heads/" + TASK_BRANCH_PREFIX):
+            return None
+        task_id = branch[len("refs/heads/" + TASK_BRANCH_PREFIX):]
+        return task_id if TASK_ID_SHAPE.fullmatch(task_id) else None
+    return None
+
+
+def _task_is_authorized(checkout, task_id):
+    """An active dispatch authorization exists for the task.
+
+    refs/gsd-path/task-authorizations/<id> is written only by activation
+    and removed by deactivation and retire; agent writes under
+    refs/gsd-path/ are denied (#480), so the ref is the one acceptance
+    input a session cannot forge.
+    """
+    verified = _read_only_git(
+        checkout, "rev-parse", "--verify", "--quiet", TASK_AUTHORIZATION_PREFIX + task_id
+    )
+    return verified.returncode == 0
+
+
+def _task_placement_matches(checkout, common, task_id, entries, roots):
+    """The worktree occupies one of the pipeline's task/<id> slots.
+
+    Three legitimate layouts exist: the pinned workspace receipt's
+    root/task/<id>, the legacy <primary>.gsd-path/task/<id> beside a
+    registered worktree of the same repository (worktree_path prefers a
+    registered one), and the unpinned workspace shape
+    <root>/<id1>/<id2>/task/<id>.
+    """
+    receipts = common / "gsd-path" / "workspaces"
+    if os.path.lexists(receipts) and not is_link_like(receipts) and receipts.is_dir():
+        try:
+            with os.scandir(receipts) as items:
+                names = sorted(item.name for item in items if item.name.endswith(".json"))
+        except OSError:
+            names = None
+        if names is not None:
+            for name in names:
+                try:
+                    data = json.loads((receipts / name).read_text(encoding="utf-8"))
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(data, dict) or not isinstance(data.get("root"), str):
+                    continue
+                root = Path(data["root"])
+                if not root.is_absolute():
+                    continue
+                if checkout == (root / "task" / task_id).resolve(strict=False):
+                    return True
+    for path, _branch in entries:
+        legacy = path.parent / f"{path.name}.gsd-path" / "task" / task_id
+        if checkout == legacy.resolve(strict=False):
+            return True
+    if checkout.parent.name == "task" and any(
+        _strictly_inside(checkout.parent.parent, root) for root in roots
+    ):
+        return True
+    return False
+
+
+def _authorized_task_checkout(candidate, commons, roots):
+    """The actively-dispatched task worktree owning a candidate, or None.
+
+    A parallel isolate lives under a state root the hook's working
+    directories never name, so the checkout is resolved from the operand
+    itself (#546). Branch names and worktree registration are agent-
+    creatable, so they are necessary but not sufficient: acceptance also
+    requires the checkout to belong to one of the session's own
+    repositories — whose .git trees the guard protects from shell
+    writes, making the authorization ref and workspace receipts under
+    them unforgeable — plus a pipeline task placement and strict
+    containment. Symlinked path components refuse rather than resolve
+    through the link.
+    """
+    if _path_has_symlink_component(candidate):
+        return None
+    probe = candidate if os.path.isdir(candidate) else candidate.parent
+    while not os.path.lexists(probe) and probe.parent != probe:
+        probe = probe.parent
+    result = _read_only_git(probe, "rev-parse", "--show-toplevel", "--git-common-dir")
+    lines = result.stdout.splitlines()
+    if result.returncode != 0 or len(lines) != 2:
+        return None
+    checkout = Path(lines[0]).resolve(strict=False)
+    common = Path(lines[1])
+    if not common.is_absolute():
+        common = probe / common
+    common = common.resolve(strict=False)
+    if common not in commons:
+        # The session repositories' .git trees are what the guard protects
+        # from shell writes, so refs and receipts under them are the
+        # unforgeable anchor. Trust in `commons` is the working-directories
+        # trust every existing carve-out shares: a host that lets a session
+        # choose its tool working directory chooses this trust root too.
+        return None
+    entries = _worktree_entries(checkout)
+    if entries is None:
+        return None
+    task_id = _task_id_for(checkout, entries)
+    if task_id is None:
+        return None
+    if not _task_is_authorized(checkout, task_id):
+        return None
+    if not _task_placement_matches(checkout, common, task_id, entries, roots):
+        return None
+    return checkout
+
+
 def destructive_state_root_reason(operands, working_directories):
     """Why a destructive operand is pipeline state, or None when outside it.
 
@@ -1495,16 +1642,32 @@ def destructive_state_root_reason(operands, working_directories):
         roots = _workspace_roots_for_commons(commons)
     except ValueError as error:
         return f"pipeline workspace state cannot be resolved: {error}"
+    authorized = set()
     for operand in operands:
         for candidate in target_paths(operand, directories, Path(os.getcwd())):
             for root in roots:
                 # A managed worktree under a state root is the agent's own
                 # checkout; deletes inside it are ordinary product work.
-                if _deletion_overlaps(candidate, root) and not any(
+                # A cached acceptance never covers a lexical candidate with
+                # a symlinked component: each such candidate is re-judged.
+                covered = any(
                     _strictly_inside(candidate, checkout) and _strictly_inside(checkout, root)
                     for checkout in checkouts
-                ):
-                    return f"destructive target is pipeline state: {operand}"
+                ) or (
+                    not _path_has_symlink_component(candidate)
+                    and any(
+                        _strictly_inside(candidate, checkout)
+                        and _strictly_inside(checkout, root)
+                        for checkout in authorized
+                    )
+                )
+                if _deletion_overlaps(candidate, root) and not covered:
+                    owner = _authorized_task_checkout(candidate, commons, roots)
+                    if owner is None or not (
+                        _strictly_inside(candidate, owner) and _strictly_inside(owner, root)
+                    ):
+                        return f"destructive target is pipeline state: {operand}"
+                    authorized.add(owner)
     return None
 
 
@@ -1566,10 +1729,13 @@ def literal_path(operand):
     if len(operand) >= 2 and operand[0] in "\"'" and operand[-1] == operand[0]:
         operand = operand[1:-1]
     # A space is safe here: the operand is one shlex unit, so it cannot carry a
-    # second word; injection-relevant characters stay excluded.
-    pattern = r"[A-Za-z0-9._/ -]+"
+    # second word; injection-relevant characters stay excluded. \w keeps the
+    # class to Unicode letters, digits, and underscore — quotes, shell
+    # metacharacters, globs, and control characters stay refused, while a
+    # literal path with non-ASCII letters is usable (#546).
+    pattern = r"[\w./ -]+"
     if os.name == "nt":
-        pattern = r"(?:[A-Za-z]:(?=[/\\]))?[A-Za-z0-9._/\\ -]+"
+        pattern = r"(?:[A-Za-z]:(?=[/\\]))?[\w./\\ -]+"
     return operand if re.fullmatch(pattern, operand) is not None else None
 
 
