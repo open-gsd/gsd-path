@@ -706,7 +706,9 @@ def _coordinator_for_member_markers(root: Path, name: str) -> Path:
 
 
 def _strip_comments(text: str) -> str:
-    return COMMENT_PATTERN.sub("", text)
+    # Code-span-preserving: criteria and reviews may quote marker comments
+    # as inline code, and every comparison side must keep them (#548).
+    return _common.strip_html_comments(text)
 
 
 def _numbered_entries(section: str, *, continuations: bool = False) -> List[Tuple[int, str]]:
@@ -1852,7 +1854,8 @@ def validate_decide_artifacts(
     planner = _section(text, "For the planner")
     for field in ("Wave-1 blockers", "Walking skeleton", "Pitfalls → tasks"):
         _named_field(planner, field, "SYNTHESIS.md For the planner")
-    if re.search(r"<[^>\n]+>", _strip_comments(text)):
+    # A backticked marker mention is text, not a placeholder (#548).
+    if re.search(r"<[^>\n]+>", _common.strip_code_spans(_strip_comments(text))):
         raise HandoffError("SYNTHESIS.md still contains a placeholder")
     return {"phase": "decide", "synthesis": relative, "decisions": decisions}
 
@@ -1965,7 +1968,8 @@ def validate_roadmap(
     text = _read(root, relative)
     if re.search(r"(?m)^## Wave |^\|\s*Task\s*\||^Files:\s*", text):
         raise HandoffError("ROADMAP.md must not contain waves, tasks, or file lists")
-    if re.search(r"<[^>\n]+>", _strip_comments(text)):
+    # A backticked marker mention is text, not a placeholder (#548).
+    if re.search(r"<[^>\n]+>", _common.strip_code_spans(_strip_comments(text))):
         raise HandoffError("ROADMAP.md still contains a placeholder")
 
     blocks = _milestone_blocks(text)

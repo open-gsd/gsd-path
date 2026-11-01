@@ -57,7 +57,6 @@ FIELD_PATTERN = _common.FIELD_PATTERN
 INLINE_LIST_PATTERN = _common.INLINE_LIST_PATTERN
 LIST_ITEM_PATTERN = _common.LIST_ITEM_PATTERN
 HEADING_PATTERN = re.compile(r"(?m)^## (?P<name>.+?)\s*$")
-COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 BACKTICK_PATTERN = re.compile(r"`([^`\n]+)`")
 PATH_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9._~/-]+")
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
@@ -233,7 +232,7 @@ def _sections(text: str) -> Dict[str, str]:
 
 
 def _clean(body: str) -> str:
-    return COMMENT_PATTERN.sub("", body).strip()
+    return _common.strip_html_comments(body).strip()
 
 
 def _slash_token_shape(token: str) -> bool:
@@ -291,7 +290,7 @@ def _prose_tokens(
     base: str,
     task: Path,
 ) -> List[str]:
-    cleaned = COMMENT_PATTERN.sub("", body)
+    cleaned = _common.strip_html_comments(body)
     tokens: List[str] = []
     for match in BACKTICK_PATTERN.finditer(cleaned):
         candidate = match.group(1).strip()

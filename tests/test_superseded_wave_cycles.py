@@ -88,6 +88,36 @@ class ValidateWaveReviewSupersededTest(unittest.TestCase):
                 self.path, self.TASKS, self.CRITERIA, "full"
             )
 
+    def test_verbatim_heading_keeps_marker_comments_inside_code_spans(self) -> None:
+        # A criterion quoting a Path marker comment as inline code is text,
+        # not markup: the verbatim heading binds at completion too (#548).
+        criteria = [
+            (
+                "SC1",
+                "`AGENTS.md` points outside `<!-- gsd-path:begin -->` to "
+                "`<!-- gsd-path:end -->`.",
+            )
+        ]
+        self.write(
+            self.review(
+                wave_verdict="pass",
+                task_verdict="pass",
+                coverage_heading=(
+                    "### SC1 — `AGENTS.md` points outside `<!-- gsd-path:begin -->` "
+                    "to `<!-- gsd-path:end -->`.: pass"
+                ),
+                marker="✅",
+            )
+        )
+        self.assertEqual(
+            list(
+                discussion_validate.validate_wave_review(
+                    self.path, self.TASKS, criteria, "full"
+                )
+            ),
+            ["pass"],
+        )
+
     def test_superseded_cycle_still_checks_task_headings(self) -> None:
         self.write(
             self.review(
