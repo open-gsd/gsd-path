@@ -249,16 +249,9 @@ ANCHORED_STATE_CREATE_SUPPORTED = (
     and os.link in getattr(os, "supports_dir_fd", ())
     and os.link in getattr(os, "supports_follow_symlinks", ())
 )
-GIT_OVERRIDE_VARS = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_COMMON_DIR",
-    "GIT_PREFIX",
-    "GIT_NAMESPACE",
-)
+# One definition lives in _common (#555); project detection keeps its stricter
+# evidence posture on top of it.
+GIT_OVERRIDE_VARS = _common.GIT_DISCOVERY_VARS
 FRONTMATTER_FIELD_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$")
 STATE_TEMP_NAME = ".STATE.md.gsd-path-tmp"
 
