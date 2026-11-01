@@ -3499,6 +3499,61 @@ def parser() -> argparse.ArgumentParser:
     return argument_parser
 
 
+def _state_phase(project: Path) -> Optional[str]:
+    """The frontmatter phase of an open milestone's STATE.md, if any (#551)."""
+    state = project / ".project" / "STATE.md"
+    try:
+        text = state.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    match = re.search(r"(?m)^phase:\s*(.+)$", text)
+    return match.group(1).strip().strip('"') if match else None
+
+
+def runtime_upgrade_preflight(source_root: Path, project: Path) -> List[str]:
+    """Warnings from running the incoming runtime's handoff checks (#551).
+
+    Read-only gates from the source being installed run against the open
+    milestone's existing artifacts; failures warn, never refuse — an upgrade
+    is the owner's call. Each warning names the check and its file, and a
+    Corrections-format failure names the migrate-corrections renumbering.
+    """
+    phase = _state_phase(project)
+    if phase is None:
+        return []
+    checks: List[tuple] = []
+    if (project / ".project" / "intent" / "INTENT.md").is_file():
+        checks.append(("intent", ("intent",)))
+    if phase == "plan":
+        checks.append(("plan", ("plan",)))
+    elif phase == "build":
+        reviews = sorted((project / ".project" / "review").glob("wave-*.cycle*.md")) \
+            if (project / ".project" / "review").is_dir() else []
+        checks.extend((f"wave ({review.name})", ("wave", "--review", review.relative_to(project).as_posix()))
+                      for review in reviews)
+    elif phase == "ship":
+        checks.append(("final", ("final",)))
+    warnings = []
+    for label, arguments in checks:
+        completed = subprocess.run(
+            [sys.executable, "-B", str(source_root / "scripts" / "check_handoffs.py"),
+             *arguments, "--repo", str(project)],
+            capture_output=True, encoding="utf-8", errors="replace",
+        )
+        if completed.returncode == 0:
+            continue
+        detail = (completed.stderr or completed.stdout).strip().splitlines()
+        message = detail[-1] if detail else "failed"
+        warnings.append(f"preflight: {label} failed under the incoming runtime: {message}")
+        if "Corrections entry is not numbered" in message:
+            warnings.append(
+                "preflight: run the migrate-corrections renumbering first — number "
+                "`- <date>:` entries under ## Corrections as "
+                "`- C<n> <date>: <ruling>` in file order; recovery gates accept "
+                "the migrated form (#551)")
+    return warnings
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     argument_parser = parser()
     arguments = argument_parser.parse_args(argv)
@@ -3555,6 +3610,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             argument_parser.error(f"--runtime-{runtime_action} requires --project")
         try:
             _validate_project_git_root(project)
+            if runtime_action == "upgrade":
+                # stdout, not stderr: the daemon surfaces the installer's
+                # stdout tail on success, and the upgrade still succeeds (#551).
+                for warning in runtime_upgrade_preflight(source_root, project):
+                    print(warning)
             locks, created = ([], []) if arguments.dry_run else _acquire_install_locks([project / HOOKS_DIRECTORY])
             try:
                 pin = runtime_store.operate(source_root, project, runtime_action,

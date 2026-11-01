@@ -826,7 +826,11 @@ def _corrections(intent: str) -> Dict[str, str]:
             raise HandoffError(
                 f"INTENT.md Corrections entry is not numbered: {line.strip()!r}; "
                 "renumber entries as `- C1 <YYYY-MM-DD>: <ruling>` — a correction "
-                "needs citable identity (#477)"
+                "needs citable identity (#477). An INTENT approved before the "
+                "numbered form may take the migrate-corrections renumbering: "
+                "number `- <date>:` entries under ## Corrections as "
+                "`- C<n> <date>: <ruling>` in file order; recovery gates accept "
+                "the migrated form (#551)"
             )
         if match.group("id") in corrections:
             raise HandoffError(
