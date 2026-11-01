@@ -302,6 +302,34 @@ def prepare(repo: Path) -> dict:
     return {"status": "prepared", "recovery": recovery, "path": str(target)}
 
 
+def _intent_matches(repo: Path, recovery: dict, approved: str, current: str) -> bool:
+    """The approved INTENT, its migrate-corrections form, or a recorded migration (#551).
+
+    The primary proof is recomputed from bytes: intent_unchanged re-runs the
+    migration. A migrate-corrections Log line naming the recovery base and
+    the migrated content's digest is accepted when it also recomputes —
+    the record is audit, not authority.
+    """
+    if __package__:
+        from scripts import _common
+    else:
+        import _common
+    import hashlib
+    if _common.intent_unchanged(approved, current):
+        return True
+    try:
+        digest = hashlib.sha256((repo / ".project/intent/INTENT.md").read_bytes()).hexdigest()
+    except OSError:
+        digest = hashlib.sha256(current.encode("utf-8")).hexdigest()
+    try:
+        state_text = (repo / ".project/STATE.md").read_text(encoding="utf-8")
+    except OSError:
+        state_text = ""
+    recorded = _common.migrate_corrections_records(state_text)
+    return (any(base == recovery["base"] and content == digest for base, content in recorded)
+            and _common.migrate_corrections(approved) == current)
+
+
 def validate_plan(repo: Path) -> None:
     state = runtime()
     recovery = context(repo)
@@ -325,8 +353,13 @@ def validate_plan(repo: Path) -> None:
         raise state.PipelineStateError("build recovery cannot manufacture landed tasks")
     if recovery["kind"] == "plan":
         intent = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/intent/INTENT.md")
-        if state._read_real_file(repo / ".project/intent/INTENT.md", "INTENT.md") != intent:
-            raise state.PipelineStateError("plan repair cannot change approved intent")
+        current_intent = state._read_real_file(repo / ".project/intent/INTENT.md", "INTENT.md")
+        if not _intent_matches(repo, recovery, intent, current_intent):
+            raise state.PipelineStateError(
+                "plan repair cannot change approved intent; only the "
+                "migrate-corrections renumbering is accepted — number "
+                "`- <date>:` entries under ## Corrections as "
+                "`- C<n> <date>: <ruling>` in file order (#551)")
     if stale_review_reasons(repo, recovery, _review_waves(repo / ".project/review")):
         raise state.PipelineStateError("changed wave must be reviewed after build resumes")
 
@@ -341,7 +374,8 @@ def stale_review_reasons(repo: Path, recovery: dict, waves: set[int]) -> dict[in
     state = runtime()
     project = repo / ".project"
     old_intent = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/intent/INTENT.md")
-    if state._read_real_file(project / "intent/INTENT.md", "INTENT.md") != old_intent:
+    current_intent = state._read_real_file(project / "intent/INTENT.md", "INTENT.md")
+    if not _intent_matches(repo, recovery, old_intent, current_intent):
         return dict.fromkeys(waves, "INTENT.md changed")
     old_plan = checkpoint_runtime()._git_text_at(repo, recovery["base"], ".project/plan/PLAN.md") or ""
     new_plan = state._read_real_file(project / "plan/PLAN.md", "PLAN.md")

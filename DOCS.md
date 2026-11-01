@@ -398,7 +398,10 @@ Skill/plugin updates and `--hooks-refresh` retain the selected runtime. Use
 `gsd-path --runtime-upgrade --project /absolute/project` to explicitly select
 the supplied package's runtime and its compatible status launcher. Review those
 configuration changes before committing them. Existing versions remain available
-for other projects and branches.
+for other projects and branches. Before it selects the runtime, `--runtime-upgrade`
+(and `--runtime-migrate`, with or without `--dry-run`) runs the incoming runtime's
+read-only handoff checks against the open milestone's artifacts and prints each
+failure as a `preflight:` warning. Warnings do not stop the upgrade.
 
 To record where a patched runtime came from, add `--runtime-provenance-source`,
 `--runtime-provenance-patch`, or `--runtime-provenance-note` to

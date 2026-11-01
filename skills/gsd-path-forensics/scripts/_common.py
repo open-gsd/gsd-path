@@ -85,6 +85,89 @@ def withdrawn_citations(task_text: str) -> list[str]:
     return [f"{m.group('date')}: {m.group('ruling')}"
             for m in WITHDRAWN_CITATION.finditer(body)]
 
+
+# The pre-#518 Corrections form: `- <date>: <ruling>` under `## Corrections`.
+_LEGACY_CORRECTION_ENTRY = re.compile(r"^- (?P<date>\d{4}-\d{2}-\d{2}): (?P<text>\S.*)$")
+_NUMBERED_CORRECTION_ENTRY = re.compile(r"^- C(?P<id>[1-9]\d*) \d{4}-\d{2}-\d{2}: ")
+# A migrate-corrections record in the STATE Log: `- <date> — <phase> —
+# migrate-corrections: {"base": <approved commit sha>, "current": <migrated
+# intent sha256>}` (#551). Any gate recomputes the proof; nothing is
+# operator-only.
+MIGRATE_CORRECTIONS_MARKER = "migrate-corrections: "
+MIGRATE_CORRECTIONS_RECORD = re.compile(
+    r"^-.+? — .+? — " + re.escape(MIGRATE_CORRECTIONS_MARKER) + r"(?P<record>\{.*\})$"
+)
+
+
+def migrate_corrections(text: str) -> str:
+    """Number legacy Corrections entries; every other byte is unchanged.
+
+    A pure, total, idempotent transform (#551): only `- <date>:` lines
+    under `## Corrections` change — each becomes `- C<n> <date>: …`,
+    numbered in file order after the highest id already present above it,
+    so a mixed file numbers its legacy entries into the running sequence.
+    A native file (every entry numbered) is returned unchanged, which is
+    what gates re-run to prove an approved INTENT's migrated form.
+    """
+    lines = text.splitlines(keepends=True)
+    output = []
+    in_corrections = False
+    next_id = 1
+    for line in lines:
+        body = line.rstrip("\r\n")
+        ending = line[len(body):]
+        # Section headings anchor flush-left, exactly like the gate's parser;
+        # trailing spaces after the heading are tolerated, leading are not.
+        if body.startswith("## "):
+            in_corrections = body.rstrip() == "## Corrections"
+            output.append(line)
+            continue
+        entry = body.lstrip()
+        indent = body[: len(body) - len(entry)]
+        numbered = _NUMBERED_CORRECTION_ENTRY.match(entry)
+        if in_corrections and numbered:
+            next_id = max(next_id, int(numbered.group("id")) + 1)
+            output.append(line)
+            continue
+        if in_corrections and _LEGACY_CORRECTION_ENTRY.match(entry):
+            output.append(f"{indent}- C{next_id} {entry[2:]}{ending}")
+            next_id += 1
+            continue
+        output.append(line)
+    return "".join(output)
+
+
+def intent_unchanged(approved: str, current: str) -> bool:
+    """Whether `current` is the approved INTENT, or its migrated form (#551).
+
+    The check re-runs the migration rather than stripping ids: only the
+    one-way transform `migrate_corrections(approved) == current` proves the
+    difference is numbering alone.
+    """
+    return current == approved or migrate_corrections(approved) == current
+
+
+def migrate_corrections_records(state_text: str) -> list[tuple[str, str]]:
+    """(base commit sha, migrated-intent sha256) pairs from migrate-corrections Log lines."""
+    body = section_body(state_text, "Log")
+    if body is None:
+        return []
+    records = []
+    for line in body.splitlines():
+        match = MIGRATE_CORRECTIONS_RECORD.match(line.strip())
+        if match is None:
+            continue
+        try:
+            record = json.loads(match.group("record"))
+        except json.JSONDecodeError:
+            continue
+        base, current = record.get("base"), record.get("current")
+        if (isinstance(base, str) and isinstance(current, str)
+                and re.fullmatch(r"[0-9a-f]{40}", base)
+                and re.fullmatch(r"[0-9a-f]{64}", current)):
+            records.append((base, current))
+    return records
+
 REVIEW_BULLET_HEADING_PATTERN = re.compile(r"^#{2,3} ")
 REVIEW_BULLET_FIELD_LABEL_PATTERN = re.compile(r"^- \*\*[^*]+\*\*:")
 

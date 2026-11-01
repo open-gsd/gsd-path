@@ -27,7 +27,11 @@ See [TEST_ENVIRONMENT.md](TEST_ENVIRONMENT.md) for prerequisites and troubleshoo
 ## Release contract
 
 The [Trust Validation Spec](docs/trust-validation/TRUST-VALIDATION-SPEC.md#release-contract)
-owns the release gate, live-check scope, and receipt requirements.
+owns the release gate, live-check scope, and receipt requirements. Every new
+INTENT or artifact format rule ships with its migrator
+(`_common.migrate_corrections` is the pattern) and is covered by the
+runtime-upgrade preflight (`install.runtime_upgrade_preflight`), so an
+in-flight milestone is never surprised by a new gate (#551).
 
 ## Recording trust evidence
 
