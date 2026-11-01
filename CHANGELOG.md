@@ -22,6 +22,7 @@ test-only changes are not listed; the Git history has them.
 - Let a parallel task coder delete files in a dispatched task worktree when the hook runs from the primary checkout, and accept non-ASCII literal paths in guarded delete and move commands.
 - Pass a task Verify that reads Git's index, such as `git ls-files` on deleted paths, in a parallel round the same as in a serial one.
 - Accept a success criterion that quotes a Path marker comment as inline code, such as `<!-- gsd-path:begin -->`, at build completion and archive the same as at the wave gate.
+- Let build recovery accept an approved INTENT whose legacy `## Corrections` entries were renumbered as `- C<n> <date>: <ruling>`, so a mid-milestone runtime upgrade no longer wedges the project, and warn during `--runtime-upgrade` and `--runtime-migrate` when the incoming runtime's handoff checks would fail on the open milestone.
 
 ## [1.7.1] - 2026-10-31
 

@@ -71,7 +71,10 @@ checkpoint. A failed approval leaves recovery open.
 
 A wave keeps its review evidence when INTENT.md, its own `## Wave N` section,
 its task files, and every other non-wave PLAN.md section are byte-identical to
-the recovery base. Two edits are exempt: the value of the `max_review_cycles`
+the recovery base. INTENT.md also matches when it is exactly the
+migrate-corrections renumbering of the base: its `- <date>:` entries under
+`## Corrections` numbered as `- C<n> <date>: <ruling>` in file order (#551).
+Plan-only recovery accepts the same renumbering. Two edits are exempt: the value of the `max_review_cycles`
 and `wave_budget` lines in `## Config`, and all of `## Dependency notes`. In
 `## Config` only those two values may change; any other edit there, a comment
 edit included, drops the evidence of every wave, as does any other non-wave
