@@ -245,11 +245,16 @@ See [UPDATE.md](UPDATE.md).
 - deletion or move commands, in every phase, that target or contain a
   pipeline state root (`~/.gsd-path`, `GSD_PATH_WORKTREE_ROOT`, or a pinned
   workspace root). Deletes inside the agent's own managed worktree under such
-  a root stay allowed. Workspace receipts that cannot be read deny the command
+  a root stay allowed. Deletes inside a dispatched task worktree of one of the
+  session's repositories also stay allowed when the operand itself resolves
+  there, even if the hook's working directory is the primary checkout. Such a
+  worktree is on a `gsd-path-task/<id>` branch, carries its task authorization
+  ref, and sits at a pipeline placement; symlinked operands stay denied.
+  Workspace receipts that cannot be read deny the command
 - deletion or move commands outside a single simple segment, including command
   chains, pipes, newlines, grouping, directory changes, and command substitution
 - deletion or move commands with any argument outside the literal-path character
-  set: ASCII letters, digits, `.`, `_`, `-`, `/`, and ASCII spaces inside one
+  set: Unicode letters and digits, `.`, `_`, `-`, `/`, and ASCII spaces inside one
   shell unit (plus a drive prefix and backslashes on Windows). One matching
   pair of surrounding quotes is allowed; parameters, wildcards, braces, and
   tilde paths are denied even when quoted. This also applies to
