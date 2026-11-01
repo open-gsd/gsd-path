@@ -6,6 +6,8 @@ The app has its own version and `app-v<version>` tags, separate from the
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-31
+
 ### Added
 - The Projects board shows multi-repo projects. A coordinator card shows how
   many members it has and lists each member under it, with its marker and
@@ -63,16 +65,14 @@ The app has its own version and `app-v<version>` tags, separate from the
   "installer refused the request" and "Nothing was changed." It no longer says
   "partial install" and "Some folders were changed", because the installer
   refuses before it writes anything.
-
-### Fixed
 - On macOS and Linux, when the app or `gsd-path-daemon install` finds a
   `~/.gsd-path/venv` made by another Python, it rebuilds the venv for the
   current Python. Before, the venv mixed two Pythons: each launch reinstalled
   the daemon but still ran the old one.
-
-### Fixed
 - The Tasks table no longer squeezes short columns, such as task ID and
   wave, to one character per line. Task file paths wrap at `/`.
+- The app ships daemon 0.2.2, so it replaces an older running daemon
+  when it starts.
 
 ## [0.1.2] - 2026-10-03
 
