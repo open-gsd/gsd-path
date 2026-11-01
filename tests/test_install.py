@@ -1323,6 +1323,31 @@ class InstallerTests(unittest.TestCase):
             update=update,
         )
 
+    def test_project_install_leaves_no_source_relative_links(self):
+        project = self.root / "links"
+        project.mkdir()
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(self.root / "claude" / "skills"),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        text = (project / "WORKFLOW.md").read_text(encoding="utf-8")
+        targets = re.findall(r"\]\(([^)]+)\)", text)
+        self.assertNotEqual([], targets)
+        relative = [
+            target
+            for target in targets
+            if not target.startswith(("http://", "https://", "mailto:", "#"))
+        ]
+        self.assertEqual([], relative)
+
     def test_project_inserts_block_into_foreign_agents_and_keeps_owner_text(self):
         project = self.root / "foreign-agents"
         project.mkdir()

@@ -9,8 +9,9 @@ dialogue and answers on disk. AGENTS.md supplies the shared operating rules.
 References to `skills/`, `scripts/`, `platforms/`, `RUNTIME.md`, and `HOOKS.md`
 describe the GSD Path source checkout, which an application need not contain.
 For execution in an installed project, resolve each role, template, and helper
-from the active skill's bundled absolute paths. Source-relative links below
-are navigation within the GSD Path source checkout, not installed-file claims.
+from the active skill's bundled absolute paths. Links below resolve within
+this file or to the GSD Path source on GitHub, so they also work in an
+installed project.
 
 **Program flow.** When the work is a multi-milestone program, define runs in
 program mode and writes `.project/CHARTER.md` (enduring scope and vetoes),
@@ -78,7 +79,7 @@ User approval remains required at define, roadmap, plan, final-review patch
 selection, and final shipping checkpoints. Decide auto-advances after its
 evidence gate unless a `NEEDS-USER` decision remains. The opt-in quick-lane
 grant for selected intent or plan gates is described in the
-[router contract](skills/gsd-path/SKILL.md#pre-approval); all other gates
+[router contract](https://github.com/open-gsd/gsd-path/blob/main/skills/gsd-path/SKILL.md#pre-approval); all other gates
 still ask.
 
 Every user-facing checkpoint follows one handoff shape: **Outcome** states what
@@ -225,7 +226,7 @@ first and presented as settled coverage for correction; the interview covers
 only its gaps and contradictions.
 
 Once the success criteria are drafted, define runs the spec-reach probes
-([spec-probes.md](skills/gsd-path/references/spec-probes.md)). The edge probe
+([spec-probes.md](https://github.com/open-gsd/gsd-path/blob/main/skills/gsd-path/references/spec-probes.md)). The edge probe
 walks each criterion through a closed edge taxonomy (boundary, adjacency,
 empty, encoding, ordering, precision, idempotency, concurrency) and records
 the user's ruling per applicable edge in INTENT.md `## Edge coverage`:
@@ -271,7 +272,7 @@ fifth standard input downstream — researchers read it so recommendations
 fit the code that exists (the stack researcher weighs migration cost, the
 pitfalls researcher checks which traps are already sprung).
 
-Follow the [research phase contract](skills/gsd-path-research/SKILL.md) for
+Follow the [research phase contract](https://github.com/open-gsd/gsd-path/blob/main/skills/gsd-path-research/SKILL.md) for
 dispatch eligibility, skipped dimensions, question assignments, and evidence
 paths. Every finding needs a checked source,
 confidence, and a tie-back to INTENT.md.
@@ -409,7 +410,7 @@ build's re-entry transition instead).
 task files, and wave reviews.
 
 A blocked build returns through the guarded
-[build recovery contract](skills/gsd-path/references/build-recovery.md) when
+[build recovery contract](https://github.com/open-gsd/gsd-path/blob/main/skills/gsd-path/references/build-recovery.md) when
 approved intent must change or the remaining task inventory needs repair.
 It preserves landed work, re-gates changed contracts, and returns through a new
 plan approval checkpoint. Ship and archived milestones cannot use this path.
@@ -417,7 +418,7 @@ plan approval checkpoint. Ship and archived milestones cannot use this path.
 The build contract is not restated here. Branch binding, the wave loop, task
 isolation and landing, wave review, fix batching, completion, and milestone
 abandon live only in the canonical
-[skills/gsd-path-build/SKILL.md](skills/gsd-path-build/SKILL.md).
+[skills/gsd-path-build/SKILL.md](https://github.com/open-gsd/gsd-path/blob/main/skills/gsd-path-build/SKILL.md).
 `skills/gsd-path/BUILD.md` is its generated mirror. The build orchestrator
 reads the canonical file; no build agent receives this section.
 
@@ -452,7 +453,7 @@ risk. List only genuine
 risks that could plausibly fail; never pad the list. The runtime
 runs PLAN.md's project Verify and generates its gap view. Single-repo output
 lives in the command/commit ledger; for member milestone evidence and reruns,
-see [S4a1](docs/multi-repo-work.md#slices). Other gap
+see [S4a1](https://github.com/open-gsd/gsd-path/blob/main/docs/multi-repo-work.md#slices). Other gap
 reviewers do not re-run it. The orchestrator
 creates one disposable worktree at exact reviewed HEAD
 per reviewer; project commands never run in the primary worktree. Every final
@@ -550,7 +551,7 @@ move with its MANIFEST.md, staged from `.project/` only, subject
 paths. There is no untracked-project fallback. Every pipeline commit carries
 the subject and field body defined by its canonical phase contract; task-land
 fields live only in the
-[build contract](skills/gsd-path-build/SKILL.md).
+[build contract](https://github.com/open-gsd/gsd-path/blob/main/skills/gsd-path-build/SKILL.md).
 
 ### Default branch
 
@@ -625,7 +626,7 @@ and requires the remote default to be the recorded
   eligible PR to `main` with a GSD Path credit footer. It returns
   `awaiting-merge` until a human GitHub user merges it with a merge commit or a
   rebase merge; Path never enables auto-merge or merges the PR. After
-  validation, Path creates the annotated milestone tag. The [ship contract](skills/gsd-path-ship/SKILL.md)
+  validation, Path creates the annotated milestone tag. The [ship contract](https://github.com/open-gsd/gsd-path/blob/main/skills/gsd-path-ship/SKILL.md)
   owns the candidate, provenance, topology, publication, and recovery rules.
 - `external-landing` is for an origin that is not GitHub.com, such as GitLab,
   Gitea, or GitHub Enterprise Server, where a merge request is the only route
