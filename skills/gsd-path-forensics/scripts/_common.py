@@ -437,8 +437,20 @@ def rebase_landing_problem(repo: Path, ship: str, landing: str) -> Optional[str]
 
 
 def git_command(repo: Path, *arguments: str) -> tuple[str, ...]:
-    """Git argv for repo, including WSL drvfs workarounds when needed."""
-    return ("git", "-C", str(repo), *git_drvfs_config_flags(repo), *arguments)
+    """Git argv for repo, including WSL drvfs workarounds when needed.
+
+    core.quotepath=false keeps non-ASCII paths raw in path listings so
+    they compare equal to the UTF-8 paths tasks declare (#545).
+    """
+    return (
+        "git",
+        "-C",
+        str(repo),
+        "-c",
+        "core.quotepath=false",
+        *git_drvfs_config_flags(repo),
+        *arguments,
+    )
 
 
 def git_drvfs_config_flags(repo: Path) -> tuple[str, ...]:
