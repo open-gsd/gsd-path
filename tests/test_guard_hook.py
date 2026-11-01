@@ -4670,6 +4670,178 @@ class DestructiveScopeTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(self.bash_in(worktree, command))
 
+    def make_task_isolate(self, task_id):
+        """A registered task worktree under a state root, with its dispatch
+        authorization ref and pinned workspace receipt, plus its primary."""
+        repo = self.scratch / f"primary-{task_id}"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.com",
+             "commit", "-q", "--allow-empty", "-m", "init"], check=True,
+        )
+        base = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True, capture_output=True, encoding="utf-8",
+        ).stdout.strip()
+        root = self.home / ".gsd-path" / "projects" / "A" / "B"
+        worktree = root / "task" / task_id
+        subprocess.run(
+            ["git", "-C", str(repo), "worktree", "add", "-q",
+             "-b", f"gsd-path-task/{task_id}", str(worktree)],
+            check=True,
+        )
+        receipts = repo / ".git" / "gsd-path" / "workspaces"
+        receipts.mkdir(parents=True)
+        (receipts / "primary.json").write_text(
+            json.dumps({"primary": str(repo.resolve()), "root": str(root.resolve())}) + "\n",
+            encoding="utf-8",
+        )
+        self.authorize_task(worktree, task_id, base)
+        return repo, worktree
+
+    def authorize_task(self, worktree, task_id, sha):
+        subprocess.run(
+            ["git", "-C", str(worktree), "update-ref",
+             f"refs/gsd-path/task-authorizations/{task_id}", sha, "0" * len(sha)],
+            check=True,
+        )
+
+    def test_authorized_task_isolate_allows_its_own_deletes_from_the_primary(self) -> None:
+        repo, worktree = self.make_task_isolate("T002")
+        (worktree / "openwiki").mkdir()
+        # The hook's working directory is the primary; a parallel coder's
+        # isolate is never among them (#546).
+        self.assert_allowed(self.bash_in(repo, f"rm -rf {(worktree / 'openwiki').as_posix()}"))
+        # A commit inside the isolate must not end acceptance.
+        subprocess.run(
+            ["git", "-C", str(worktree), "-c", "user.name=t", "-c", "user.email=t@example.com",
+             "commit", "-q", "--allow-empty", "-m", "wip"], check=True,
+        )
+        (worktree / "build").mkdir()
+        self.assert_allowed(self.bash_in(repo, f"rm -rf {(worktree / 'build').as_posix()}"))
+        # The isolate root itself stays pipeline state.
+        self.assert_denied(self.bash_in(repo, f"rm -r {worktree.as_posix()}"))
+        # Without the authorization ref the same delete refuses again.
+        subprocess.run(
+            ["git", "-C", str(worktree), "update-ref", "-d",
+             "refs/gsd-path/task-authorizations/T002"], check=True,
+        )
+        (worktree / "docs").mkdir()
+        self.assert_denied(self.bash_in(repo, f"rm -rf {(worktree / 'docs').as_posix()}"))
+
+    @requires_symlink
+    def test_authorized_isolate_symlinked_operand_still_refused(self) -> None:
+        repo, worktree = self.make_task_isolate("T005")
+        (worktree / "safe").mkdir()
+        outside = self.home / ".gsd-path" / "runtimes" / "abc123"
+        outside.mkdir(parents=True)
+        link = worktree / "linked"
+        os.symlink(str(outside), str(link))
+        # An accepted first operand must not let a symlinked second operand
+        # through on the cached acceptance.
+        self.assert_denied(
+            self.bash_in(repo, f"rm -rf {(worktree / 'safe').as_posix()} {link.as_posix()}")
+        )
+        # The accepted operand alone still passes.
+        self.assert_allowed(self.bash_in(repo, f"rm -rf {(worktree / 'safe').as_posix()}"))
+
+    def test_rogue_task_worktree_without_authorization_stays_denied(self) -> None:
+        repo, worktree = self.make_task_isolate("T003")
+        rogue_root = worktree.parent
+        rogue = rogue_root / "task" / "ROGUE"
+        subprocess.run(
+            ["git", "-C", str(repo), "worktree", "add", "-q",
+             "-b", "gsd-path-task/ROGUE", str(rogue)],
+            check=True,
+        )
+        (rogue / "openwiki").mkdir()
+        # Branch name, registration, and placement all match a task isolate;
+        # only the unforgeable authorization ref is missing.
+        self.assert_denied(self.bash_in(repo, f"rm -rf {(rogue / 'openwiki').as_posix()}"))
+
+    def test_foreign_repository_task_worktree_stays_denied(self) -> None:
+        # A session repo to stand in for the pipeline primary.
+        repo, _worktree = self.make_task_isolate("T004")
+        # A second repository under the session's control forges the whole
+        # acceptance stack: task branch, registration, authorization ref,
+        # and workspace receipt all live under ITS .git, which the guard
+        # does not protect the way it protects the session repository's.
+        foreign = self.scratch / "foreign"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(foreign)], check=True)
+        subprocess.run(
+            ["git", "-C", str(foreign), "-c", "user.name=t", "-c", "user.email=t@example.com",
+             "commit", "-q", "--allow-empty", "-m", "init"], check=True,
+        )
+        base = subprocess.run(
+            ["git", "-C", str(foreign), "rev-parse", "HEAD"],
+            check=True, capture_output=True, encoding="utf-8",
+        ).stdout.strip()
+        root = self.home / ".gsd-path" / "projects" / "X" / "Y"
+        worktree = root / "task" / "FRGN"
+        subprocess.run(
+            ["git", "-C", str(foreign), "worktree", "add", "-q",
+             "-b", "gsd-path-task/FRGN", str(worktree)],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(worktree), "update-ref",
+             "refs/gsd-path/task-authorizations/FRGN", base, "0" * len(base)],
+            check=True,
+        )
+        receipts = foreign / ".git" / "gsd-path" / "workspaces"
+        receipts.mkdir(parents=True)
+        (receipts / "primary.json").write_text(
+            json.dumps({"primary": str(foreign.resolve()), "root": str(root.resolve())}) + "\n",
+            encoding="utf-8",
+        )
+        (worktree / "openwiki").mkdir()
+        self.assert_denied(self.bash_in(repo, f"rm -rf {(worktree / 'openwiki').as_posix()}"))
+
+    def test_legacy_and_unpinned_isolates_allow_their_own_deletes(self) -> None:
+        configured = self.home / "worktrees"
+        with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(configured)}):
+            primary = configured / "proj"
+            subprocess.run(["git", "init", "-q", "-b", "main", str(primary)], check=True)
+            subprocess.run(
+                ["git", "-C", str(primary), "-c", "user.name=t", "-c", "user.email=t@example.com",
+                 "commit", "-q", "--allow-empty", "-m", "init"], check=True,
+            )
+            base = subprocess.run(
+                ["git", "-C", str(primary), "rev-parse", "HEAD"],
+                check=True, capture_output=True, encoding="utf-8",
+            ).stdout.strip()
+            # Legacy layout beside the primary: <primary>.gsd-path/task/<id>,
+            # preferred by worktree_path when registered.
+            legacy = primary.parent / f"{primary.name}.gsd-path" / "task" / "T009"
+            subprocess.run(
+                ["git", "-C", str(primary), "worktree", "add", "-q",
+                 "-b", "gsd-path-task/T009", str(legacy)],
+                check=True,
+            )
+            self.authorize_task(legacy, "T009", base)
+            (legacy / "build").mkdir()
+            self.assert_allowed(self.bash_in(primary, f"rm -rf {(legacy / 'build').as_posix()}"))
+            # Unpinned workspace shape: <root>/<id1>/<id2>/task/<id>, no receipt.
+            unpinned = configured / "aa" / "bb" / "task" / "T010"
+            subprocess.run(
+                ["git", "-C", str(primary), "worktree", "add", "-q",
+                 "-b", "gsd-path-task/T010", str(unpinned)],
+                check=True,
+            )
+            self.authorize_task(unpinned, "T010", base)
+            (unpinned / "build").mkdir()
+            self.assert_allowed(self.bash_in(primary, f"rm -rf {(unpinned / 'build').as_posix()}"))
+
+    def test_destructive_literal_paths_accept_non_ascii_letters(self) -> None:
+        repo = self.scratch / "plain"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+        (repo / "docs" / "7-计划与进展").mkdir(parents=True)
+        self.assert_allowed(self.bash_in(repo, "rm -rf docs/7-计划与进展"))
+        self.assert_allowed(self.bash_in(repo, f"rm -rf {(repo / 'docs/7-计划与进展').as_posix()}"))
+        # Injection-relevant shapes stay refused.
+        self.assert_denied(self.bash_in(repo, 'rm "scratch;other"'))
+        self.assert_denied(self.bash_in(repo, 'rm "$var/whatever"'))
+
     def test_closed_milestone_checks_operands_after_double_dash(self) -> None:
         repo = self.make_closed_milestone_repo()
         target = self.scratch / "file.txt"
