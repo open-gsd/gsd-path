@@ -3610,9 +3610,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             argument_parser.error(f"--runtime-{runtime_action} requires --project")
         try:
             _validate_project_git_root(project)
-            if runtime_action == "upgrade":
+            if runtime_action in ("upgrade", "migrate"):
                 # stdout, not stderr: the daemon surfaces the installer's
-                # stdout tail on success, and the upgrade still succeeds (#551).
+                # stdout tail on success, and the upgrade still succeeds.
+                # The daemon's legacy-runtime path shells --runtime-migrate,
+                # and the ruling covers the daemon path too (#551).
                 for warning in runtime_upgrade_preflight(source_root, project):
                     print(warning)
             locks, created = ([], []) if arguments.dry_run else _acquire_install_locks([project / HOOKS_DIRECTORY])

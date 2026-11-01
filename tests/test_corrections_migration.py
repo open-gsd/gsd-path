@@ -179,6 +179,17 @@ class UpgradePreflightTests(unittest.TestCase):
         self.assertTrue(any("intent" in warning for warning in warnings), warnings)
         self.assertTrue(any("migrate-corrections" in warning for warning in warnings), warnings)
 
+    def test_runtime_migrate_prints_the_preflight_warnings(self) -> None:
+        project = self.make_project(LEGACY_INTENT)
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        completed = subprocess.run(
+            [sys.executable, "-B", str(PROJECT_ROOT / "scripts" / "install.py"),
+             "--runtime-migrate", "--dry-run", "--project", str(project)],
+            capture_output=True, encoding="utf-8",
+        )
+        self.assertIn("preflight: intent failed under the incoming runtime", completed.stdout)
+        self.assertIn("migrate-corrections", completed.stdout)
+
     def test_preflight_is_quiet_for_a_native_intent(self) -> None:
         project = self.make_project(_common.migrate_corrections(LEGACY_INTENT))
         self.assertEqual(install.runtime_upgrade_preflight(PROJECT_ROOT, project), [])
