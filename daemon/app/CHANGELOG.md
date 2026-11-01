@@ -74,6 +74,12 @@ The app has its own version and `app-v<version>` tags, separate from the
 - The app ships daemon 0.2.2, so it replaces an older running daemon
   when it starts.
 
+### Fixed
+- Release and framework update checks work when the daemon runs under a
+  python.org macOS Python with no CA certificates installed. The daemon then
+  also trusts the macOS system roots (`/etc/ssl/cert.pem`); certificate checks
+  stay on.
+
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
