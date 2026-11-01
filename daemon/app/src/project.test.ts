@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asking, blocked, building, shipped, status } from "./fixtures";
-import { browsedCheckout, doctorReport, editMember, emptyMemberForm, facts, memberAdd, memberRows, milestoneRows, nowBox, phaseTrack, repoRows, setupRows, usageTiles } from "./project";
+import { browsedCheckout, doctorReport, editMember, emptyMemberForm, facts, memberAdd, memberIntegration, memberRemove, memberRows, milestoneRows, nowBox, phaseTrack, repoRows, setupRows, usageTiles } from "./project";
 import type { MemberForm } from "./project";
 import { DASH } from "./status";
 import type { ProjectSetup } from "./skills";
@@ -212,6 +212,19 @@ describe("repositories in this milestone", () => {
     const [, api, web] = repoRows(p);
     expect(api.close).toEqual({ label: "Integrated", tone: "ok", detail: "bbbbbbb · milestone/demo-004-x" });
     expect(web.close).toEqual({ label: "Closing", tone: "acc", detail: null });
+  });
+});
+
+describe("change a member", () => {
+  it("removes by name and says what it deletes and what stays", () => {
+    expect(memberRemove("api")).toEqual({
+      body: { name: "api" },
+      confirm: "Remove api from this project. This rewrites .project/MEMBERS.md and deletes the member marker and member hooks in api; a hook they wrapped gets its old name back. Path branches, tags, and finished milestones stay. Members change only between milestones.",
+    });
+  });
+  it("sends a new integration mode and nothing when the mode is the same", () => {
+    expect(memberIntegration({ name: "api", integration: "default" }, "pull-request")).toEqual({ name: "api", integration: "pull-request" });
+    expect(memberIntegration({ name: "api", integration: "direct" }, "direct")).toBeNull();
   });
 });
 

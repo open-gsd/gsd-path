@@ -154,7 +154,8 @@ const AREAS = [
     ["Install member hooks", "Hold a member repo to the coordinator guard.", "--member-of PATH --project MEMBER", "Project", "have", ""],
     ["Repair member markers", "Fix markers after the coordinator moves.", "members.py repair", "Project", "have", ""],
     ["Join a member", "Record a member repo, or create one on GitHub.", "members.py add [--create]", "Project", "have", "Owner ruling 2026-10-31: the app adds members; members.py add owns the rules."],
-    ["Member shipping mode", "default, direct, or pull-request per member.", "members add --integration", "—", "router", "Chosen in the Add member form only at join time; changing it later stays in the router."],
+    ["Member shipping mode", "default, direct, or pull-request per member.", "members.py add --integration, set-integration", "Project", "have", "Chosen in the Add member form, changed on each member row."],
+    ["Remove a member", "Take a member out; its marker and member hooks go, its branches and tags stay.", "members.py remove", "Project", "have", ""],
   ]},
   { name: "Path settings", where: "Settings → Path settings (user and project)", rows: [
     ["Shipping mode (default)", "direct merge or pull request for new projects.", "path_config set integration", "Settings", "have", ""],

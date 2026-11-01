@@ -11,6 +11,7 @@ from typing import Optional
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import _common
 import archive_milestone
 import check_handoffs
 import lean_verification
@@ -681,6 +682,99 @@ class MemberTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("already a member of other", result.stderr)
         self.assertEqual(json.loads(marker.read_text(encoding="utf-8")), foreign)
+
+    def detect(self, checkout: Path) -> dict:
+        result = subprocess.run([sys.executable, str(SCRIPT), "detect", "--checkout", str(checkout)],
+                                encoding="utf-8", errors="replace", capture_output=True, check=True)
+        return json.loads(result.stdout)
+
+    def test_remove_drops_the_member_and_its_marker_and_keeps_its_branches(self) -> None:
+        web, sdk = self.joined("web"), self.joined("sdk")
+        git(web, "branch", "gsd-path/acme-M001")
+        removed = self.run_members("remove", "--name", "web")
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertEqual(json.loads(removed.stdout)["cleaned"], [str(self.marker_path(web))])
+        validated = self.run_members("validate")
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+        self.assertEqual([member["name"] for member in json.loads(validated.stdout)["members"]], ["sdk"])
+        self.assertEqual(self.detect(web), {"member": False, "checkout": str(web)})
+        self.assertTrue(self.detect(sdk)["current"])
+        self.assertTrue(git(web, "rev-parse", "--verify", "refs/heads/gsd-path/acme-M001"))
+
+    def test_remove_of_the_last_member_leaves_a_valid_empty_list(self) -> None:
+        web = self.joined("web")
+        self.assertEqual(self.run_members("remove", "--name", "web").returncode, 0)
+        validated = self.run_members("validate")
+        self.assertEqual((validated.returncode, json.loads(validated.stdout)), (0, {"members": []}))
+        self.assertEqual(self.add("web", web).returncode, 0, "a removed repository can join again")
+
+    def test_remove_works_when_the_member_checkout_is_gone(self) -> None:
+        web = self.joined("web")
+        _common.rmtree_force(web)
+        removed = self.run_members("remove", "--name", "web")
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertEqual(json.loads(removed.stdout), {"members": [], "cleaned": []})
+
+    def test_remove_works_when_the_member_checkout_is_no_longer_a_git_repository(self) -> None:
+        web = self.joined("web")
+        _common.rmtree_force(web / ".git")
+        git(self.root, "init", "-q", "-b", "main")
+        parent_hook = self.root / ".git" / "hooks" / "pre-commit"
+        parent_hook.write_bytes(f"#!/bin/sh\n# {members.MEMBER_HOOK_MARKER}\n".encode("utf-8"))
+        removed = self.run_members("remove", "--name", "web")
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertEqual(json.loads(removed.stdout), {"members": [], "cleaned": []})
+        self.assertTrue(parent_hook.is_file())
+
+    def test_remove_leaves_the_marker_of_another_coordinator(self) -> None:
+        web = self.joined("web")
+        foreign = {"schema": "gsd-path/member/v1", "coordinator": str(self.root / "other"),
+                   "project": "other", "name": "web"}
+        self.marker_path(web).write_bytes(json.dumps(foreign).encode("utf-8"))
+        self.assertEqual(self.run_members("remove", "--name", "web").returncode, 0)
+        self.assertEqual(json.loads(self.marker_path(web).read_text(encoding="utf-8")), foreign)
+        self.assertEqual(members.read_members(self.coordinator), [])
+
+    def test_remove_refuses_an_unknown_member_or_one_a_task_names(self) -> None:
+        web = self.joined("web")
+        before = (self.coordinator / ".project" / "MEMBERS.md").read_bytes()
+        unknown = self.run_members("remove", "--name", "api")
+        self.assertNotEqual(unknown.returncode, 0)
+        self.assertIn("member api is not in MEMBERS.md", unknown.stderr)
+        (self.coordinator / ".project" / "tasks").mkdir()
+        (self.coordinator / ".project" / "tasks" / "T001-demo.md").write_bytes(
+            b"---\nid: T001\nrepo: web\n---\n")
+        named = self.run_members("remove", "--name", "web")
+        self.assertNotEqual(named.returncode, 0)
+        self.assertIn("task briefs name member web", named.stderr)
+        self.assertEqual((self.coordinator / ".project" / "MEMBERS.md").read_bytes(), before)
+        self.assertTrue(self.marker_path(web).is_file())
+
+    def test_set_integration_changes_only_the_mode(self) -> None:
+        web = self.joined("web")
+        changed = self.run_members("set-integration", "--name", "web", "--integration", "pull-request")
+        self.assertEqual(changed.returncode, 0, changed.stderr)
+        self.assertEqual(members.read_members(self.coordinator), [
+            {"name": "web", "checkout": str(web), "remote": "https://github.com/acme/web.git",
+             "integration": "pull-request", "default_branch": "main"}])
+        self.assertEqual(self.run_members("validate").returncode, 0)
+        bad = self.run_members("set-integration", "--name", "web", "--integration", "squash")
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertEqual(members.read_members(self.coordinator)[0]["integration"], "pull-request")
+
+    def test_remove_and_set_integration_refuse_during_build_and_ship(self) -> None:
+        web = self.joined("web")
+        before = (self.coordinator / ".project" / "MEMBERS.md").read_bytes()
+        for phase in ("build", "ship"):
+            write_state(self.coordinator, "acme", phase)
+            for arguments in (("remove", "--name", "web"),
+                              ("set-integration", "--name", "web", "--integration", "direct")):
+                with self.subTest(phase=phase, command=arguments[0]):
+                    result = self.run_members(*arguments)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("milestone boundary", result.stderr)
+        self.assertEqual((self.coordinator / ".project" / "MEMBERS.md").read_bytes(), before)
+        self.assertTrue(self.marker_path(web).is_file())
 
 
 class MembersArtifactTests(unittest.TestCase):
