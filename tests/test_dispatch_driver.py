@@ -534,14 +534,16 @@ class DispatchDriverTests(unittest.TestCase):
         ledger = (root / ".project/build/verify-ledger.jsonl").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(ledger), 1)
         self.assertEqual([item["ledger"] for item in receipt["landed"]], [True, False])
-        # A parallel Verify runs inside its task isolate: cwd and worktree agree.
+        # A parallel Verify runs in a reproduced sidecar of the isolate, like
+        # the serial one: cwd names the sidecar, worktree the task checkout.
         for item in receipt["landed"]:
-            self.assertEqual(item["verify"]["cwd"], item["verify"]["worktree"])
+            self.assertNotEqual(item["verify"]["cwd"], item["verify"]["worktree"])
+            self.assertTrue(item["verify"]["location"].startswith("sidecar gsd-path-verify/task-"))
             self.assertRegex(item["verify"]["base"], r"^[0-9a-f]{40}$")
         for task in ("T001", "T002"):
             text = (root / f".project/tasks/{task}-demo.md").read_text(encoding="utf-8")
             self.assertIn("status: done", text)
-            self.assertIn("orchestrator Verify (isolate gsd-path-task/", text)
+            self.assertIn("orchestrator Verify (sidecar gsd-path-verify/task-", text)
         dispatches = self.driver(root, "status")["dispatches"]
         self.assertEqual([d["outcome"] for d in dispatches], ["landed", "landed"])
 
@@ -1381,6 +1383,41 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.subjects(root)[:2], ["T002: Demo task T002", "T001: Demo task T001"])
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
 
+    def test_parallel_landing_verify_sees_the_task_deletions(self) -> None:
+        # A Verify that reads git's index must give the same answer whatever
+        # the round size: coders never stage, so the isolate's real index
+        # stays at the base while the working tree carries the deletion (#547).
+        root = self.root
+        (root / "docs").mkdir()
+        (root / "docs/progress.md").write_bytes("progress\n".encode("utf-8"))
+        head = self.fixture(
+            root,
+            files_t002="docs/progress.md",
+            verify_t002='test -z "$(git ls-files docs/progress.md)" '
+                        '&& d="$(mktemp -d)" && git -C "$d" init -q '
+                        '&& git -C "$d" -c user.name=t -c user.email=t@example.test '
+                        'commit -q --allow-empty -m scratch && rm -rf "$d"',
+        )
+        prepared = subprocess.run(
+            [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "prepare-task",
+             "--repo", str(root), "--expected-head", head, "--task-id", "T002", "--round-size", "2"],
+            check=True, capture_output=True, encoding="utf-8", errors="replace")
+        worktree = Path(json.loads(prepared.stdout)["steps"][0]["result"]["worktree"])
+        task_file = ".project/tasks/T002-demo.md"
+        subprocess.run([sys.executable, "-B", str(PROJECT_ROOT / "scripts/isolation.py"),
+                        "activate-task", "--repo", str(worktree), "--base", head, "--task-id", "T002",
+                        "--agent", "build_t002", "--task-file", task_file,
+                        "--task-branch", json.loads(prepared.stdout)["steps"][0]["result"]["task_branch"]],
+                       check=True, capture_output=True)
+        (worktree / "docs/progress.md").unlink()
+        receipt = self.driver(root, "finish", "--task-id", "T002")
+        self.assertEqual(receipt["status"], "landed", receipt)
+        self.assertEqual(receipt["landed"][0]["mode"], "parallel", receipt)
+        self.assertIn(
+            "docs/progress.md",
+            run_git(root, "show", "--stat", "--format=", "HEAD").stdout,
+        )
+
     def hand_dispatch_parallel(self, root: Path) -> Path:
         """prepare-task and activate-task T001 by hand in a parallel isolate, then write its product file."""
         head = self.fixture(root)
@@ -1402,9 +1439,19 @@ class DispatchDriverTests(unittest.TestCase):
         root = self.root
         worktree = self.hand_dispatch_parallel(root)
         removal = dispatch_driver.isolation.IsolationError("fatal: Directory not empty")
-        output = io.StringIO()
 
-        with mock.patch.object(dispatch_driver.isolation, "_remove_worktree", side_effect=removal), \
+        real_removal = dispatch_driver.isolation._remove_worktree
+
+        def isolate_removal_only(primary: Path, destination: Path, force: bool) -> None:
+            # The parallel Verify retires a sidecar before the landing; only
+            # the task isolate's own removal fails.
+            if destination == worktree:
+                raise removal
+            real_removal(primary, destination, force)
+
+        output = io.StringIO()
+        with mock.patch.object(dispatch_driver.isolation, "_remove_worktree",
+                               side_effect=isolate_removal_only), \
                 redirect_stdout(output):
             code = dispatch_driver.main(["finish", "--repo", str(root), "--task-id", "T001"])
 
@@ -1426,7 +1473,12 @@ class DispatchDriverTests(unittest.TestCase):
         root = self.root
         worktree = self.hand_dispatch_parallel(root)
 
+        real_removal = dispatch_driver.isolation._remove_worktree
+
         def partial_removal(primary: Path, destination: Path, force: bool) -> None:
+            if destination != worktree:
+                real_removal(primary, destination, force)  # the Verify sidecar retires normally
+                return
             (destination / "src/app.py").unlink()
             raise dispatch_driver.isolation.IsolationError(
                 f"could not delete {destination}: [WinError 145] The directory is not empty")
