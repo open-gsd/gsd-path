@@ -185,7 +185,7 @@ class UpgradePreflightTests(unittest.TestCase):
         completed = subprocess.run(
             [sys.executable, "-B", str(PROJECT_ROOT / "scripts" / "install.py"),
              "--runtime-migrate", "--dry-run", "--project", str(project)],
-            capture_output=True, encoding="utf-8",
+            capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertIn("preflight: intent failed under the incoming runtime", completed.stdout)
         self.assertIn("migrate-corrections", completed.stdout)
