@@ -34,7 +34,7 @@ export const planUninstall = (body: { scope: "global"; hosts: string[] } | { sco
   api<{ ok: boolean; plan: UninstallPlan }>("POST", "/api/plugin/uninstall", { ...body, dry_run: true });
 export const applyUninstall = (body: { scope: "global"; hosts: string[] } | { scope: "project"; root: string }) =>
   api<{ ok: boolean; applied: string[]; errors: { path: string; error: string }[] }>("POST", "/api/plugin/uninstall", { ...body, confirm: true });
-export const projectOp = <T = OpResult>(root: string, op: string, more: { dry_run?: boolean; member?: string } = {}) =>
+export const projectOp = <T = OpResult>(root: string, op: string, more: { dry_run?: boolean; member?: string } & Record<string, string | boolean> = {}) =>
   api<T>("POST", "/api/project/op", { root, op, ...more });
 
 /** The text of a failed call: the daemon's message, without the "Error: " a thrown Error adds. */

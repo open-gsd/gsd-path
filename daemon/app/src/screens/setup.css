@@ -52,3 +52,12 @@ button.step:disabled{cursor:default}
 .sk-remove{border-top:1px solid var(--line);margin-top:26px;padding-top:8px;display:grid;gap:10px;justify-items:start}
 .sk-remove>*{max-width:100%}
 .sk-remove .sk-plan,.sk-remove .sk-ask{justify-self:stretch}
+.member-add{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;align-items:end}
+.member-add input:not([type=checkbox]),.member-add select{width:100%;min-height:34px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--text);padding:0 8px;font:inherit;font-size:13px}
+.member-add input.mono{font-family:var(--mono);font-size:12.5px}
+.member-add-new{display:flex;align-items:center;gap:8px;font-size:13px;grid-column:1/-1}
+.member-add .actions{grid-column:1/-1;display:flex;gap:8px}
+.member-browse{display:flex;gap:6px;min-width:0}
+.member-add .member-browse input{flex:1;min-width:0;width:auto}
+.member-add>*{min-width:0}
+.member-browse .btn{flex:none}

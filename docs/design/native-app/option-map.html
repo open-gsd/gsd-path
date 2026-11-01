@@ -150,11 +150,11 @@ const AREAS = [
     ["Migrate from GSD Core", "Convert a .planning/ project.", "gsd-path-migrate skill", "Project", "router", "Show a hint when .planning/ is found."],
   ]},
   { name: "Multi-repo", where: "Coordinator project page", rows: [
-    ["Members and their health", "Marker, member hooks, and origin/main per member.", "members.py validate, detect", "Project", "plan", "A4."],
-    ["Install member hooks", "Hold a member repo to the coordinator guard.", "--member-of PATH --project MEMBER", "Project", "plan", "A4."],
-    ["Repair member markers", "Fix markers after the coordinator moves.", "members.py repair", "Project", "plan", "A4."],
-    ["Join a member", "Record a member repo, or create one on GitHub.", "members.py add [--create]", "—", "router", "Owner ruling: joining stays in the router."],
-    ["Member shipping mode", "default, direct, or pull-request per member.", "members add --integration", "—", "router", "Show it read-only."],
+    ["Members and their health", "Marker, member hooks, and origin/main per member.", "members.py validate, detect", "Project", "have", ""],
+    ["Install member hooks", "Hold a member repo to the coordinator guard.", "--member-of PATH --project MEMBER", "Project", "have", ""],
+    ["Repair member markers", "Fix markers after the coordinator moves.", "members.py repair", "Project", "have", ""],
+    ["Join a member", "Record a member repo, or create one on GitHub.", "members.py add [--create]", "Project", "have", "Owner ruling 2026-10-31: the app adds members; members.py add owns the rules."],
+    ["Member shipping mode", "default, direct, or pull-request per member.", "members add --integration", "—", "router", "Chosen in the Add member form only at join time; changing it later stays in the router."],
   ]},
   { name: "Path settings", where: "Settings → Path settings (user and project)", rows: [
     ["Shipping mode (default)", "direct merge or pull request for new projects.", "path_config set integration", "Settings", "have", ""],

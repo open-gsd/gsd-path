@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { asking, blocked, building, shipped, status } from "./fixtures";
-import { doctorReport, facts, memberRows, milestoneRows, nowBox, phaseTrack, repoRows, setupRows, usageTiles } from "./project";
+import { browsedCheckout, doctorReport, editMember, emptyMemberForm, facts, memberAdd, memberRows, milestoneRows, nowBox, phaseTrack, repoRows, setupRows, usageTiles } from "./project";
+import type { MemberForm } from "./project";
 import { DASH } from "./status";
 import type { ProjectSetup } from "./skills";
 
@@ -211,5 +212,71 @@ describe("repositories in this milestone", () => {
     const [, api, web] = repoRows(p);
     expect(api.close).toEqual({ label: "Integrated", tone: "ok", detail: "bbbbbbb · milestone/demo-004-x" });
     expect(web.close).toEqual({ label: "Closing", tone: "acc", detail: null });
+  });
+});
+
+describe("add member form", () => {
+  const form = (over: Partial<MemberForm> = {}): MemberForm => ({ ...emptyMemberForm(), name: " api ", checkout: " /work/api ", ...over });
+
+  it("sends the trimmed fields for an existing checkout and names both places it writes", () => {
+    const result = memberAdd(form({ integration: "pull-request", repo: "ignored/repo" }));
+    expect(result).toEqual({
+      body: { name: "api", checkout: "/work/api", integration: "pull-request" },
+      confirm: "Add api at /work/api as a member. This writes .project/MEMBERS.md in this project and a member marker in the Git folder of api. Members change only between milestones.",
+    });
+  });
+  it("adds the repository and visibility for a new GitHub repository and says it cannot be undone", () => {
+    const result = memberAdd(form({ create: true, repo: " acme/api ", visibility: "public" }));
+    expect(result).toEqual({
+      body: { name: "api", checkout: "/work/api", integration: "default", create: "acme/api", visibility: "public" },
+      confirm: "Create the public GitHub repository acme/api, clone it to /work/api, and add it as member api. The app cannot delete the GitHub repository later.",
+    });
+  });
+  it("names the first field to fix and sends nothing", () => {
+    expect(memberAdd(form({ name: "  " }))).toEqual({ error: "Enter a member name." });
+    expect(memberAdd(form({ checkout: "" }))).toEqual({ error: "Enter the checkout folder." });
+    for (const repo of ["", "acme", "acme/api/extra", "acme /api"]) {
+      expect(memberAdd(form({ create: true, repo }))).toEqual({ error: "Enter the new repository as owner/name." });
+    }
+  });
+  it("refuses a relative checkout and accepts full paths", () => {
+    for (const checkout of ["api", "work/api", "./api", "C:api"]) {
+      expect(memberAdd(form({ checkout }))).toEqual({ error: "Enter a full folder path, or use Browse." });
+    }
+    for (const checkout of ["~/x", "/x", "C:\\x", "C:/x"]) {
+      expect(memberAdd(form({ checkout }))).toHaveProperty("body.checkout", checkout);
+    }
+  });
+  it("starts private, so a new repository is never public by default", () => {
+    expect(emptyMemberForm()).toMatchObject({ integration: "default", create: false, visibility: "private" });
+  });
+});
+
+describe("browse for the member folder", () => {
+  it("uses the picked folder as the checkout and its name as an empty member name", () => {
+    expect(browsedCheckout(emptyMemberForm(), "/Users/me/work/api")).toEqual({ checkout: "/Users/me/work/api", name: "api" });
+    expect(browsedCheckout({ ...emptyMemberForm(), name: "backend" }, "/Users/me/work/api/")).toEqual({ checkout: "/Users/me/work/api/" });
+    expect(browsedCheckout(emptyMemberForm(), "C:\\work\\api")).toEqual({ checkout: "C:\\work\\api", name: "api" });
+  });
+  it("for a new repository keeps the pick as the parent and clones into the repository name", () => {
+    const form = { ...emptyMemberForm(), create: true, repo: "acme/web" };
+    const browse = (f: MemberForm, picked: string) => editMember(f, browsedCheckout(f, picked));
+    expect(browse(form, "/Users/me/work")).toMatchObject({ checkout: "/Users/me/work/web", name: "" });
+    expect(browse({ ...form, repo: "", name: "site" }, "/Users/me/work/")).toMatchObject({ checkout: "/Users/me/work/site" });
+  });
+  it("never uses the bare parent and follows the repository typed or changed after Browse", () => {
+    let form = editMember({ ...emptyMemberForm(), create: true }, browsedCheckout({ ...emptyMemberForm(), create: true }, "/Users/me/new"));
+    expect(form.checkout).toBe("");
+    form = editMember(form, { repo: "acme/web" });
+    expect(form.checkout).toBe("/Users/me/new/web");
+    form = editMember(form, { repo: "acme/site" });
+    expect(form.checkout).toBe("/Users/me/new/site");
+    form = editMember(form, { repo: "", name: "api" });
+    expect(form.checkout).toBe("/Users/me/new/api");
+  });
+  it("a typed checkout replaces the browsed parent", () => {
+    const browsed = editMember({ ...emptyMemberForm(), create: true }, { parent: "/Users/me/new" });
+    const typed = editMember(browsed, { checkout: "/elsewhere/web" });
+    expect(editMember(typed, { repo: "acme/other" })).toMatchObject({ checkout: "/elsewhere/web", parent: "" });
   });
 });
