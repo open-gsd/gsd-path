@@ -20,6 +20,7 @@ test-only changes are not listed; the Git history has them.
 - Link the installed `WORKFLOW.md` to GitHub so its links resolve in consuming projects. Existing installs keep their copy; see [UPDATE.md](UPDATE.md) to adopt it.
 - Land and recover tasks that declare non-ASCII paths, such as `docs/4-决策/x.md`, without a `core.quotePath` workaround.
 - Let a parallel task coder delete files in a dispatched task worktree when the hook runs from the primary checkout, and accept non-ASCII literal paths in guarded delete and move commands.
+- Pass a task Verify that reads Git's index, such as `git ls-files` on deleted paths, in a parallel round the same as in a serial one.
 
 ## [1.7.1] - 2026-10-31
 

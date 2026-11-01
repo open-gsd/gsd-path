@@ -12,7 +12,10 @@ For each `## Wave N` in PLAN.md order (a wave's tasks are the task files whose
 **Dispatch driver.** Steps 1–5 below are deterministic, and the bundled
 `scripts/dispatch_driver.py` runs them: recover, settle exited coders, the
 bookkeeping checkpoint, `ready`, brief lint, `prepare-task`, `activate-task`,
-one child per ready task, then Verify in the isolate, Log append, `land`,
+one child per ready task, then Verify in a reproduced sidecar of the task's
+work (the serial sidecar, or for a parallel isolate a sidecar of its working
+tree, so an index-reading Verify sees the task's changes whatever the round
+size — member Verifies keep the member sidecar), Log append, `land`,
 `verify-record`, and `retire` in task-id order. Prefer it whenever the owner
 supplies a child command (a headless CLI that reads the brief on stdin, for
 example `claude -p --output-format json ...` or `codex exec --json ...`; the

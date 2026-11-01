@@ -786,11 +786,45 @@ def land_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
         isolation.clean_verify(primary, sidecar_path, base, str(sidecar["branch"]))
         isolation.retire(primary, sidecar_path, str(sidecar["branch"]), False)
     else:
-        execution, reruns = landing_verify(command, regressions, worktree)
-        execution_dir = worktree
-        # A member Verify starts from the member repository's base, not the coordinator's.
-        execution_base = str(state["member_base"]) if state["mode"] == "member" else base
-        location = f"isolate {state['task_branch']}"
+        if state["mode"] == "parallel":
+            # The Verify must see the task's changes whatever the round size;
+            # the isolate's index still equals the base, and coders never
+            # stage (#547). Reproduce the isolate's working tree into a
+            # verify sidecar at the task base — the same construction the
+            # serial branch uses — so a Verify that reads git's index gets
+            # the same answer a serial round gives it. The primary may have
+            # moved past the base, so the sidecar is retired without the
+            # serial cleanup's HEAD gate.
+            branch = isolation.verify_branch_name(f"task-{task_id.lower()}-verify")
+            ensured = isolation.ensure_verify_sidecar(primary, base, branch)
+            sidecar_path = Path(str(ensured["worktree"]))
+            # A retry may find a sidecar an interrupted finish left; reproduction
+            # resets tracked files, but Verify leftovers that are untracked must
+            # not leak into the next attempt's result.
+            isolation.git_output(sidecar_path, "restore", "--source=HEAD", "--staged", "--worktree", "--", ".")
+            isolation.git_output(sidecar_path, "clean", "-fdx", "--", ".")
+            tree = snapshot_tree(worktree)
+            try:
+                isolation.reproduce_verify_sidecar(sidecar_path, tree)
+            except isolation.IsolationError as error:
+                raise DriverStop(str(error), task=task_id) from error
+            execution, reruns = landing_verify(command, regressions, sidecar_path)
+            if isolation.current_sha(sidecar_path) != base:
+                # The serial cleanup refuses a moved HEAD for the same reason:
+                # the recorded pass would not describe the reproduced tree.
+                raise DriverStop("parallel verify sidecar HEAD changed", task=task_id)
+            execution_dir = sidecar_path
+            execution_base = base
+            location = f"sidecar {branch}"
+            isolation.git_output(sidecar_path, "restore", "--source=HEAD", "--staged", "--worktree", "--", ".")
+            isolation.git_output(sidecar_path, "clean", "-fdx", "--", ".")
+            isolation.retire(primary, sidecar_path, branch, False)
+        else:
+            execution, reruns = landing_verify(command, regressions, worktree)
+            execution_dir = worktree
+            # A member Verify starts from the member repository's base, not the coordinator's.
+            execution_base = str(state["member_base"]) if state["mode"] == "member" else base
+            location = f"isolate {state['task_branch']}"
     passed = execution["exit_code"] == 0
     broken = [item for item in reruns if item["exit_code"]]
     execution.update({"worktree": str(worktree), "cwd": str(execution_dir),
