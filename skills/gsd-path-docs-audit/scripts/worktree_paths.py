@@ -78,6 +78,9 @@ def _worktree_list_porcelain_uncached(primary: Path) -> tuple[str, bool]:
 
 
 def _git(primary: Path, *args: str) -> str:
+    # run_git scrubs git's discovery environment: a hook-exported GIT_DIR
+    # would make the placement probe answer for the hook's repository and
+    # refuse every commit from a linked worktree (#555).
     result = _common.run_git(primary, *args)
     if result.returncode:
         raise ValueError(result.stderr.strip() or "cannot inspect worktree placement")

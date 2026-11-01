@@ -27,7 +27,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import BinaryIO, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import BinaryIO, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 
 # Chosen by what imports, not os.name, so tests can emulate Windows on POSIX.
@@ -470,16 +470,19 @@ def parse_verify_ledger(text: str) -> list:
 
 
 def _run_exact(
-    argv: Sequence[str], *, cwd: Optional[Path] = None, input: Optional[str] = None
+    argv: Sequence[str], *, cwd: Optional[Path] = None, input: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
 ) -> subprocess.CompletedProcess[str]:
     """subprocess.run with UTF-8 text and no newline translation.
 
     Text-mode pipes on Windows turn "\\n" into "\\r\\n" on the way in, so text
     handed to git hash-object would no longer match the committed blob.
+    An explicit env replaces the inherited one (None inherits, as before).
     """
     completed = subprocess.run(
         argv,
         cwd=cwd,
+        env=env,
         input=None if input is None else input.encode("utf-8", "surrogateescape"),
         capture_output=True,
         check=False,
@@ -499,9 +502,43 @@ def run_command(
 
 
 def run_git(
-    repo: Path, *arguments: str, input: Optional[str] = None
+    repo: Path, *arguments: str, input: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
 ) -> subprocess.CompletedProcess[str]:
-    return _run_exact(git_command(repo, *arguments), input=input)
+    # The default scrubs git's repository-discovery environment: run_git's
+    # contract is "this repo, on its own merits", and a hook-exported GIT_DIR
+    # overrides `-C` for discovery entirely (#555). No caller relies on the
+    # ambient variables; explicit env replaces the scrub when a caller
+    # genuinely needs one.
+    return _run_exact(
+        git_command(repo, *arguments), input=input,
+        env=git_environment() if env is None else env,
+    )
+
+
+# Git's repository-discovery environment. Git exports GIT_DIR (and
+# GIT_INDEX_FILE for pre-commit) to hooks; with GIT_DIR set, an explicit
+# `-C <dir>` loses discovery entirely, so a probe about another directory
+# answers for the hook's repository instead (#555). One definition shared
+# by every probe that must resolve a directory on its own merits.
+GIT_DISCOVERY_VARS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_PREFIX",
+    "GIT_NAMESPACE",
+)
+
+
+def git_environment() -> dict:
+    """The inherited environment without git's repository-discovery vars (#555)."""
+    env = dict(os.environ)
+    for key in GIT_DISCOVERY_VARS:
+        env.pop(key, None)
+    return env
 
 
 def _patch_ids(repo: Path, commits: Sequence[str]) -> list[Optional[str]]:

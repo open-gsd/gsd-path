@@ -94,6 +94,24 @@ class WorktreePlacementTests(unittest.TestCase):
                 self.assertFalse(root.exists())
                 self.assertFalse((self.repo / ".git/gsd-path/workspaces").exists())
 
+    def test_outside_root_resolves_under_the_hook_environment(self):
+        # git exports GIT_DIR (and GIT_INDEX_FILE for pre-commit) to hooks;
+        # with GIT_DIR set, `-C` loses repository discovery, so the placement
+        # probe would report the hook's repository for the managed root and
+        # refuse every commit from a linked worktree (#555).
+        linked = self.root / "linked"
+        test_isolation.git(self.repo, "worktree", "add", "-b", "other", str(linked), self.base)
+        git_dir = test_isolation.git(self.repo, "rev-parse", "--absolute-git-dir").strip()
+        hook_environment = {
+            "GIT_DIR": git_dir + "/worktrees/linked",
+            "GIT_INDEX_FILE": git_dir + "/worktrees/linked/index",
+            "GIT_PREFIX": "",
+        }
+        with mock.patch.dict(os.environ, hook_environment):
+            placed = isolation.isolate_verify(self.repo, self.base, "review")
+        self.assertTrue(Path(placed["worktree"]).is_relative_to(self.managed), placed["worktree"])
+        isolation.retire(self.repo, Path(placed["worktree"]), placed["branch"], False)
+
     def test_legacy_cleanup_survives_new_managed_allocations(self):
         legacy = self.repo.parent / f"{self.repo.name}.gsd-path" / "verify" / "old"
         with mock.patch.object(isolation, "sidecar_root", return_value=legacy):
