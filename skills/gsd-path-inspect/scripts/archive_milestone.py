@@ -138,7 +138,6 @@ WAVE_REPAIR_PATTERN = re.compile(
 WAVE_CYCLE_CLAIM_PATTERN = re.compile(r"^wave-\d+\.?cycle")
 FINAL_CRITERION_PATTERN = re.compile(r"^### SC([1-9]\d*) — (.+)$")
 INTENT_CRITERION_PATTERN = re.compile(r"^([1-9]\d*)\.\s+(\S.*)$")
-HTML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 FINAL_GAP_FILE_PATTERN = re.compile(r"^final-gap-([1-9]\d*)\.md$")
 FINAL_GAP_HEADING_PATTERN = re.compile(r"^# Gap Review — ([1-9]\d*): (.+)$")
 WAVE_TASK_HEADING_PATTERN = re.compile(r"^## (T\d{3}) — (.+): (pass|fail)$")

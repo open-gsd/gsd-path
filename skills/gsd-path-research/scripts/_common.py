@@ -285,7 +285,7 @@ def quotes_criterion(quote: str, criterion: str) -> bool:
 
 
 _COMMENT_OR_CODE_SPAN = re.compile(
-    r"(?<!`)(?<!\\)(`+)(?!`)(?:(?!\1).)*?\1|<!--.*?-->", re.DOTALL
+    r"(?<!`)(?<!\\)(`+)(?!`)(?:(?!\1)[^\n])*?\1|<!--.*?-->", re.DOTALL
 )
 
 
