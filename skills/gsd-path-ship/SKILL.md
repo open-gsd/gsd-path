@@ -366,7 +366,33 @@ The persisted `STATE.archive` field is the transaction identity.
      **Outcome**, link
      the returned PR as **Review**, and state in **Next** that the user must
      merge it with GitHub's merge-commit or rebase method. Stop this ship
-     invocation; Path never enables auto-merge or merges the PR. On rerun after
+     invocation; Path never enables auto-merge or merges the PR.
+     While awaiting-merge, a red required forge check may instead be rolled
+     back before anything is merged or tagged (#457): when the user rules the
+     failing check must be fixed rather than merged, run
+     `python3 <absolute archive_milestone.py> abandon-integration --repo <root> --slug <STATE.milestone> --finding "<one verbatim line of the failing check output>"`.
+     The helper first proves the milestone is still safely reversible — the
+     PR exists, is open and unmerged with its head still the ship commit, no
+     `milestone/<NNN>-<slug>` tag exists on origin, the published bound
+     branch is still exactly at the ship commit, and the ship commit is not
+     on the remote default — then it journals the transaction, closes the PR
+     without merging, deletes the published bound branch, rewinds the local
+     bound branch to the reviewed pre-ship commit, restores the archived
+     milestone to its active `.project/` paths, and moves STATE
+     `shipped/done` to `ship/blocked` with event `published integration
+     abandoned` (STATE.archive nulled so the milestone re-ships cleanly). It
+     writes `.project/review/final-gap-N.md` (Gap verdict: blocked) and
+     `.project/review/PATCH-FINDINGS.md` from the `--finding` text, leaving
+     the rollback uncommitted for the patch-plan checkpoint exactly like
+     final-review outputs. The router then routes `ship/blocked` to plan
+     patch mode through the existing PATCH-FINDINGS path: fix the failing
+     check, re-run the final gate, and re-ship the milestone. A merged PR, an
+     existing milestone tag, a moved PR head, a moved bound branch, a ship
+     commit already on the remote default, or a published ref that vanished
+     while the pull request is still open blocks with no mutation, as does a
+     `PATCH-FINDINGS.md` this transaction did not write, wherever it sits in
+     the archived or restored review (an earlier cycle's file or a human
+     revision): resolve that file before rerunning. On rerun after
      a human GitHub user merges it, the helper requires the PR head to remain
      the ship commit and its landing to be on `origin/main` first-parent
      history as either a two-parent merge with that ship commit as second
@@ -426,7 +452,9 @@ The persisted `STATE.archive` field is the transaction identity.
    commit, and partial merge, tag, push, and cleanup states are resumed only by
    rerunning `integrate`; it reuses NNN from STATE.archive. While integration
    is pending, never report shipped or start the next milestone; route back to
-   ship.
+   ship. An awaiting-merge milestone whose required forge checks fail may
+   instead be rolled back through `abandon-integration` above; its journal
+   makes every rollback step idempotent, so rerun the exact command to resume.
 
 ## Published validation recovery
 

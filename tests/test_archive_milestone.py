@@ -13,6 +13,7 @@ from unittest import mock
 from scripts import (
     archive_milestone,
     build_state,
+    check_handoffs,
     discussion_validate,
     integration,
     isolation,
@@ -3926,6 +3927,22 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 return subprocess.CompletedProcess(
                     arguments, 0, json.dumps(created), ""
                 )
+            if (
+                len(arguments) >= 6
+                and arguments[4].casefold().startswith("repos/open-gsd/demo/pulls/")
+                and "PATCH" in arguments
+                and "state=closed" in arguments
+            ):
+                # abandon-integration closes the milestone PR without merging.
+                closed = {
+                    **pulls[0],
+                    "state": "closed",
+                    "merged_at": None,
+                    "merge_commit_sha": None,
+                }
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps(closed), ""
+                )
             return subprocess.CompletedProcess(arguments, 1, "", "unexpected command")
 
         return run
@@ -4326,6 +4343,840 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertNotEqual(
                 self.git(remote, "show-ref", "--tags", "--quiet").returncode,
                 0,
+            )
+
+    def awaiting_merge_pull(self, ship_sha: str) -> dict:
+        return {
+            "number": 7,
+            "state": "open",
+            "html_url": "https://github.com/open-gsd/demo/pull/7",
+            "merged_at": None,
+            "merge_commit_sha": None,
+            "base": {"ref": "main"},
+            "head": {
+                "ref": "gsd-path/M001",
+                "sha": ship_sha,
+                "repo": {"full_name": "open-gsd/demo"},
+            },
+            "body": integration.PR_CREDIT_LINE,
+        }
+
+    def abandon_integration(
+        self, repo: Path, finding: str = "CI run 42 failed: tests failed"
+    ) -> dict:
+        return integration.abandon_integration(repo, "demo", finding)
+
+    def test_abandon_integration_rolls_back_the_published_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            ship_parent = self.git(repo, "rev-parse", f"{ship_sha}^").stdout.strip()
+            open_pull = self.awaiting_merge_pull(ship_sha)
+            calls: list[tuple[str, ...]] = []
+            base_dispatcher = self.github_api([open_pull])
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                calls.append(arguments)
+                return base_dispatcher(*arguments)
+
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(
+                    integration, "run_command", side_effect=github_api
+                ),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+                result = self.abandon_integration(
+                    repo, "CI run 42 failed: pytest tests/test_demo.py assert 1 == 2"
+                )
+
+            self.assertEqual(result["status"], "abandoned")
+            self.assertEqual(result["pr_closed"], open_pull["html_url"])
+            self.assertTrue(result["bound_deleted"])
+            self.assertEqual(result["state"], "ship/blocked")
+            self.assertTrue(result["finding_recorded"])
+            close_calls = [
+                arguments
+                for arguments in calls
+                if "PATCH" in arguments and "state=closed" in arguments
+            ]
+            self.assertEqual(len(close_calls), 1)
+            self.assertEqual(
+                close_calls[0][4], "repos/open-gsd/demo/pulls/7"
+            )
+            # The published bound branch is gone from origin.
+            self.assertNotEqual(
+                self.git(
+                    remote, "rev-parse", "--verify", "-q", "refs/heads/gsd-path/M001"
+                ).returncode,
+                0,
+            )
+            # The local bound branch rewound to the reviewed pre-ship commit.
+            self.assertEqual(
+                self.git(repo, "branch", "--show-current").stdout.strip(),
+                "gsd-path/M001",
+            )
+            self.assertEqual(
+                self.git(repo, "rev-parse", "HEAD").stdout.strip(), ship_parent
+            )
+            # The restored tree is working-tree-only: nothing stays staged from
+            # the rewound ship transaction, and every restored directory
+            # byte-matches the pre-ship index, so the patch-plan checkpoint
+            # stages exactly what it validates.
+            self.assertEqual(
+                self.git(repo, "diff", "--cached", "--name-only").stdout.strip(), ""
+            )
+            self.assertEqual(
+                self.git(
+                    repo,
+                    "status",
+                    "--porcelain",
+                    "--",
+                    ".project/intent",
+                    ".project/research",
+                    ".project/plan",
+                    ".project/tasks",
+                ).stdout.strip(),
+                "",
+            )
+            # STATE moved to ship/blocked with a nulled archive transaction.
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status, state.archive), ("ship", "blocked", None))
+            self.assertIn(
+                "published integration abandoned",
+                (repo / ".project" / "STATE.md").read_text(encoding="utf-8"),
+            )
+            # The archive moved back to the active root and is consumable.
+            self.assertFalse((repo / ".project" / "archive" / archive_name).exists())
+            self.assertTrue(
+                (repo / ".project" / "review" / "FINAL.md").is_file()
+            )
+            self.assertTrue(
+                (repo / ".project" / "tasks" / "T001-demo.md").is_file()
+            )
+            summary = check_handoffs.validate_patch_findings(repo)
+            self.assertEqual(summary["findings"], ["P001"])
+            self.assertEqual(
+                summary["sources"], [".project/review/final-gap-2.md"]
+            )
+            # The router reopens the existing patch route for the finding.
+            route = pipeline_state.route_state(repo)["route"]
+            self.assertEqual(route["action"], "run-phase")
+            self.assertEqual(route["phase"], "plan")
+            self.assertEqual(route["mode"], "patch")
+            # The transaction journal is gone once the rollback completes.
+            common = (
+                self.git(
+                    repo, "rev-parse", "--path-format=absolute", "--git-common-dir"
+                )
+                .stdout.strip()
+            )
+            self.assertFalse(
+                (Path(common) / "gsd-path-abandon-integration.json").exists()
+            )
+
+    def test_abandon_integration_refuses_a_merged_pull_request(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = self.awaiting_merge_pull(ship_sha)
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+                merged_pull = self.merged_pull_request(ship_sha, "e" * 40)
+                with mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([merged_pull]),
+                ):
+                    with self.assertRaisesRegex(
+                        archive_milestone.ArchiveError,
+                        "refuses a merged pull request",
+                    ):
+                        self.abandon_integration(repo)
+
+            self.assertEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("shipped", "done"))
+            self.assertFalse(
+                (repo / ".project" / "review" / "PATCH-FINDINGS.md").exists()
+            )
+
+    def test_abandon_integration_refuses_a_published_milestone_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = self.awaiting_merge_pull(ship_sha)
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+                tagged = self.git(
+                    remote, "tag", f"milestone/{archive_name}", "main"
+                )
+                self.assertEqual(tagged.returncode, 0, tagged.stderr)
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    f"milestone tag refs/tags/milestone/{archive_name} already exists",
+                ):
+                    self.abandon_integration(repo)
+
+            self.assertEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("shipped", "done"))
+            self.assertFalse(
+                (repo / ".project" / "review" / "PATCH-FINDINGS.md").exists()
+            )
+
+    def test_abandon_integration_refuses_a_moved_pull_request_head(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = self.awaiting_merge_pull(ship_sha)
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+                moved_pull = {
+                    **self.awaiting_merge_pull("c" * 40),
+                    "number": 8,
+                    "html_url": "https://github.com/open-gsd/demo/pull/8",
+                }
+                with (
+                    mock.patch.object(
+                        integration,
+                        "run_command",
+                        side_effect=self.github_api([moved_pull]),
+                    ),
+                    self.assertRaisesRegex(
+                        archive_milestone.ArchiveError,
+                        "GitHub pull request head is not the ship commit",
+                    ),
+                ):
+                    self.abandon_integration(repo)
+
+            self.assertEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("shipped", "done"))
+
+    def test_abandon_integration_refuses_a_state_that_is_not_shipped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = self.awaiting_merge_pull(ship_sha)
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+                state_path = repo / ".project" / "STATE.md"
+                before = state_path.read_text(encoding="utf-8")
+                state_path.write_bytes(
+                    before.replace("phase: shipped", "phase: ship")
+                    .replace("status: done", "status: active")
+                    .encode("utf-8")
+                )
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    r"not valid in state: ship/active",
+                ):
+                    self.abandon_integration(repo)
+
+            self.assertEqual(
+                state_path.read_text(encoding="utf-8"),
+                before.replace("phase: shipped", "phase: ship")
+                .replace("status: done", "status: active"),
+            )
+            self.assertEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+
+    def test_abandon_integration_restores_a_program_roadmap_row(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            project = repo / ".project"
+            (project / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+            (project / "ROADMAP.md").write_bytes(
+                "# Roadmap\n\n### M001 — demo\n\n"
+                "Status: shipped\n"
+                "Archive: .project/archive/001-demo\n".encode("utf-8")
+            )
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = self.awaiting_merge_pull(ship_sha)
+
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+                result = self.abandon_integration(repo)
+
+            self.assertEqual(result["state"], "ship/blocked")
+            # record_shipment's stamp is inverted: the row no longer claims a
+            # shipped milestone or an archive directory the rollback removed.
+            roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
+            self.assertIn("Status: active", roadmap)
+            self.assertIn("Archive: null", roadmap)
+            self.assertNotIn("Status: shipped", roadmap)
+            self.assertNotIn("Archive: .project/archive/001-demo", roadmap)
+            self.assertFalse((project / "archive" / archive_name).exists())
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("ship", "blocked"))
+            summary = check_handoffs.validate_patch_findings(repo)
+            self.assertEqual(summary["findings"], ["P001"])
+
+    def test_abandon_integration_uses_the_first_unused_gap_number(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            review = repo / ".project" / "review"
+            # An earlier patch cycle already consumed gaps 1 and 2; both travel
+            # into the archive and come back on rollback. The abandon finding
+            # must take 3 without overwriting either review. (That cycle's own
+            # PATCH-FINDINGS.md, when left in place, blocks the abandonment
+            # loudly instead — see the revised-findings test below.)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            (review / "final-gap-2.md").write_bytes(
+                f"""# Gap Review — 2: project Verify command
+
+Reviewed HEAD: {reviewed_head}
+Gap verdict: pass
+Risk: project Verify command
+Waves checked: 1
+
+## Checked evidence
+
+- **Check**: `python -m unittest`
+- **Observed**: focused project verification passed.
+- **Reference**: `tests/test_archive_milestone.py`
+
+## Finding
+
+- **Found**: The project Verify command passed at the reviewed HEAD.
+- **Fix direction**: none
+""".encode("utf-8")
+            )
+            gap_one = (review / "final-gap-1.md").read_text(encoding="utf-8")
+            gap_two = (review / "final-gap-2.md").read_text(encoding="utf-8")
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = self.awaiting_merge_pull(ship_sha)
+
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+                self.abandon_integration(repo, "CI run 7 failed: flaky socket test")
+
+            # Neither earlier gap review was overwritten.
+            self.assertEqual(
+                (review / "final-gap-1.md").read_text(encoding="utf-8"), gap_one
+            )
+            self.assertEqual(
+                (review / "final-gap-2.md").read_text(encoding="utf-8"), gap_two
+            )
+            self.assertTrue((review / "final-gap-3.md").is_file())
+            summary = check_handoffs.validate_patch_findings(repo)
+            self.assertEqual(
+                summary["sources"], [".project/review/final-gap-3.md"]
+            )
+
+    def test_abandon_integration_resume_refuses_a_foreign_checkout_first(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = self.awaiting_merge_pull(ship_sha)
+            calls: list[tuple[str, ...]] = []
+            base_dispatcher = self.github_api([open_pull])
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                calls.append(arguments)
+                return base_dispatcher(*arguments)
+
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(integration, "run_command", side_effect=github_api),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+
+                def crash_after_journal(*args, **kwargs):
+                    journal = integration.abandon_integration_journal_path(
+                        repo.resolve()
+                    )
+                    assert journal.is_file(), "journal must exist before the crash"
+                    raise integration.ArchiveError("simulated crash after journal")
+
+                # A crash right after journal creation leaves the transaction
+                # resumable with nothing mutated yet.
+                with mock.patch.object(
+                    integration, "close_pull_request", side_effect=crash_after_journal
+                ):
+                    with self.assertRaisesRegex(
+                        archive_milestone.ArchiveError, "simulated crash"
+                    ):
+                        self.abandon_integration(repo)
+
+                # Someone switches the worktree to another branch at the ship
+                # commit before the resume: the local proof must refuse before
+                # ANY remote mutation, not after closing the PR.
+                switched = self.git(repo, "checkout", "-q", "-b", "other-at-ship")
+                self.assertEqual(switched.returncode, 0, switched.stderr)
+                calls.clear()
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "requires the bound branch gsd-path/M001 checked out",
+                ):
+                    self.abandon_integration(repo)
+
+            self.assertFalse(
+                [arguments for arguments in calls if "state=closed" in arguments],
+                "no PR may be closed from a foreign checkout",
+            )
+            self.assertEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("shipped", "done"))
+
+    def test_abandon_integration_keeps_a_human_revised_gap_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            self.make_repo(repo)
+            project = repo / ".project"
+            review = project / "review"
+            pipeline_state.transition_state(
+                repo,
+                expected={
+                    "phase": "ship",
+                    "status": "active",
+                    "milestone": "demo",
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                changes={"status": "blocked"},
+                event="final gate blocked for the writer test",
+            )
+            finding = "CI run 9 failed: integration suite timeout"
+            first = integration.write_abandon_integration_findings(project, finding)
+            self.assertEqual(first, ".project/review/final-gap-2.md")
+
+            # A human revises the gap review between runs of the transaction.
+            revised = (
+                (review / "final-gap-2.md").read_text(encoding="utf-8")
+                + "human revision: rechecked locally, still blocked\n"
+            )
+            (review / "final-gap-2.md").write_bytes(revised.encode("utf-8"))
+
+            second = integration.write_abandon_integration_findings(project, finding)
+
+            # The revision survives byte-for-byte; the rerun took a fresh
+            # unused number instead of overwriting it.
+            self.assertEqual(
+                (review / "final-gap-2.md").read_text(encoding="utf-8"), revised
+            )
+            self.assertEqual(second, ".project/review/final-gap-3.md")
+            self.assertTrue((review / "final-gap-3.md").is_file())
+            summary = check_handoffs.validate_patch_findings(repo)
+            self.assertEqual(summary["findings"], ["P001"])
+            self.assertEqual(
+                summary["sources"], [".project/review/final-gap-3.md"]
+            )
+
+    def test_abandon_integration_refuses_a_human_revised_patch_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            self.make_repo(repo)
+            project = repo / ".project"
+            review = project / "review"
+            pipeline_state.transition_state(
+                repo,
+                expected={
+                    "phase": "ship",
+                    "status": "active",
+                    "milestone": "demo",
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                changes={"status": "blocked"},
+                event="final gate blocked for the writer test",
+            )
+            finding = "CI run 11 failed: integration suite timeout"
+            first = integration.write_abandon_integration_findings(project, finding)
+            self.assertEqual(first, ".project/review/final-gap-2.md")
+            findings_path = review / "PATCH-FINDINGS.md"
+            gap_before = (review / "final-gap-2.md").read_text(encoding="utf-8")
+
+            # A human revises the findings file while the gap review stays as
+            # this transaction wrote it: the rerun must refuse loudly and
+            # leave both files byte-unchanged.
+            revised = (
+                findings_path.read_text(encoding="utf-8")
+                + "human revision: triaged by the owner\n"
+            )
+            findings_path.write_bytes(revised.encode("utf-8"))
+
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError,
+                "a PATCH-FINDINGS.md already exists with different content",
+            ):
+                integration.write_abandon_integration_findings(project, finding)
+
+            self.assertEqual(
+                findings_path.read_text(encoding="utf-8"), revised
+            )
+            self.assertEqual(
+                (review / "final-gap-2.md").read_text(encoding="utf-8"), gap_before
+            )
+            self.assertFalse((review / "final-gap-3.md").exists())
+
+    def test_abandon_integration_resume_refuses_a_premature_manual_rewind(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            ship_parent = self.git(repo, "rev-parse", f"{ship_sha}^").stdout.strip()
+            open_pull = self.awaiting_merge_pull(ship_sha)
+            calls: list[tuple[str, ...]] = []
+            base_dispatcher = self.github_api([open_pull])
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                calls.append(arguments)
+                return base_dispatcher(*arguments)
+
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(integration, "run_command", side_effect=github_api),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+
+                def crash_after_journal(*args, **kwargs):
+                    journal = integration.abandon_integration_journal_path(
+                        repo.resolve()
+                    )
+                    assert journal.is_file(), "journal must exist before the crash"
+                    raise integration.ArchiveError("simulated crash after journal")
+
+                with mock.patch.object(
+                    integration, "close_pull_request", side_effect=crash_after_journal
+                ):
+                    with self.assertRaisesRegex(
+                        archive_milestone.ArchiveError, "simulated crash"
+                    ):
+                        self.abandon_integration(repo)
+
+                # Someone manually rewinds the bound branch before this
+                # transaction's remote steps ran: the PR is still open and the
+                # ref still published, so the resume must refuse before any
+                # remote mutation.
+                rewound = self.git(repo, "reset", "-q", "--mixed", ship_parent)
+                self.assertEqual(rewound.returncode, 0, rewound.stderr)
+                calls.clear()
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "sits on the reviewed parent before this transaction",
+                ):
+                    self.abandon_integration(repo)
+
+            self.assertFalse(
+                [arguments for arguments in calls if "state=closed" in arguments],
+                "no PR may be closed from a prematurely rewound checkout",
+            )
+            self.assertEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("shipped", "done"))
+
+    def test_abandon_integration_resume_refuses_a_foreign_ref_deletion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = self.awaiting_merge_pull(ship_sha)
+            calls: list[tuple[str, ...]] = []
+            base_dispatcher = self.github_api([open_pull])
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                calls.append(arguments)
+                return base_dispatcher(*arguments)
+
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(integration, "run_command", side_effect=github_api),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+
+                def crash_after_journal(*args, **kwargs):
+                    journal = integration.abandon_integration_journal_path(
+                        repo.resolve()
+                    )
+                    assert journal.is_file(), "journal must exist before the crash"
+                    raise integration.ArchiveError("simulated crash after journal")
+
+                with mock.patch.object(
+                    integration, "close_pull_request", side_effect=crash_after_journal
+                ):
+                    with self.assertRaisesRegex(
+                        archive_milestone.ArchiveError, "simulated crash"
+                    ):
+                        self.abandon_integration(repo)
+
+                # Someone deletes the published ref while the pull request is
+                # still open: this transaction deletes only after closing, so
+                # the resume must refuse a state it cannot have produced.
+                self.git(remote, "update-ref", "-d", "refs/heads/gsd-path/M001")
+                calls.clear()
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "absent while the pull request is still open",
+                ):
+                    self.abandon_integration(repo)
+
+            self.assertFalse(
+                [arguments for arguments in calls if "state=closed" in arguments],
+                "no PR may be closed over a foreign ref deletion",
+            )
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("shipped", "done"))
+
+    def test_abandon_integration_resume_refuses_foreign_findings_before_mutating(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = self.awaiting_merge_pull(ship_sha)
+            calls: list[tuple[str, ...]] = []
+            base_dispatcher = self.github_api([open_pull])
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                calls.append(arguments)
+                return base_dispatcher(*arguments)
+
+            with (
+                mock.patch.object(
+                    integration, "github_repository", return_value="open-gsd/demo"
+                ),
+                mock.patch.object(integration, "run_command", side_effect=github_api),
+            ):
+                waiting = integration.integrate(repo, "demo")
+                self.assertEqual(waiting["status"], "awaiting-merge")
+
+                def crash_after_journal(*args, **kwargs):
+                    journal = integration.abandon_integration_journal_path(
+                        repo.resolve()
+                    )
+                    assert journal.is_file(), "journal must exist before the crash"
+                    raise integration.ArchiveError("simulated crash after journal")
+
+                with mock.patch.object(
+                    integration, "close_pull_request", side_effect=crash_after_journal
+                ):
+                    with self.assertRaisesRegex(
+                        archive_milestone.ArchiveError, "simulated crash"
+                    ):
+                        self.abandon_integration(repo)
+
+                # An edited findings file inside the archive must refuse the
+                # rerun in the proof phase — before the pull request is
+                # closed, not at the write step after the remote rollback.
+                findings = (
+                    repo
+                    / ".project"
+                    / "archive"
+                    / archive_name
+                    / "review"
+                    / "PATCH-FINDINGS.md"
+                )
+                self.assertTrue(findings.parent.is_dir(), "archived review exists")
+                findings.write_text(
+                    "# Patch Findings\n\nhuman triage from an earlier cycle\n",
+                    encoding="utf-8",
+                )
+                calls.clear()
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "PATCH-FINDINGS.md already exists with different content",
+                ):
+                    self.abandon_integration(repo)
+
+            self.assertFalse(
+                [arguments for arguments in calls if "state=closed" in arguments],
+                "no PR may be closed when foreign findings block the abandon",
+            )
+            self.assertEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("shipped", "done"))
+
+    def test_abandon_findings_conflict_rejects_foreign_shapes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            review = Path(temporary_directory) / "review"
+            review.mkdir()
+            head = "a" * 40
+            final = review / "FINAL.md"
+            final.write_text(f"# Final\n\nReviewed HEAD: {head}\n", encoding="utf-8")
+            finding = "CI run 12 failed: integration suite timeout"
+            self.assertFalse(
+                integration.abandon_findings_conflict(review, finding),
+                "an absent findings file is no conflict",
+            )
+            findings = review / "PATCH-FINDINGS.md"
+            ours = integration.abandon_patch_findings_text(
+                head, finding, ".project/review/final-gap-2.md"
+            )
+            findings.write_text(ours, encoding="utf-8")
+            self.assertFalse(
+                integration.abandon_findings_conflict(review, finding),
+                "this transaction's own bytes are no conflict",
+            )
+            findings.write_bytes(b"# Patch Findings\n\n\xff\xfe broken bytes\n")
+            self.assertTrue(
+                integration.abandon_findings_conflict(review, finding),
+                "malformed UTF-8 can never be proven ours",
+            )
+            findings.write_text(ours, encoding="utf-8")
+            final.write_bytes(b"\xff\xfe broken final\n")
+            self.assertTrue(
+                integration.abandon_findings_conflict(review, finding),
+                "an unreadable FINAL.md leaves the bytes unprovable",
+            )
+            final.write_text(f"# Final\n\nReviewed HEAD: {head}\n", encoding="utf-8")
+            findings.unlink()
+            elsewhere = review / "elsewhere.md"
+            elsewhere.write_text("elsewhere", encoding="utf-8")
+            findings.symlink_to(elsewhere)
+            self.assertTrue(
+                integration.abandon_findings_conflict(review, finding),
+                "a symlinked findings file can never be ours",
             )
 
     def test_pull_request_integration_rejects_competing_pr_for_ship_commit(
