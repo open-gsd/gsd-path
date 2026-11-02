@@ -671,6 +671,9 @@ def tree_mtime(path: Union[str, Path], skip: Tuple[str, ...] = ()) -> Optional[f
     return latest
 
 
+STATUS_COMMAND_TIMEOUT = 10
+
+
 def _run_status_command(command: List[str]) -> Tuple[Optional[dict], str]:
     """The status payload, or None and the last line the command wrote to stderr."""
     try:
@@ -681,9 +684,13 @@ def _run_status_command(command: List[str]) -> Tuple[Optional[dict], str]:
             capture_output=True,
             encoding="utf-8",
             errors="replace",
-            timeout=10,
+            timeout=STATUS_COMMAND_TIMEOUT,
             check=False,
         )
+    except subprocess.TimeoutExpired:
+        # Name the timeout: a slow runtime is not an unavailable one, and a
+        # verified milestone must not read as a silent validation gap (#558).
+        return None, f"runtime status timed out after {STATUS_COMMAND_TIMEOUT} s"
     except (OSError, subprocess.SubprocessError):
         return None, ""
     if result.returncode != 0:

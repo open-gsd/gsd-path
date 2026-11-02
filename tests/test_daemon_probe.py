@@ -651,6 +651,20 @@ class DeclaredRuntimeTests(unittest.TestCase):
         row = self.runtime_row(status)
         self.assertEqual((row["status"], row["detail"]), ("not started", "No milestone has started yet."))
 
+    def test_slow_runtime_names_the_timeout(self) -> None:
+        make_declared_runtime(self.root, self.home)
+        with mock.patch.object(
+            probe.subprocess_platform, "run",
+            side_effect=subprocess.TimeoutExpired("status_runtime.py", probe.STATUS_COMMAND_TIMEOUT),
+        ):
+            status = probe.probe_project(self.root)
+        reason = status.workflow["reason"]
+        self.assertEqual(
+            reason,
+            f"Runtime validation is unavailable. runtime status timed out after {probe.STATUS_COMMAND_TIMEOUT} s",
+        )
+        self.assertEqual(status.attention[-1], {"kind": "unverified", "label": reason, "ref": None})
+
     def test_broken_runtime_keeps_the_launcher_hint(self) -> None:
         make_declared_runtime(self.root, self.home)
         shutil.rmtree(self.home / ".gsd-path" / "runtimes")
