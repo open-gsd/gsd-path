@@ -24,6 +24,7 @@ test-only changes are not listed; the Git history has them.
 - Accept a success criterion that quotes a Path marker comment as inline code, such as `<!-- gsd-path:begin -->`, at build completion and archive the same as at the wave gate.
 - Let build recovery accept an approved INTENT whose legacy `## Corrections` entries were renumbered as `- C<n> <date>: <ruling>`, so a mid-milestone runtime upgrade no longer wedges the project, and warn during `--runtime-upgrade` and `--runtime-migrate` when the incoming runtime's handoff checks would fail on the open milestone.
 - Let the pre-commit guard accept commits from a linked worktree after a milestone ships and integrates, instead of refusing every commit with "managed worktree root must be outside this repository's worktrees".
+- Read every origin ref a status check needs with one batched `git ls-remote` instead of six serial round trips, keeping `status` inside the app's probe budget on wide-area origins.
 
 ## [1.7.1] - 2026-10-31
 

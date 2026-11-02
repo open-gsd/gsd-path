@@ -6307,6 +6307,41 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(payload["integrate"], merge_sha)
             self.assertEqual(payload["tag"], f"milestone/{archive_name}")
 
+    def test_status_reads_origin_refs_with_one_ls_remote(self):
+        # Six serial ls-remote round trips pushed the daemon's status past
+        # its budget; the whole live set is one batched query (#558).
+        from scripts import integration, pipeline_state
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root / "primary"
+            repo.mkdir()
+            self.make_publishable_bound_repo(repo, root / "origin.git")
+            (repo / "src/demo.py").write_bytes("value = 'integration'\n".encode("utf-8"))
+            self.git(repo, "add", "src/demo.py")
+            changed = self.git(repo, "commit", "-qm", "fixture product change")
+            self.assertEqual(changed.returncode, 0, changed.stderr)
+            self.restamp_final_review(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            result = self.integrate(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            remote_calls = []
+            real_run_git = integration.run_git
+
+            def counting_run_git(project, *arguments, **keywords):
+                if arguments and arguments[0] == "ls-remote":
+                    remote_calls.append(arguments)
+                return real_run_git(project, *arguments, **keywords)
+
+            with mock.patch.object(integration, "run_git", side_effect=counting_run_git):
+                status = pipeline_state.status_state(repo)
+            self.assertEqual(status["completion"]["status"], "verified", status["completion"])
+            self.assertEqual(remote_calls, [
+                ("ls-remote", "--refs", "origin",
+                 "refs/heads/main", f"refs/tags/milestone/{archive_name}",
+                 "refs/heads/gsd-path/M001"),
+            ], remote_calls)
+
     def test_completed_milestone_releases_ordinary_work_only_with_proof(self):
         from scripts import pipeline_state
         from tests.test_guard_hook import guard_hook, run_guard

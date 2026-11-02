@@ -11,7 +11,7 @@ import json
 import re
 import contextlib
 from pathlib import Path, PurePosixPath
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Sequence
 
 if __package__:
     from .pipeline_git import (
@@ -112,6 +112,32 @@ def live_remote_ref(project: Path, ref: str) -> Optional[str]:
     if len(rows) != 1 or len(rows[0]) != 2 or rows[0][1] != ref:
         raise ArchiveError(f"origin returned ambiguous ref data for {ref}")
     return rows[0][0]
+
+
+def live_remote_refs(project: Path, refs: Sequence[str]) -> dict:
+    """The live origin SHA of every fully-qualified ref, in one ls-remote (#558).
+
+    Six serial round trips made the daemon's status exceed its 10 s budget on
+    an ordinary wide-area origin; one batched query answers the whole set.
+    An absent ref maps to None. Callers pass fully-qualified refs, so the
+    rows match exactly and ambiguity stays an error.
+    """
+    if not refs:
+        return {}
+    result = run_git(project, "ls-remote", "--refs", "origin", *refs)
+    if result.returncode != 0:
+        raise ArchiveError(f"could not inspect origin refs: git ls-remote failed")
+    published: dict = {ref: None for ref in refs}
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        row = line.split("\t", 1)
+        if len(row) != 2 or row[1] not in published:
+            raise ArchiveError("origin returned ambiguous ref data")
+        if published[row[1]] is not None:
+            raise ArchiveError(f"origin returned ambiguous ref data for {row[1]}")
+        published[row[1]] = row[0]
+    return published
 
 
 def publishable_bound_branch(
@@ -1587,6 +1613,16 @@ def validate_integrated(
         raise ArchiveError("HEAD does not contain the integration merge")
 
     # (e) The bound branch tip and annotated tag must be published on origin.
+    # One batched ls-remote answers every live read below; six serial round
+    # trips pushed status past the daemon's budget (#558). The bound ref is
+    # always in the set: require_published_integration reads it in the
+    # allow_missing_bound modes, not only direct integration.
+    prefetch_refs = [
+        f"refs/heads/{default_name}",
+        f"refs/tags/{tag_name}",
+        f"refs/heads/{bound_branch}",
+    ]
+    remote_refs = live_remote_refs(project, prefetch_refs) if has_origin else None
     require_published_integration(
         project,
         bound_branch,
@@ -1597,6 +1633,7 @@ def validate_integrated(
         allow_missing_bound=state.integration in ("pull-request", "external-landing")
         or (historical and has_origin),
         retired=historical,
+        remote_refs=remote_refs,
     )
 
     result = {
@@ -1618,10 +1655,10 @@ def validate_integrated(
                 (f"refs/tags/{tag_name}", optional_ref(project, tag_ref))]
         if state.integration == "direct":
             bound_ref = f"refs/heads/{bound_branch}"
-            if not historical or live_remote_ref(project, bound_ref) is not None:
+            if not historical or remote_refs[bound_ref] is not None:
                 refs.append((bound_ref, ship_commit))
         for ref, expected in refs:
-            if live_remote_ref(project, ref) != expected:
+            if remote_refs[ref] != expected:
                 raise ArchiveError(f"published {ref} differs from local integration evidence")
     if pull_request is not None:
         result["pull_request"] = pull_request
@@ -1643,9 +1680,14 @@ def require_published_integration(
     allow_missing_bound: bool = False,
     retired: bool = False,
     tag_ship: Optional[str] = None,
+    remote_refs: Optional[dict] = None,
 ) -> None:
     if allow_missing_bound:
-        published_ship = live_remote_ref(project, f"refs/heads/{bound_branch}")
+        bound_ref_name = f"refs/heads/{bound_branch}"
+        published_ship = (
+            remote_refs[bound_ref_name] if remote_refs is not None
+            else live_remote_ref(project, bound_ref_name)
+        )
         # A surviving bound branch stays at the original ship commit, which a
         # rebase merge rewrote into the landing validated here (#450).
         expected_ships = {ship_commit} | ({tag_ship} if tag_ship else set())
@@ -1653,7 +1695,11 @@ def require_published_integration(
             raise ArchiveError(
                 f"origin/{bound_branch} is {published_ship}, expected ship commit {ship_commit}"
             )
-        published_tag = live_remote_ref(project, f"refs/tags/{tag_name}")
+        tag_ref_name = f"refs/tags/{tag_name}"
+        published_tag = (
+            remote_refs[tag_ref_name] if remote_refs is not None
+            else live_remote_ref(project, tag_ref_name)
+        )
         if published_tag is None:
             raise ArchiveError(f"missing published milestone tag: origin/tags/{tag_name}")
         local_tag = optional_ref(project, f"refs/tags/{tag_name}")

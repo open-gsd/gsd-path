@@ -6,6 +6,9 @@ The app has its own version and `app-v<version>` tags, separate from the
 
 ## [Unreleased]
 
+### Fixed
+- Report a runtime status that exceeds the probe timeout as "runtime status timed out after 10 s" instead of the generic unavailable reason, so a verified shipped milestone is no longer indistinguishable from a broken runtime.
+
 ## [0.1.3] - 2026-10-31
 
 ### Added

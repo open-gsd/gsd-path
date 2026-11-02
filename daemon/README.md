@@ -554,7 +554,8 @@ VERSION-stamp probes plus the update-check cache, never a source refresh; see
   project has no project install, and the reason names the install command),
   **Not started** (`idle`; the install is present and `.project/STATE.md` does
   not exist yet), or **Unverified** (the launcher failed; the reason carries
-  the last line of its error output).
+  the last line of its error output, or names the probe timeout when the
+  runtime status ran too long).
 - Dashboard detail:
   - `reviews` — `[{file, kind, verdict, cycle, depth, note}]` parsed from
     `.project/review/*.md` (`kind` is `wave`, `final`, `gap`,
