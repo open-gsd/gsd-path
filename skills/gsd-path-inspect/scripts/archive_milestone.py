@@ -427,8 +427,7 @@ def frontmatter_value(content: str, key: str) -> Optional[str]:
             break
         match = re.match(rf"^{re.escape(key)}:(.*)$", line)
         if match:
-            value = _common.strip_yaml_comment(match.group(1))
-            return value.strip().strip('"').strip("'")
+            return _common.unquote(match.group(1))
     return None
 
 
