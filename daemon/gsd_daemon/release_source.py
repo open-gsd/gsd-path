@@ -13,6 +13,7 @@ import io
 import json
 import os
 import shutil
+import ssl
 import tarfile
 import tempfile
 import urllib.request
@@ -25,6 +26,9 @@ REGISTRY_ACCEPT = "application/vnd.npm.install-v1+json"
 FETCH_TIMEOUT_S = 30
 # npm packs every file under this directory.
 PACKAGE_PREFIX = "package"
+# The macOS system root bundle. python.org macOS builds ship no CA certificates
+# until "Install Certificates.command" runs, so every https request fails without it.
+SYSTEM_CA_FILE = "/etc/ssl/cert.pem"
 
 Fetch = Callable[[str], bytes]
 
@@ -33,9 +37,18 @@ class ReleaseError(RuntimeError):
     pass
 
 
+def ssl_context() -> ssl.SSLContext:
+    """The default verifying context, plus the system bundle when Python has no CA certificates."""
+    context = ssl.create_default_context()
+    paths = ssl.get_default_verify_paths()
+    if not (paths.cafile or paths.capath) and os.path.isfile(SYSTEM_CA_FILE):
+        context.load_verify_locations(cafile=SYSTEM_CA_FILE)
+    return context
+
+
 def default_fetch(url: str) -> bytes:
     request = urllib.request.Request(url, headers={"Accept": REGISTRY_ACCEPT})
-    with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_S) as response:
+    with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_S, context=ssl_context()) as response:
         return response.read()
 
 

@@ -5,16 +5,20 @@ import http.client
 import io
 import json
 import shutil
+import ssl
+import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 
-from gsd_daemon import release_source
+from gsd_daemon import frameworks, release_source
 from gsd_daemon.config import Config
 from gsd_daemon.plugin import PluginManager
 from gsd_daemon.serve import serve_in_thread
@@ -45,6 +49,62 @@ def tarball(version, extra=None, links=()):
 
 def integrity(data):
     return "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode("ascii")
+
+
+@unittest.skipUnless(shutil.which("openssl"), "needs the openssl CLI to make a test certificate")
+class TlsTests(unittest.TestCase):
+    """A python.org macOS build without "Install Certificates" has no CA file or path."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        # A throwaway self-signed certificate for 127.0.0.1, made per run so no
+        # key lives in the repo. It plays both the registry's certificate and
+        # the only root in a stand-in macOS system bundle.
+        self.bundle = root / "cert.pem"
+        subprocess.run(
+            ["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1",
+             "-nodes", "-days", "1", "-subj", "/CN=gsd-path test registry",
+             "-addext", "subjectAltName=IP:127.0.0.1",
+             "-keyout", str(root / "key.pem"), "-out", str(self.bundle)],
+            check=True, capture_output=True)
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"ok": true}')
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(self.bundle, root / "key.pem")
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.url = f"https://127.0.0.1:{server.server_address[1]}/"
+
+    def paths(self, cafile):
+        return ssl.DefaultVerifyPaths(cafile, None, "SSL_CERT_FILE", "", "SSL_CERT_DIR", "")
+
+    def test_no_ca_certificates_falls_back_to_the_system_bundle(self):
+        with mock.patch.object(release_source, "SYSTEM_CA_FILE", str(self.bundle)), \
+                mock.patch("ssl.get_default_verify_paths", return_value=self.paths(None)):
+            self.assertEqual(release_source.default_fetch(self.url), b'{"ok": true}')
+            # The framework version check reads the same registry.
+            self.assertEqual(frameworks._fetch(self.url), b'{"ok": true}')
+
+    def test_python_with_its_own_ca_file_does_not_trust_the_system_bundle(self):
+        # Verification stays on: a cert only the fallback bundle trusts is refused.
+        with mock.patch.object(release_source, "SYSTEM_CA_FILE", str(self.bundle)), \
+                mock.patch("ssl.get_default_verify_paths", return_value=self.paths("/elsewhere.pem")), \
+                self.assertRaises(OSError) as raised:
+            release_source.default_fetch(self.url)
+        self.assertIn("CERTIFICATE_VERIFY_FAILED", str(raised.exception))
 
 
 class Registry:
