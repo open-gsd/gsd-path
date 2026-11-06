@@ -10,6 +10,8 @@ sys.dont_write_bytecode = True
 import json
 import re
 import contextlib
+import shutil
+from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Mapping, Optional, Sequence
 
@@ -24,9 +26,10 @@ if __package__:
         milestone_number,
         ship_subject,
     )
-    from .pipeline_state import PipelineState
+    from .pipeline_state import PipelineState, transition_state
     from .isolation import publication_base, _unlink_link_like, IsolationError
     from . import _common
+    from . import roadmap
     from . import worktree_paths
 else:
     try:
@@ -40,9 +43,10 @@ else:
             milestone_number,
             ship_subject,
         )
-        from pipeline_state import PipelineState
+        from pipeline_state import PipelineState, transition_state
         from isolation import publication_base, _unlink_link_like, IsolationError
         import _common
+        import roadmap
         import worktree_paths
     except ImportError:  # pragma: no cover - package import used by tests
         from scripts.pipeline_git import (
@@ -55,9 +59,10 @@ else:
             milestone_number,
             ship_subject,
         )
-        from scripts.pipeline_state import PipelineState
+        from scripts.pipeline_state import PipelineState, transition_state
         from scripts.isolation import publication_base, _unlink_link_like, IsolationError
         from scripts import _common
+        from scripts import roadmap
         from scripts import worktree_paths
 
 
@@ -745,8 +750,10 @@ def find_pull_request(
         if pull["base"].get("ref") == base
         and (
             pull["head"].get("sha") == ship_commit
+            # Closed unmerged PRs from an abandoned cycle must not shadow the re-ship.
             or (
                 pull["head"].get("ref") == branch
+                and pull["state"] == "open"
                 and pull_request_head_matches_repository(pull, repository)
             )
         )
@@ -824,6 +831,20 @@ def create_pull_request(
     pull = require_pull_request_shape(response)
     require_pull_request_identity(repository, pull, branch, ship_commit, base)
     return pull
+
+
+def close_pull_request(repository: str, pull: dict) -> dict:
+    response = github_api_json(
+        f"repos/{repository}/pulls/{pull['number']}",
+        "--method",
+        "PATCH",
+        "-f",
+        "state=closed",
+    )
+    updated = require_pull_request_shape(response)
+    if updated["state"] != "closed" or updated["merged_at"] is not None:
+        raise ArchiveError("GitHub pull request did not close without merging")
+    return updated
 
 
 def pull_request_tag_message(
@@ -1400,6 +1421,706 @@ def integrate(repo: Path, slug: str, adopt_published: Optional[str] = None) -> d
                 raise ArchiveError(f"integration branch {integration_branch} moved unexpectedly")
         delete_integration_branch(project, integration_branch, branch_tip)
     return validate_integrated(project, slug)
+
+
+ABANDON_INTEGRATION_SCHEMA = "gsd-path/abandon-integration/v1"
+ABANDON_INTEGRATION_JOURNAL_NAME = "gsd-path-abandon-integration.json"
+ABANDON_INTEGRATION_RISK = "published integration checks"
+ABANDON_INTEGRATION_FIX_DIRECTION = "Fix the failing forge check; re-run the final gate."
+
+
+def abandon_integration_journal_path(project: Path) -> Path:
+    common = archive_milestone.require_git_success(
+        run_git(project, "rev-parse", "--path-format=absolute", "--git-common-dir"),
+        "resolve common Git directory",
+    )
+    path = Path(common)
+    if not path.is_absolute():
+        path = project / path
+    return path.resolve() / ABANDON_INTEGRATION_JOURNAL_NAME
+
+
+def read_abandon_integration_journal(path: Path) -> dict:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ArchiveError(
+            f"abandon-integration journal is unreadable: {path}"
+        ) from error
+    fields = {
+        "schema",
+        "repo",
+        "slug",
+        "finding",
+        "ship_commit",
+        "bound_ref",
+        "pr_number",
+        "expected_head",
+        "abandoned_on",
+    }
+    if not isinstance(payload, dict) or set(payload) != fields:
+        raise ArchiveError("abandon-integration journal has invalid fields")
+    if payload["schema"] != ABANDON_INTEGRATION_SCHEMA or any(
+        not isinstance(payload[field], str) or not payload[field]
+        for field in fields - {"schema", "pr_number"}
+    ):
+        raise ArchiveError("abandon-integration journal has invalid values")
+    number = payload["pr_number"]
+    branch = payload["bound_ref"].removeprefix("refs/heads/")
+    if (
+        not isinstance(number, int)
+        or isinstance(number, bool)
+        or number < 1
+        or not re.fullmatch(r"[0-9a-f]{40,64}", payload["ship_commit"])
+        or not re.fullmatch(r"[0-9a-f]{40,64}", payload["expected_head"])
+        or payload["bound_ref"] != f"refs/heads/{branch}"
+        or not is_bound_branch(branch)
+    ):
+        raise ArchiveError("abandon-integration journal has invalid transaction metadata")
+    try:
+        date.fromisoformat(payload["abandoned_on"])
+    except ValueError as error:
+        raise ArchiveError("abandon-integration journal has invalid transaction date") from error
+    return payload
+
+
+def write_abandon_integration_journal(path: Path, payload: Mapping[str, object]) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    archive_milestone.atomic_replace(
+        path, temporary, json.dumps(payload, sort_keys=True) + "\n"
+    )
+
+
+def require_open_unmerged_pull(
+    repository: str,
+    branch: str,
+    ship_commit: str,
+    base: str,
+    journal: Optional[dict] = None,
+) -> dict:
+    pull = find_pull_request(repository, branch, ship_commit, base)
+    if pull is None:
+        raise ArchiveError(
+            "published integration abandon requires the milestone pull request to exist"
+        )
+    if pull["merged_at"] is not None:
+        raise ArchiveError(
+            "published integration abandon refuses a merged pull request"
+        )
+    if pull["state"] != "open":
+        if journal is None or pull["number"] != journal["pr_number"]:
+            raise ArchiveError(
+                "GitHub pull request was closed without merging; "
+                "only the abandon-integration journal may adopt a closed request"
+            )
+    return pull
+
+
+def restore_abandoned_archive(project: Path, active_root: Path, archive: Path) -> None:
+    """Reverse prepare's archive move: back to the active .project/ root."""
+    if archive.is_symlink() or not archive.is_dir():
+        raise ArchiveError(f"abandoned archive must be a real directory: {archive}")
+    archive_device = archive.stat().st_dev
+    for name in archive_milestone.TRANSACTION_DIRECTORIES:
+        source = archive / name
+        destination = active_root / name
+        if source.is_symlink() or destination.is_symlink():
+            raise ArchiveError(f"restore transaction paths must not be symlinks: {name}")
+        if not source.exists():
+            if destination.exists():
+                continue  # already restored by an earlier interrupted run
+            if name in archive_milestone.DIRECTORIES_TO_ARCHIVE:
+                raise ArchiveError(f"missing both active and archived {name}")
+            continue
+        if destination.exists():
+            if not (
+                name == "research"
+                and archive_milestone.is_existing_carry_forward(destination, source)
+            ):
+                raise ArchiveError(f"restore collision: both {destination} and {source} exist")
+            # prepare's carry-forward copy is byte-identical; drop it before the move.
+            shutil.rmtree(destination)
+        if source.stat().st_dev != archive_device:
+            raise ArchiveError(f"restore move crosses filesystems: {source}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+    leftovers = sorted(
+        path
+        for path in archive.rglob("*")
+        if not _common.is_ignored_junk(path)
+        and path.name not in {"MANIFEST.md", archive_milestone.MANIFEST_TEMP_NAME}
+    )
+    if leftovers:
+        raise ArchiveError(
+            "abandoned archive holds unexpected artifacts: "
+            + ", ".join(path.name for path in leftovers)
+        )
+    shutil.rmtree(archive)
+
+
+def restore_abandoned_roadmap(active_root: Path, slug: str, configured: str) -> None:
+    """Reverse record_shipment's roadmap stamp: the milestone ships again.
+
+    Single-flow milestones keep no ROADMAP.md; a program roadmap's shipped
+    row is restored to its pre-ship `Status: active` and `Archive: null` so
+    no row claims an archive directory the rollback removed.
+    """
+    roadmap_path = active_root / "ROADMAP.md"
+    if not roadmap_path.exists():
+        return
+    if roadmap_path.is_symlink() or not roadmap_path.is_file():
+        raise ArchiveError(f"program roadmap must be a real file: {roadmap_path}")
+    text = roadmap_path.read_text(encoding="utf-8")
+    try:
+        sections = roadmap.strict_sections(text)
+        if slug not in sections:
+            raise roadmap.RoadmapError(f"ROADMAP.md is missing milestone {slug}")
+        _, start, end = sections[slug]
+        lines = text.splitlines(keepends=True)
+        roadmap.replace_field(
+            lines, start, end, "Status", {"shipped", "active"}, "active"
+        )
+        roadmap.replace_field(
+            lines, start, end, "Archive", {configured, "null"}, "null"
+        )
+    except roadmap.RoadmapError as error:
+        raise ArchiveError(
+            f"published integration abandon cannot restore the roadmap: {error}"
+        ) from error
+    archive_milestone.atomic_replace(
+        roadmap_path,
+        roadmap_path.with_name(f".{roadmap_path.name}.gsd-path-tmp"),
+        "".join(lines),
+    )
+
+
+def abandon_gap_review_text(reviewed_head: str, finding: str, number: int) -> str:
+    risk_line = f"Risk: {ABANDON_INTEGRATION_RISK}"
+    return (
+        f"# Gap Review — {number}: {ABANDON_INTEGRATION_RISK}\n"
+        "\n"
+        "<!-- Written by archive_milestone.py abandon-integration from the owner's\n"
+        "     verbatim failing-check report (#457). -->\n"
+        "\n"
+        f"Reviewed HEAD: {reviewed_head}\n"
+        "Gap verdict: blocked\n"
+        f"{risk_line}\n"
+        "Waves checked: all\n"
+        "\n"
+        "## Checked evidence\n"
+        "\n"
+        "- **Check**: the published pull request's required forge checks\n"
+        f"- **Observed**: {finding}\n"
+        "- **Reference**: the milestone pull request\n"
+        "\n"
+        "## Finding\n"
+        "\n"
+        f"- **Found**: {finding}\n"
+        f"- **Fix direction**: {ABANDON_INTEGRATION_FIX_DIRECTION}\n"
+    )
+
+
+def abandon_patch_findings_text(reviewed_head: str, finding: str, source: str) -> str:
+    risk_line = f"Risk: {ABANDON_INTEGRATION_RISK}"
+    return (
+        "# Patch Findings\n"
+        "\n"
+        "<!-- Written by archive_milestone.py abandon-integration; consumed by patch\n"
+        "     planning (#457). -->\n"
+        "\n"
+        f"Reviewed HEAD: {reviewed_head}\n"
+        "State: ship/blocked\n"
+        "\n"
+        "## Findings\n"
+        "\n"
+        f"### P001 — {ABANDON_INTEGRATION_RISK}\n"
+        "\n"
+        f"- **Source**: `{source}`\n"
+        f"- **Locator**: {risk_line}\n"
+        f"- **Evidence**: {finding}\n"
+        f"- **Fix direction**: {ABANDON_INTEGRATION_FIX_DIRECTION}\n"
+    )
+
+
+def abandon_findings_conflict(review: Path, finding: str) -> bool:
+    """A PATCH-FINDINGS.md in ``review`` conflicts when this transaction
+    cannot recognize its own deterministic bytes in it: a human revision or
+    an earlier cycle's file. Checked in the proof phase — before any
+    mutation — so the refusal stays one of the documented no-mutation
+    blockers instead of firing after the pull request is closed."""
+
+    findings_path = review / "PATCH-FINDINGS.md"
+    if findings_path.is_symlink() or (
+        findings_path.exists() and not findings_path.is_file()
+    ):
+        # Not a real file can never carry this transaction's bytes.
+        return True
+    if not findings_path.is_file():
+        return False
+    final = review / "FINAL.md"
+    final_text: Optional[str] = None
+    if archive_milestone.is_real_file(final):
+        try:
+            final_text = final.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            final_text = None
+    reviewed = (
+        re.search(r"(?m)^Reviewed HEAD:\s*(\S+)", final_text)
+        if final_text is not None
+        else None
+    )
+    if reviewed is None or not re.fullmatch(r"[0-9a-f]{40,64}", reviewed.group(1)):
+        # Without FINAL.md's reviewed head the deterministic form cannot be
+        # reconstructed, so the bytes cannot be proven ours.
+        return True
+    try:
+        text = findings_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return True
+    referenced: set[int] = set()
+    for match in re.finditer(r"(?m)^- \*\*Source\*\*:\s*`?([^`\s]+)", text):
+        number = archive_milestone.FINAL_GAP_FILE_PATTERN.fullmatch(
+            PurePosixPath(match.group(1)).name
+        )
+        if number is not None:
+            referenced.add(int(number.group(1)))
+    return text not in {
+        abandon_patch_findings_text(
+            reviewed.group(1), finding, f".project/review/final-gap-{candidate}.md"
+        )
+        for candidate in sorted(referenced)
+    }
+
+
+def write_abandon_integration_findings(
+    active_root: Path, finding: str
+) -> str:
+    review = active_root / "review"
+    final = review / "FINAL.md"
+    if not archive_milestone.is_real_file(final):
+        raise ArchiveError("restored review/FINAL.md is missing")
+    reviewed = re.search(
+        r"(?m)^Reviewed HEAD:\s*(\S+)", final.read_text(encoding="utf-8")
+    )
+    if reviewed is None or not re.fullmatch(r"[0-9a-f]{40,64}", reviewed.group(1)):
+        raise ArchiveError("restored FINAL.md has no valid Reviewed HEAD")
+
+    def gap_text_for(number: int) -> str:
+        return abandon_gap_review_text(reviewed.group(1), finding, number)
+
+    def findings_text_for(source: str) -> str:
+        return abandon_patch_findings_text(reviewed.group(1), finding, source)
+
+    def gap_relative(number: int) -> str:
+        return f".project/review/final-gap-{number}.md"
+
+    existing = {
+        int(match.group(1))
+        for path in review.iterdir()
+        if (match := archive_milestone.FINAL_GAP_FILE_PATTERN.fullmatch(path.name))
+        is not None
+    }
+    findings_path = review / "PATCH-FINDINGS.md"
+    if findings_path.is_symlink() or (
+        findings_path.exists() and not findings_path.is_file()
+    ):
+        raise ArchiveError("review/PATCH-FINDINGS.md must be a real file")
+    referenced: set[int] = set()
+    findings_bytes: Optional[str] = None
+    if archive_milestone.is_real_file(findings_path):
+        findings_bytes = findings_path.read_text(encoding="utf-8")
+        for match in re.finditer(r"(?m)^- \*\*Source\*\*:\s*`?([^`\s]+)", findings_bytes):
+            number = archive_milestone.FINAL_GAP_FILE_PATTERN.fullmatch(
+                PurePosixPath(match.group(1)).name
+            )
+            if number is not None:
+                referenced.add(int(number.group(1)))
+        # Never overwrite findings this transaction did not write: a file
+        # whose bytes match no deterministic form of ours (a human revision,
+        # a consumed earlier cycle's file) blocks loudly instead of falling
+        # through to a replace.
+        if findings_bytes not in {
+            findings_text_for(gap_relative(candidate))
+            for candidate in sorted(referenced)
+        }:
+            raise ArchiveError(
+                "a PATCH-FINDINGS.md already exists with different content; "
+                "resolve it before abandoning"
+            )
+    # Resume: adopt a number only when BOTH files this transaction wrote still
+    # carry its deterministic bytes. A human revision to either file makes the
+    # number not-ours; the writer then takes a fresh unused number instead of
+    # overwriting the revision.
+    number: Optional[int] = None
+    if findings_bytes is not None:
+        for candidate in sorted(referenced):
+            if findings_bytes != findings_text_for(gap_relative(candidate)):
+                continue
+            gap_path = review / f"final-gap-{candidate}.md"
+            if archive_milestone.is_real_file(gap_path) and gap_path.read_text(
+                encoding="utf-8"
+            ) == gap_text_for(candidate):
+                number = candidate
+                break
+    if number is None:
+        for candidate in sorted(existing):
+            path = review / f"final-gap-{candidate}.md"
+            if archive_milestone.is_real_file(path) and path.read_text(
+                encoding="utf-8"
+            ) == gap_text_for(candidate):
+                number = candidate
+                break
+    if number is None:
+        # First number no existing gap review uses and no findings file cites;
+        # an earlier gap review is never overwritten.
+        number = 1
+        while number in existing or number in referenced:
+            number += 1
+    source = gap_relative(number)
+    gap_path = review / f"final-gap-{number}.md"
+    archive_milestone.atomic_replace(
+        gap_path, gap_path.with_name(f".{gap_path.name}.gsd-path-tmp"), gap_text_for(number)
+    )
+    archive_milestone.atomic_replace(
+        findings_path,
+        findings_path.with_name(f".{findings_path.name}.gsd-path-tmp"),
+        findings_text_for(source),
+    )
+    return source
+
+
+def abandon_integration(repo: Path, slug: str, finding: str) -> dict:
+    project = repo.resolve()
+    active_root = archive_milestone.require_project_layout(project)
+    requested_slug = archive_milestone.normalized_slug(slug)
+    cleaned = finding.strip()
+    if not cleaned or "\n" in cleaned or "\r" in cleaned:
+        raise ArchiveError(
+            "abandon-integration requires a single-line --finding of the failing check output"
+        )
+    journal_path = abandon_integration_journal_path(project)
+    if journal_path.is_symlink():
+        raise ArchiveError(
+            f"abandon-integration journal must not be a symlink: {journal_path}"
+        )
+    journal: Optional[dict] = None
+    if journal_path.is_file():
+        journal = read_abandon_integration_journal(journal_path)
+    elif journal_path.exists():
+        raise ArchiveError(
+            f"abandon-integration journal must be a real file: {journal_path}"
+        )
+    if journal is not None:
+        expected = {"repo": str(project), "slug": requested_slug, "finding": cleaned}
+        mismatches = [key for key, value in expected.items() if journal[key] != value]
+        if mismatches:
+            raise ArchiveError(
+                "abandon-integration request differs from journal fields: "
+                + ", ".join(sorted(mismatches))
+            )
+        resolved = run_git(
+            project, "rev-parse", "--verify", "--quiet", f"{journal['expected_head']}^{{commit}}"
+        )
+        if resolved.returncode != 0 or resolved.stdout.strip() != journal["expected_head"]:
+            raise ArchiveError("abandon-integration journal expected HEAD no longer resolves")
+    with archive_milestone.discussion_lock(active_root):
+        context = abandon_integration_rollback(
+            project, active_root, requested_slug, cleaned, journal_path, journal
+        )
+    # STATE's own transition takes the .project/ directory lock; run it outside
+    # the discussion lock like the build abandon transaction does.
+    return abandon_integration_finalize(
+        project, active_root, requested_slug, cleaned, journal_path, context
+    )
+
+
+def abandon_integration_rollback(
+    project: Path,
+    active_root: Path,
+    slug: str,
+    finding: str,
+    journal_path: Path,
+    journal: Optional[dict],
+) -> dict:
+    state, _, loaded_state_path = archive_milestone.strict_state(project)
+    if loaded_state_path.resolve() != (active_root / "STATE.md").resolve():
+        raise ArchiveError("strict STATE.md loader returned an unexpected path")
+    if state.integration != "pull-request":
+        raise ArchiveError(
+            f"abandon-integration requires pull-request integration, not {state.integration}"
+        )
+    branch = state.branch
+    if branch is None or not is_bound_branch(branch):
+        raise ArchiveError("abandon-integration requires a canonical gsd-path/M00N branch")
+
+    if journal is None:
+        # A fresh entry derives its plan from the proven ship transaction.
+        if (state.phase, state.status) != ("shipped", "done") or state.archive is None:
+            raise ArchiveError(
+                f"published integration abandon is not valid in state: "
+                f"{state.phase}/{state.status}"
+            )
+        if archive_milestone.milestone_slug(state) != slug:
+            raise ArchiveError(
+                f"--slug {slug!r} does not match normalized STATE.milestone "
+                f"{archive_milestone.milestone_slug(state)!r}"
+            )
+        shipped = archive_milestone.validate(project)
+        ship_commit = shipped["commit"]
+        configured = shipped["archive"]
+        archive_name = PurePosixPath(configured).name
+        if branch != bound_branch_name(milestone_number(archive_name)):
+            raise ArchiveError(
+                f"abandon-integration requires canonical bound branch "
+                f"{bound_branch_name(milestone_number(archive_name))}"
+            )
+        head = archive_milestone.require_git_success(
+            run_git(project, "rev-parse", "HEAD"), "resolve bound branch HEAD"
+        )
+        if head != ship_commit:
+            raise ArchiveError(
+                "bound worktree must remain at the ship commit during integration"
+            )
+        subject = archive_milestone.require_git_success(
+            run_git(project, "show", "-s", "--format=%s", ship_commit),
+            "inspect ship commit subject",
+        )
+        if subject != ship_subject(archive_name):
+            raise ArchiveError(
+                "abandon-integration only rolls back canonical M00N shipment history"
+            )
+    else:
+        # A resumed entry replays the plan the journal recorded.
+        ship_commit = journal["ship_commit"]
+        branch = journal["bound_ref"].removeprefix("refs/heads/")
+    bound_ref = f"refs/heads/{branch}"
+    archive_name = f"{milestone_number(branch):03d}-{slug}"
+    configured = f".project/archive/{archive_name}"
+    archive = archive_milestone.archive_from_state(project, configured)
+    state, _, _ = archive_milestone.strict_state(project)
+    if state.branch != branch or not (
+        (
+            (state.phase, state.status) == ("shipped", "done")
+            and state.archive == configured
+        )
+        or (state.phase, state.status, state.archive) == ("ship", "blocked", None)
+    ):
+        raise ArchiveError(
+            "abandon-integration transaction has an invalid STATE.md: "
+            f"{state.phase}/{state.status}"
+        )
+
+    # --- Proofs run on EVERY entry, fresh or resumed, before any mutation:
+    # --- the local checkout first (a wrong worktree must refuse before any
+    # --- remote mutation), then origin: a merge or tag that lands
+    # --- mid-transaction must abort the rollback.
+    # The findings refusal is documented as a no-mutation blocker, so whatever
+    # review directory is live — the archive's on an early resume, the active
+    # root's once the rollback restored it — must carry no foreign
+    # PATCH-FINDINGS.md bytes before the pull request is touched.
+    for live_review in (active_root / "review", archive / "review"):
+        if abandon_findings_conflict(live_review, finding):
+            raise ArchiveError(
+                "a PATCH-FINDINGS.md already exists with different content; "
+                "resolve it before abandoning"
+            )
+    ship_parent = archive_milestone.require_git_success(
+        run_git(project, "rev-parse", f"{ship_commit}^"),
+        "resolve the reviewed pre-ship commit",
+    )
+    current_branch = archive_milestone.require_git_success(
+        run_git(project, "branch", "--show-current"), "resolve current branch"
+    )
+    if current_branch != branch:
+        raise ArchiveError(
+            f"abandon-integration requires the bound branch {branch} checked out"
+        )
+    head = archive_milestone.require_git_success(
+        run_git(project, "rev-parse", "HEAD"), "resolve HEAD"
+    )
+    # A fresh entry starts at the ship commit. Whether a resumed entry may sit
+    # on the reviewed parent is decided below, once this transaction's remote
+    # progress is observable — never before.
+    if journal is None and head != ship_commit:
+        raise ArchiveError(
+            "bound worktree must remain at the ship commit during integration"
+        )
+
+    remote_default = refresh_origin(project)["remote_default"]
+    if default_branch_name(remote_default) != state.default_branch:
+        raise ArchiveError(
+            f"remote default must be {state.default_branch}, got "
+            f"{default_branch_name(remote_default)!r}"
+        )
+    require_github_authentication()
+    repository = github_repository(project)
+    pull = require_open_unmerged_pull(
+        repository, branch, ship_commit, state.default_branch, journal
+    )
+    tag_ref = f"refs/tags/milestone/{archive_name}"
+    published = live_remote_refs(project, [bound_ref, tag_ref])
+    if published[tag_ref] is not None:
+        raise ArchiveError(
+            f"milestone tag {tag_ref} already exists on origin; "
+            "a tagged milestone is integrated and cannot be abandoned"
+        )
+    if published[bound_ref] is None:
+        if journal is None:
+            raise ArchiveError(f"origin/{branch} is absent; nothing published to abandon")
+        if pull["state"] == "open":
+            # This transaction deletes the published ref only after closing
+            # the pull request, so an open pull over a deleted ref is not a
+            # checkpoint it can have produced; something else removed the ref.
+            raise ArchiveError(
+                f"origin/{branch} is absent while the pull request is still "
+                "open; this rollback deletes the ref only after closing the "
+                "pull request, so the deletion is not ours — investigate "
+                "before resuming"
+            )
+    elif published[bound_ref] != ship_commit:
+        raise ArchiveError(
+            f"origin/{branch} is not at the ship commit: {published[bound_ref]}"
+        )
+    merged = run_git(
+        project, "merge-base", "--is-ancestor", ship_commit, remote_default
+    )
+    if merged.returncode == 0:
+        raise ArchiveError(
+            "the ship commit is already on the remote default branch; "
+            "an integrated milestone cannot be abandoned"
+        )
+    if merged.returncode != 1:
+        archive_milestone.require_git_success(
+            merged, "inspect ship ancestry on the remote default"
+        )
+
+    if journal is not None:
+        # The reviewed parent is acceptable only when THIS transaction's remote
+        # steps already ran: it closed the pull request (the journal adopted
+        # the closed PR) and deleted the published ref. A manual rewind before
+        # them must restore the ship commit; the rollback never reached its
+        # rewind step, so the remote must not be touched from that state.
+        remote_steps_done = pull["state"] != "open" and published[bound_ref] is None
+        if head == ship_parent and not remote_steps_done:
+            raise ArchiveError(
+                "the bound branch sits on the reviewed parent before this "
+                "transaction closed the pull request and deleted the published "
+                "ref; restore the ship commit before resuming"
+            )
+        if head not in {ship_commit, ship_parent}:
+            raise ArchiveError(
+                "bound branch HEAD is neither the ship commit nor its reviewed parent"
+            )
+
+    if journal is None:
+        journal = {
+            "schema": ABANDON_INTEGRATION_SCHEMA,
+            "repo": str(project),
+            "slug": slug,
+            "finding": finding,
+            "ship_commit": ship_commit,
+            "bound_ref": bound_ref,
+            "pr_number": pull["number"],
+            "expected_head": ship_commit,
+            "abandoned_on": date.today().isoformat(),
+        }
+        write_abandon_integration_journal(journal_path, journal)
+
+    # --- Journaled mutations; every step is idempotent across a rerun.
+    if pull["state"] == "open":
+        close_pull_request(repository, pull)
+
+    if published[bound_ref] is not None:
+        # Delete under the exact lease just observed; a racing push that moves
+        # the ref fails the lease and aborts with no further mutation.
+        archive_milestone.require_git_success(
+            run_git(
+                project,
+                "push",
+                f"--force-with-lease={bound_ref}:{published[bound_ref]}",
+                "origin",
+                "--delete",
+                bound_ref,
+            ),
+            "delete the published bound branch under its observed lease",
+        )
+        if live_remote_refs(project, [bound_ref])[bound_ref] is not None:
+            raise ArchiveError(f"origin/{branch} still exists after deletion")
+    tracking_ref = f"refs/remotes/origin/{branch}"
+    if optional_ref(project, tracking_ref) is not None:
+        archive_milestone.require_git_success(
+            run_git(project, "update-ref", "-d", tracking_ref),
+            "remove the local bound tracking ref",
+        )
+
+    head = archive_milestone.require_git_success(
+        run_git(project, "rev-parse", "HEAD"), "resolve HEAD"
+    )
+    if head == ship_commit:
+        # A mixed reset leaves the restored tree as working-tree-only changes;
+        # the patch-plan checkpoint then stages exactly what it validates.
+        archive_milestone.require_git_success(
+            run_git(project, "reset", "--mixed", ship_parent),
+            "rewind the bound branch to the reviewed commit",
+        )
+    elif head != ship_parent:
+        raise ArchiveError(
+            "bound branch HEAD is neither the ship commit nor its reviewed parent"
+        )
+
+    if archive.exists() or archive.is_symlink():
+        restore_abandoned_archive(project, active_root, archive)
+    restore_abandoned_roadmap(active_root, slug, configured)
+
+    return {
+        "slug": slug,
+        "finding": finding,
+        "ship_commit": ship_commit,
+        "bound_ref": bound_ref,
+        "configured": configured,
+        "pr_url": pull["html_url"],
+    }
+
+
+def abandon_integration_finalize(
+    project: Path,
+    active_root: Path,
+    slug: str,
+    finding: str,
+    journal_path: Path,
+    context: Mapping[str, str],
+) -> dict:
+    branch = context["bound_ref"].removeprefix("refs/heads/")
+    state, _, _ = archive_milestone.strict_state(project)
+    if (state.phase, state.status) == ("shipped", "done"):
+        if state.archive != context["configured"]:
+            raise ArchiveError("STATE.archive differs from the abandoned integration")
+        transition_state(
+            project,
+            expected={
+                "phase": "shipped",
+                "status": "done",
+                "milestone": slug,
+                "branch": branch,
+                "archive": context["configured"],
+            },
+            changes={"phase": "ship", "status": "blocked", "archive": None},
+            event="published integration abandoned",
+        )
+    elif (state.phase, state.status, state.archive) != ("ship", "blocked", None):
+        raise ArchiveError(
+            "abandon-integration transaction has an invalid finalized STATE.md"
+        )
+
+    write_abandon_integration_findings(active_root, finding)
+    journal_path.unlink()
+    return {
+        "status": "abandoned",
+        "pr_closed": context["pr_url"],
+        "bound_deleted": True,
+        "state": "ship/blocked",
+        "finding_recorded": True,
+    }
 
 
 def find_integrate_commit(

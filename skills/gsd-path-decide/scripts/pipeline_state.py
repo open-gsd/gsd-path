@@ -151,6 +151,7 @@ CROSS_PHASE_TRANSITIONS = {
     ("build", "active", "roadmap", "active"),
     ("build", "blocked", "roadmap", "active"),
     ("ship", "blocked", "plan", "active"),
+    ("shipped", "done", "ship", "blocked"),
     ("shipped", "done", "define", "active"),
     ("shipped", "done", "inspect", "active"),
     ("roadmap", "active", "inspect", "active"),
@@ -1693,7 +1694,14 @@ def _validate_transition(
         and before.archive is not None
         and after.archive is None
     )
-    if archive_changed and not (abandon or next_milestone):
+    integration_abandoned = (
+        before.phase == "shipped"
+        and before.status == "done"
+        and after_position == ("ship", "blocked")
+        and before.archive is not None
+        and after.archive is None
+    )
+    if archive_changed and not (abandon or next_milestone or integration_abandoned):
         raise PipelineStateError("illegal STATE.archive transition")
 
     milestone_changed = before.milestone != after.milestone
@@ -1765,6 +1773,7 @@ def _validate_transition(
             "archive preflight passed; shipment recorded",
             "archive preflight passed; shipment recorded; program complete",
         },
+        ("shipped", "done", "ship", "blocked"): {"published integration abandoned"},
     }.get((*before_position, *after_position))
     if edge_events is not None and event not in edge_events:
         expected = " or ".join(sorted(edge_events))

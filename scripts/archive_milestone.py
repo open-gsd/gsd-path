@@ -2305,13 +2305,34 @@ def parser() -> argparse.ArgumentParser:
     abandon_parser.add_argument("--repo", required=True, type=Path)
     abandon_parser.add_argument("--slug", required=True)
     abandon_parser.add_argument("--reason", required=True)
+
+    abandon_integration_parser = subparsers.add_parser(
+        "abandon-integration",
+        help=(
+            "close an unmerged published pull request, rewind the bound branch, "
+            "and route the failing forge check to patch planning"
+        ),
+    )
+    abandon_integration_parser.add_argument("--repo", required=True, type=Path)
+    abandon_integration_parser.add_argument("--slug", required=True)
+    abandon_integration_parser.add_argument(
+        "--finding",
+        required=True,
+        help="one verbatim line of the failing required check's output",
+    )
     return argument_parser
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        if arguments.command in {"validate-integrated", "refresh-origin", "integrate", "close-members"}:
+        if arguments.command in {
+            "validate-integrated",
+            "refresh-origin",
+            "integrate",
+            "close-members",
+            "abandon-integration",
+        }:
             if __package__:
                 from . import integration
             else:
@@ -2324,6 +2345,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = preflight(arguments.repo)
         elif arguments.command == "abandon":
             result = abandon(arguments.repo, arguments.slug, arguments.reason)
+        elif arguments.command == "abandon-integration":
+            result = integration.abandon_integration(
+                arguments.repo, arguments.slug, arguments.finding
+            )
         elif arguments.command == "validate-integrated":
             result = integration.validate_integrated(
                 arguments.repo, arguments.slug, historical=arguments.historical
