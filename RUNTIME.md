@@ -258,3 +258,30 @@ recovered. A full quick-lane wave explicitly covering final scope supplies FINAL
 when every criterion and surface walkthrough is proven and Git shows unchanged
 product and contracts. Other scopes retain final review. The output names whether
 review is needed; models do not route reuse by comparing prose or file sizes.
+
+## Return a verified closed checkout to the default branch
+
+On explicit owner direction, run the selected runtime's `pipeline_git.py
+closeout-main --repo <root> --ship <original-ship-SHA> --base <remote-default-SHA>`.
+The preview verifies the published integration and exact remote default, requires
+unchanged `.project/` contents, and refuses staged changes, unrelated dirt, a
+divergent local default branch, or a default branch owned by another worktree.
+Apply the reviewed preview with the same arguments plus `--apply
+--runtime-pin-sha <preview.runtime_pin_sha>`.
+
+Only an approved local runtime-pin change may be dropped as checkout switches
+to the published pin. A stale unpublished direct-integration tag is preserved
+under `refs/gsd-path/closeout/` before the local milestone tag is synchronized
+to its verified published object. The helper never pushes, edits the archive or
+STATE, retires the bound milestone, or creates a new milestone. It checks clean
+status and integration again after switching. The same arguments safely resume
+an interrupted switch; changed remote inputs require a new preview.
+
+After closeout, `pipeline_git.py retire-maintenance --repo <retained-root>
+--checkout <duplicate-clone> --head <default-SHA>` previews removal of a redundant
+maintenance clone. Both checkouts must be at that SHA with the same origin; the
+retained checkout must be on the verified remote default. Every duplicate commit
+must remain reachable in the retained repository. Local changes and unknown
+ignored data block removal; only build/cache directories are expendable. Add
+`--apply` to remove the reviewed duplicate. Canonical milestone artifacts remain
+in the retained checkout; linked worktrees are not accepted by this command.

@@ -159,6 +159,35 @@ def make_integrated_milestone(tmp: str) -> tuple[Path, Path, str, str]:
 
 
 class PipelineGitTests(unittest.TestCase):
+    def test_retire_maintenance_requires_redundant_history_and_no_user_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            origin, repo, head = make_remote_repo(tmp)
+            checkout = Path(tmp) / "maintenance"
+            run_git(Path(tmp), "clone", "-q", str(origin), str(checkout))
+            state = {"milestone": "first", "default_branch": "main"}
+            with (mock.patch.object(pipeline_git, "_validated_shipped_state", return_value=state),
+                  mock.patch.object(integration, "validate_integrated", return_value={"base": head})):
+                (checkout / "unknown.txt").write_text("keep")
+                with self.assertRaisesRegex(pipeline_git.PipelineGitError, "local changes"):
+                    pipeline_git.retire_maintenance_checkout(repo, checkout, head)
+                (checkout / "unknown.txt").unlink()
+                (checkout / ".git/info/exclude").write_text(".env\n")
+                (checkout / ".env").write_text("private")
+                with self.assertRaisesRegex(pipeline_git.PipelineGitError, "ignored data"):
+                    pipeline_git.retire_maintenance_checkout(repo, checkout, head)
+                (checkout / ".env").unlink()
+                unique = run_git(repo, "commit-tree", f"{head}^{{tree}}", "-p", head, "-m", "unique").stdout.strip()
+                run_git(checkout, "fetch", "-q", str(repo), unique + ":refs/heads/unique")
+                with self.assertRaisesRegex(pipeline_git.PipelineGitError, "history not retained"):
+                    pipeline_git.retire_maintenance_checkout(repo, checkout, head)
+                run_git(repo, "update-ref", "refs/gsd-path/maintenance/saved", unique)
+                preview = pipeline_git.retire_maintenance_checkout(repo, checkout, head)
+                self.assertEqual(preview["status"], "preview")
+                self.assertTrue(checkout.is_dir())
+                self.assertEqual(pipeline_git.retire_maintenance_checkout(repo, checkout, head, apply=True)["status"], "complete")
+                self.assertFalse(checkout.exists())
+                self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), head)
+
     def test_initialize_bind_and_transition_without_a_commit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             _, repo, base = make_remote_repo(tmp)
