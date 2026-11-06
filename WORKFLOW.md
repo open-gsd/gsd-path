@@ -626,7 +626,9 @@ and requires the remote default to be the recorded
   eligible PR to `main` with a GSD Path credit footer. It returns
   `awaiting-merge` until a human GitHub user merges it with a merge commit or a
   rebase merge; Path never enables auto-merge or merges the PR. After
-  validation, Path creates the annotated milestone tag. The [ship contract](https://github.com/open-gsd/gsd-path/blob/main/skills/gsd-path-ship/SKILL.md)
+  validation, Path creates the annotated milestone tag. If a required check
+  fails before the merge, `archive_milestone.py abandon-integration` closes
+  the PR unmerged and routes the failure to patch planning for a re-ship. The [ship contract](https://github.com/open-gsd/gsd-path/blob/main/skills/gsd-path-ship/SKILL.md)
   owns the candidate, provenance, topology, publication, and recovery rules.
 - `external-landing` is for an origin that is not GitHub.com, such as GitLab,
   Gitea, or GitHub Enterprise Server, where a merge request is the only route

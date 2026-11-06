@@ -15,6 +15,7 @@ test-only changes are not listed; the Git history has them.
 
 ### Added
 - Remove a member repository with `members.py remove`, and change a member's integration mode with `members.py set-integration`.
+- Roll back a pull-request milestone that awaits merge when a required forge check fails, with `archive_milestone.py abandon-integration`: it closes the PR unmerged, rewinds the bound branch, and routes the failing check to patch planning so the milestone re-ships.
 
 ### Fixed
 - Link the installed `WORKFLOW.md` to GitHub so its links resolve in consuming projects. Existing installs keep their copy; see [UPDATE.md](UPDATE.md) to adopt it.
