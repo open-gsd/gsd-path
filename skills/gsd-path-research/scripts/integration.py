@@ -750,8 +750,10 @@ def find_pull_request(
         if pull["base"].get("ref") == base
         and (
             pull["head"].get("sha") == ship_commit
+            # Closed unmerged PRs from an abandoned cycle must not shadow the re-ship.
             or (
                 pull["head"].get("ref") == branch
+                and pull["state"] == "open"
                 and pull_request_head_matches_repository(pull, repository)
             )
         )

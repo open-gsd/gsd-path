@@ -3855,6 +3855,60 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
         self.assertIsNone(result)
 
+    def abandoned_branch_pull(self, state: str, head_sha: str) -> dict:
+        return {
+            "number": 7,
+            "state": state,
+            "html_url": "https://github.com/open-gsd/demo/pull/7",
+            "merged_at": None,
+            "merge_commit_sha": None,
+            "base": {"ref": "main"},
+            "head": {
+                "ref": "gsd-path/M001",
+                "sha": head_sha,
+                "repo": {"full_name": "open-gsd/demo"},
+            },
+        }
+
+    def test_pull_request_discovery_skips_abandoned_closed_pr_on_reship(
+        self,
+    ) -> None:
+        closed = self.abandoned_branch_pull("closed", "a" * 40)
+        with mock.patch.object(
+            integration, "github_api_json", return_value=[[closed]]
+        ):
+            result = integration.find_pull_request(
+                "open-gsd/demo", "gsd-path/M001", "b" * 40
+            )
+
+        self.assertIsNone(result)
+
+    def test_pull_request_discovery_keeps_closed_pr_at_ship_commit(self) -> None:
+        closed = self.abandoned_branch_pull("closed", "a" * 40)
+        with mock.patch.object(
+            integration, "github_api_json", return_value=[[closed]]
+        ):
+            result = integration.find_pull_request(
+                "open-gsd/demo", "gsd-path/M001", "a" * 40
+            )
+
+        self.assertEqual(result, closed)
+
+    def test_pull_request_discovery_rejects_open_branch_pr_with_moved_head(
+        self,
+    ) -> None:
+        moved = self.abandoned_branch_pull("open", "a" * 40)
+        with mock.patch.object(
+            integration, "github_api_json", return_value=[[moved]]
+        ):
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError,
+                "head is not the ship commit",
+            ):
+                integration.find_pull_request(
+                    "open-gsd/demo", "gsd-path/M001", "b" * 40
+                )
+
     def github_api(self, pulls, merge_actor: str = "User"):
         def run(*arguments: str) -> subprocess.CompletedProcess[str]:
             if self.is_github_authentication(arguments):
