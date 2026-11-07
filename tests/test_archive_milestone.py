@@ -532,6 +532,36 @@ wave: 1   # inline comment
             isolation.task_frontmatter(task)[0]["title"],
         )
 
+    def test_frontmatter_value_keeps_quotes_at_title_edges(self) -> None:
+        # The wave gate reads titles with check_handoffs._task_scalar, which
+        # unquotes only a fully quoted scalar. Completion must read the same
+        # title, or a wave review that passed the gate can never close.
+        titles = [
+            'Refuse a hidden recipe with "This recipe isn\'t available"',
+            "Keep the owners'",
+            '"Leading" quote then text',
+            "'Leading' single quote then text",
+            'Two trailing quotes ""',
+            '"Escaped \\"inner\\""',
+            "\"'nested'\"",
+            '"Fully quoted"',
+            "'Fully single quoted'",
+            "Plain title",
+        ]
+        for title in titles:
+            with self.subTest(title=title):
+                task = f"---\nid: T001\ntitle: {title}\nwave: 1\n---\n"
+                self.assertEqual(
+                    archive_milestone.frontmatter_value(task, "title"),
+                    check_handoffs._task_scalar(task, "T001", "title"),
+                )
+        self.assertEqual(
+            archive_milestone.frontmatter_value(
+                '---\ntitle: a "b"\n---\n', "title"
+            ),
+            'a "b"',
+        )
+
     def test_prepare_is_idempotent_and_validate_requires_ship_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
