@@ -2584,6 +2584,106 @@ wave: 1   # inline comment
             ):
                 archive_milestone.canonical_wave_repair_files(review)
 
+    def add_withdrawn_tombstone(self, project: Path, citation: bool = True) -> None:
+        log ="## Log\n\n- created\n"
+        if citation:
+            log += "- Withdrawn — 2026-11-09: owner ruling: drop T002 from this milestone\n"
+        (project / "tasks/T002-dropped.md").write_bytes(
+            f"""---
+id: T002
+title: dropped
+wave: 1
+deps: []
+status: withdrawn
+agent: null
+base: null
+worktree: null
+task_branch: null
+files: [src/dropped.py]
+---
+
+# T002 — dropped
+
+## Verify
+
+```bash
+python3 -c 'print(2)'
+```
+
+{log}""".encode("utf-8"),
+        )
+        plan = project / "plan" / "PLAN.md"
+        plan.write_bytes(
+            plan.read_text(encoding="utf-8")
+            .replace(
+                "| T001 | demo | — | src/demo.py |\n",
+                "| T001 | demo | — | src/demo.py |\n| T002 | dropped | — | src/dropped.py |\n",
+            )
+            .encode("utf-8"),
+        )
+
+    def test_completion_skips_a_cited_withdrawn_tombstone_like_the_wave_gate(self) -> None:
+        # #578: the wave gate excludes a cited tombstone (#483), so its review
+        # heads only live tasks; completion and archive must accept that review.
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            project = repo / ".project"
+            self.add_withdrawn_tombstone(project)
+
+            self.assertEqual(discussion_validate.review_cycle_counts(project), [1])
+            self.assertEqual(
+                discussion_validate.archived_wave_tasks(project, [1]),
+                {1: [("T001", "demo")]},
+            )
+
+            # A review that heads the tombstone no longer matches the live wave.
+            review = project / "review" / "wave-1.cycle1.md"
+            review.write_bytes(
+                review.read_text(encoding="utf-8")
+                .replace("Tasks reviewed: 1", "Tasks reviewed: 2")
+                .replace(
+                    "## Intent coverage",
+                    "## T002 — dropped: pass\n\n- ✅ placeholder\n\n## Intent coverage",
+                )
+                .encode("utf-8"),
+            )
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError, "do not match its wave task files"
+            ):
+                discussion_validate.review_cycle_counts(project)
+
+    def test_completion_rejects_an_uncited_withdrawn_tombstone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            project = repo / ".project"
+            self.add_withdrawn_tombstone(project, citation=False)
+
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError, "T002 is withdrawn without an owner citation"
+            ):
+                discussion_validate.review_cycle_counts(project)
+
+    def test_completion_rejects_a_wave_of_only_withdrawn_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            project = repo / ".project"
+            task = project / "tasks/T001-demo.md"
+            task.write_bytes(
+                task.read_text(encoding="utf-8")
+                .replace("status: done", "status: withdrawn")
+                .replace("## Log\n", "## Log\n\n- Withdrawn — 2026-11-09: owner ruling: drop it\n")
+                .encode("utf-8"),
+            )
+            self.assertIn("status: withdrawn", task.read_text(encoding="utf-8"))
+
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError, "has only withdrawn tasks"
+            ):
+                discussion_validate.review_cycle_counts(project)
+
     def test_repair_task_joins_its_wave_after_the_source_cycle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)

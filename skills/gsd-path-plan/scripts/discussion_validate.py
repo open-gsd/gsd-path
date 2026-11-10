@@ -740,6 +740,7 @@ def archived_wave_tasks(
     tasks: dict[int, list[tuple[str, str]]] = {
         wave: [] for wave in wave_numbers
     }
+    withdrawn: set[int] = set()
     seen = set()
     for path in archive_milestone.canonical_task_files(archive / "tasks"):
         content = path.read_text(encoding="utf-8")
@@ -759,9 +760,24 @@ def archived_wave_tasks(
             raise ArchiveError(f"{path.name} names unknown Wave {wave}")
         if archive_milestone.contains_placeholder(title):
             raise ArchiveError(f"{path.name} has an incomplete title")
+        # A cited withdrawn tombstone produced no live work, so no wave review
+        # heads it — the same exclusion the wave gate applies (#483, #578). An
+        # uncited tombstone is a dropped obligation and still fails.
+        if archive_milestone.frontmatter_value(content, "status") == "withdrawn":
+            if not _common.withdrawn_citations(content):
+                raise ArchiveError(
+                    f"{task_id} is withdrawn without an owner citation; append a "
+                    "`- Withdrawn — <YYYY-MM-DD>: <owner ruling verbatim>` Log entry"
+                )
+            withdrawn.add(wave)
+            continue
         tasks[wave].append((task_id, title))
     for wave, members in tasks.items():
         if not members:
+            if wave in withdrawn:
+                raise ArchiveError(
+                    f"plan Wave {wave} has only withdrawn tasks; it has no live work to review"
+                )
             raise ArchiveError(f"plan Wave {wave} has no task files")
     return tasks
 
