@@ -15,6 +15,7 @@ test-only changes are not listed; the Git history has them.
 
 ### Added
 - Remove a member repository with `members.py remove`, and change a member's integration mode with `members.py set-integration`.
+- Stop a build round before entry, and a task before isolation, when the host refuses to create a Git worktree, such as the Claude Code sandbox from 2.1.325, with a message that names the likely cause, the installed Claude Code version, and the workaround. `isolation.py probe-worktree` runs the same check on its own.
 - Roll back a pull-request milestone that awaits merge when a required forge check fails, with `archive_milestone.py abandon-integration`: it closes the PR unmerged, rewinds the bound branch, and routes the failing check to patch planning so the milestone re-ships.
 
 ### Fixed

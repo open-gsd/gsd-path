@@ -38,7 +38,13 @@ when a default is not beside that script, it resolves from the shipped
 `round` owns the entry transition described in Preconditions and branch
 binding, checkpointed as `build: start milestone`, and sets `build/blocked`
 on a dependency deadlock or a blocked
-recovery; every other stop stays with the parent. Act only on its receipt:
+recovery; every other stop stays with the parent. Before entry or any
+dispatch, `round` creates and removes one throwaway worktree in the managed
+worktree root (`isolation.py probe-worktree` runs the same check alone). When
+the host refuses it, the receipt is `blocked` with code `worktree-refused`,
+STATE and HEAD are unchanged, and nothing is dispatched: show the user its
+reason, which names the likely cause and the workaround, and stop. Act only
+on its receipt:
 `done` means every wave task landed — run
 `review --wave <N> --cycle <C> --child-command '<owner command>' [--wait
 <owner seconds>]` for step 6 at `full` or `deep` depth: it records the clean

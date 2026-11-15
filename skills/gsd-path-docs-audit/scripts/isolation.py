@@ -704,7 +704,8 @@ def _cleanup_reserved_worktree(
 
 
 def create_named_worktree(
-    primary: Path, branch: str, destination: Path, base: str, bound: Optional[str] = None
+    primary: Path, branch: str, destination: Path, base: str, bound: Optional[str] = None,
+    *, checkout: bool = True,
 ) -> None:
     # A member names its bound branch; the member team's checkout is never on it.
     bound = bound or require_bound(primary)
@@ -732,6 +733,7 @@ def create_named_worktree(
         primary,
         "worktree",
         "add",
+        *(() if checkout else ("--no-checkout",)),
         str(destination),
         branch,
     )
@@ -754,6 +756,107 @@ def create_named_worktree(
             primary, branch, destination, base, reserved_directory
         )
         raise IsolationError("new worktree is not at the recorded base")
+
+
+WORKTREE_PROBE_PREFIX = "probe-"
+_PERMISSION_MARKERS = ("operation not permitted", "permission denied", "read-only file system")
+
+
+def claude_code_version() -> Optional[str]:
+    """The installed Claude Code version, or None when it cannot be read."""
+    executable = shutil.which("claude")
+    if executable is None:
+        return None
+    try:
+        completed = subprocess.run(
+            (executable, "--version"), capture_output=True, encoding="utf-8",
+            errors="replace", timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"\d+\.\d+\.\d+", completed.stdout or "")
+    return match.group(0) if completed.returncode == 0 and match else None
+
+
+def _worktree_refusal(primary: Path, stage: str, detail: str, leftovers: Sequence[str]) -> str:
+    lines = [f"worktree {stage} was refused: {detail}"]
+    registry = str(common_git_dir(primary) / "worktrees")
+    lowered = detail.lower()
+    if any(marker in lowered for marker in _PERMISSION_MARKERS) and (
+        registry in detail or ".git/worktrees" in detail
+    ):
+        lines.append(
+            f"Likely cause: a sandbox that refuses writes under {registry}, so Path cannot"
+            " create or remove its isolates and sidecars. The known example is the Claude Code"
+            " sandbox from 2.1.325, which allows only worktrees the session itself created."
+        )
+    version = claude_code_version()
+    lines.append(f"Installed Claude Code: {version or 'unknown (could not run claude --version)'}.")
+    lines.append(
+        "Workaround: pin Claude Code below 2.1.325 (2.1.322 is known to work) and turn off"
+        " its auto-update."
+    )
+    if leftovers:
+        lines.append("The probe could not clean up: " + "; ".join(leftovers))
+    lines.append("No task was dispatched.")
+    return "\n".join(lines)
+
+
+def probe_worktree(primary: Path) -> Dict[str, object]:
+    """Create and remove one throwaway worktree the way isolation does.
+
+    Runs before any dispatch so a host that refuses `git worktree add` (the
+    Claude Code sandbox from 2.1.325) stops the round with an explanation
+    instead of inside the first isolate. The probe leaves no branch, no
+    worktree entry, and no folder behind, whether it passes or fails.
+    """
+    primary = require_directory(primary, "primary worktree")
+    if worktree_root(primary) != primary:
+        raise IsolationError(f"primary is not its Git root: {primary}")
+    base = current_sha(primary)
+    name = f"{WORKTREE_PROBE_PREFIX}{os.getpid()}-{os.urandom(4).hex()}"
+    branch = verify_branch_name(name)
+    ref = f"refs/heads/{branch}"
+    # Not pinned: a probe must not write the placement receipt.
+    destination = sidecar_root(primary, "verify", name)
+    created_parents = []
+    parent = destination.parent
+    while not parent.exists():
+        created_parents.append(parent)
+        parent = parent.parent
+    bound = git_output(primary, "branch", "--show-current") or "HEAD"
+    stage, detail = "creation", ""
+    try:
+        create_named_worktree(primary, branch, destination, base, bound, checkout=False)
+        stage = "removal"
+        _remove_worktree(primary, destination, True)
+    except IsolationError as error:
+        detail = str(error)
+    leftovers = []
+    if stage == "removal" and detail:
+        # The worktree exists but cannot be removed; say so rather than forcing it.
+        leftovers.append(f"worktree {destination} on branch {branch}")
+    else:
+        if run_git(primary, "show-ref", "--verify", "--quiet", ref).returncode == 0:
+            if run_git(primary, "update-ref", "-d", ref, base).returncode != 0:
+                leftovers.append(f"branch {branch}")
+        for directory in created_parents:
+            with contextlib.suppress(OSError):
+                directory.rmdir()
+        if os.path.lexists(destination):
+            leftovers.append(f"folder {destination}")
+        if destination.resolve() in _registered_worktrees(primary):
+            leftovers.append(f"worktree entry {destination}")
+    if not detail and not leftovers:
+        return {"status": "ok", "worktree": str(destination), "branch": branch}
+    detail = detail or "the probe left state behind"
+    return {
+        "status": "refused",
+        "stage": stage,
+        "detail": detail,
+        "leftovers": leftovers,
+        "message": _worktree_refusal(primary, stage, detail, leftovers),
+    }
 
 
 def isolate_task(
@@ -5898,6 +6001,12 @@ def parser() -> argparse.ArgumentParser:
         help="the parallel isolate's branch gsd-path-task/<id>",
     )
 
+    probe_parser = subparsers.add_parser(
+        "probe-worktree",
+        help="create and remove one throwaway worktree; exit 1 when the host refuses it",
+    )
+    probe_parser.add_argument("--repo", type=Path, required=True)
+
     isolate_verify_parser = subparsers.add_parser(
         "isolate-verify", help="create a named verify sidecar"
     )
@@ -6028,6 +6137,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.task_id,
                 arguments.task_branch,
             )
+        elif arguments.command == "probe-worktree":
+            result = probe_worktree(arguments.repo)
+            if result["status"] != "ok":
+                print(json.dumps(result, sort_keys=True))
+                print(result["message"], file=sys.stderr)
+                return 1
         elif arguments.command == "isolate-verify":
             result = isolate_verify(arguments.repo, arguments.base, arguments.name, arguments.historical_task)
         elif arguments.command == "land":

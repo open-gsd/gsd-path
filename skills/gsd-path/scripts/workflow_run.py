@@ -207,6 +207,12 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             step("isolation.py", "isolate-member-task", "--repo", str(repo),
                  "--member", _task_member(repo, project_dir, task_id), "--task-id", task_id)
         elif action == "prepare-task":
+            # Both a parallel isolate and a serial task's Verify sidecar need a new worktree.
+            # A passing probe adds no step: callers read the isolate-task step first.
+            probe = isolation.probe_worktree(repo)
+            if probe["status"] != "ok":
+                steps.append({"script": "isolation.py probe-worktree", "result": probe})
+                raise StepFailed(probe["message"])
             task = step("isolation.py", "isolate-task", "--repo", str(repo),
                         "--base", expected_head, "--task-id", task_id,
                         "--round-size", str(round_size))

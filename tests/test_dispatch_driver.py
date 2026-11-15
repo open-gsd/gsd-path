@@ -2433,6 +2433,42 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertIn("build: start milestone", self.subjects(root))
         self.assertIn("build started", (root / ".project/STATE.md").read_text(encoding="utf-8"))
 
+    @unittest.skipIf(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+                     "needs POSIX permissions")
+    def test_round_stops_before_entry_when_worktree_creation_is_refused(self) -> None:
+        root = self.root
+        head = self.fixture(root, state=("plan", "done"))
+        managed = root.parent / "managed"
+        registry = root / ".git" / "worktrees"
+        registry.mkdir()
+        registry.chmod(0o555)  # what the Claude Code sandbox does from 2.1.325
+        self.addCleanup(lambda: registry.is_dir() and registry.chmod(0o755))
+        state = (root / ".project/STATE.md").read_bytes()
+
+        receipt = self.round(root, "--wait", "60", default_resources=True,
+                             GSD_PATH_WORKTREE_ROOT=str(managed), PATH=os.defpath)
+
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["blocked"][0]["code"], "worktree-refused")
+        reason = receipt["blocked"][0]["reason"]
+        self.assertIn("worktree creation was refused", reason)
+        self.assertIn("a sandbox that refuses writes under", reason)
+        self.assertIn("Installed Claude Code: unknown", reason)
+        self.assertIn("Workaround: pin Claude Code below 2.1.325", reason)
+        self.assertEqual(receipt["dispatched"], [])
+        self.assertEqual(((root / ".project/STATE.md").read_bytes(), self.head(root)), (state, head))
+        self.assertEqual(list((root / ".git/gsd-path/dispatch").rglob("state.json")), [])
+        self.assertEqual(run_git(root, "branch", "--list", "gsd-path-*").stdout.strip(), "")
+        self.assertEqual(list(registry.iterdir()), [])
+        self.assertFalse(managed.exists())
+
+        registry.chmod(0o755)
+        receipt = self.round(root, "--wait", "60", default_resources=True,
+                             GSD_PATH_WORKTREE_ROOT=str(managed))
+        self.assertEqual(receipt["status"], "done", receipt)
+        self.assertEqual(receipt["steps"][0]["result"]["status"], "ok")
+        self.assertEqual(self.state(root), "build/active")
+
     def test_round_records_build_blocked_when_recovery_blocks(self) -> None:
         root = self.root
         head = self.fixture(root)

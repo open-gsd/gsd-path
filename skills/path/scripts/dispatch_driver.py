@@ -973,6 +973,13 @@ class Round:
 
     # state transitions ----------------------------------------------------
 
+    def probe_worktrees(self) -> None:
+        """Stop before entry or dispatch when the host refuses to create a worktree."""
+        result = isolation.probe_worktree(self.primary)
+        self.receipt["steps"].append({"script": "isolation.probe_worktree", "result": result})
+        if result["status"] != "ok":
+            raise DriverStop(str(result["message"]), code="worktree-refused", probe=result)
+
     def enter(self) -> None:
         """The contract's checkpointed entry from plan/done, or recovery from build/blocked."""
         state, _, _ = pipeline_state.load_state(self.primary, self.project_dir)
@@ -1398,6 +1405,7 @@ class Round:
     def run(self) -> Dict[str, object]:
         deadline = time.monotonic() + self.options.wait if self.options.wait else None
         try:
+            self.probe_worktrees()
             self.enter()
             self.configure_budget()
             self.recover()
