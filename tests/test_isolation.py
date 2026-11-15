@@ -11,7 +11,7 @@ from typing import Optional
 from unittest import mock
 
 from scripts import build_state, isolation, pipeline_git
-from tests._platform import requires_symlink
+from tests._platform import posix_permissions_only, requires_symlink
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -4915,6 +4915,127 @@ class SidecarRootPinningTests(unittest.TestCase):
             self.assertTrue(any(receipts.glob("*.json")))
         finally:
             isolation._RECOVERY_MEMO.pop(("head-sha", str(self.repo)), None)
+
+
+class WorktreeProbeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        temporary = Path(self.tmp.name).resolve()
+        self.repo = temporary / "repo"
+        self.repo.mkdir()
+        git(self.repo, "init", "-b", "gsd-path/M001")
+        git(self.repo, "config", "user.email", "t@example.test")
+        git(self.repo, "config", "user.name", "T")
+        (self.repo / "app.py").write_bytes("print('base')\n".encode("utf-8"))
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "base")
+        self.head = git(self.repo, "rev-parse", "HEAD")
+        # The managed root does not exist yet: the probe must not leave it behind.
+        self.managed = temporary / "managed" / "projects"
+        environment = mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(self.managed)})
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def refuse_worktree_registry(self) -> None:
+        registry = self.repo / ".git" / "worktrees"
+        registry.mkdir(exist_ok=True)
+        registry.chmod(0o555)
+        self.addCleanup(lambda: registry.is_dir() and registry.chmod(0o755))
+
+    def assert_nothing_left(self) -> None:
+        self.assertEqual(git(self.repo, "branch", "--list", "gsd-path-verify/*"), "")
+        listing = git(self.repo, "worktree", "list", "--porcelain")
+        self.assertEqual(listing.count("worktree "), 1, listing)
+        self.assertFalse((self.repo / ".git" / "worktrees").is_dir()
+                         and any((self.repo / ".git" / "worktrees").iterdir()))
+        self.assertFalse(self.managed.parent.exists())
+        self.assertFalse((self.repo / ".git" / "gsd-path" / "workspaces").exists())
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), self.head)
+        self.assertEqual(git(self.repo, "status", "--porcelain"), "")
+
+    def test_probe_creates_and_removes_one_worktree(self) -> None:
+        added = []
+        run_git = isolation.run_git
+
+        def spy(repo, *arguments):
+            if arguments[:2] == ("worktree", "add"):
+                added.append(arguments)
+            return run_git(repo, *arguments)
+
+        with mock.patch.object(isolation, "run_git", side_effect=spy):
+            result = isolation.probe_worktree(self.repo)
+
+        self.assertEqual(result["status"], "ok", result)
+        self.assertTrue(result["branch"].startswith("gsd-path-verify/probe-"))
+        self.assertTrue(Path(str(result["worktree"])).is_relative_to(self.managed))
+        self.assertEqual(len(added), 1)
+        self.assertIn("--no-checkout", added[0])
+        self.assert_nothing_left()
+
+    @posix_permissions_only
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root ignores directory permissions")
+    def test_refused_creation_explains_the_sandbox_and_cleans_up(self) -> None:
+        self.refuse_worktree_registry()
+        with mock.patch.object(isolation, "claude_code_version", return_value="2.1.325"):
+            result = isolation.probe_worktree(self.repo)
+
+        self.assertEqual(result["status"], "refused", result)
+        self.assertEqual(result["stage"], "creation")
+        self.assertIn("worktrees", str(result["detail"]))
+        message = str(result["message"])
+        self.assertIn("worktree creation was refused", message)
+        self.assertIn("a sandbox that refuses writes under", message)
+        self.assertIn("Claude Code sandbox from 2.1.325", message)
+        self.assertIn("Installed Claude Code: 2.1.325.", message)
+        self.assertIn("Workaround: pin Claude Code below 2.1.325", message)
+        self.assertIn("turn off its auto-update", message)
+        self.assertNotIn("outside the sandbox", message)
+        self.assertEqual(result["leftovers"], [])
+        (self.repo / ".git" / "worktrees").chmod(0o755)
+        self.assert_nothing_left()
+
+    @posix_permissions_only
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root ignores directory permissions")
+    def test_cli_exits_nonzero_with_the_message(self) -> None:
+        self.refuse_worktree_registry()
+        completed = subprocess.run(
+            (sys.executable, str(ISOLATION_SCRIPT), "probe-worktree", "--repo", str(self.repo)),
+            encoding="utf-8", errors="replace", capture_output=True, check=False,
+            env={**os.environ, "PATH": os.defpath},
+        )
+        self.assertEqual(completed.returncode, 1, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout)["status"], "refused")
+        self.assertIn("worktree creation was refused", completed.stderr)
+        self.assertIn("Installed Claude Code: unknown", completed.stderr)
+        (self.repo / ".git" / "worktrees").chmod(0o755)
+        self.assert_nothing_left()
+
+    def test_refused_removal_names_what_is_left(self) -> None:
+        with mock.patch.object(isolation, "_remove_worktree",
+                               side_effect=isolation.IsolationError("Operation not permitted")), \
+                mock.patch.object(isolation, "claude_code_version", return_value=None):
+            result = isolation.probe_worktree(self.repo)
+        self.assertEqual(result["status"], "refused", result)
+        self.assertEqual(result["stage"], "removal")
+        self.assertIn("worktree removal was refused", str(result["message"]))
+        self.assertEqual(len(result["leftovers"]), 1)
+        # A worktree the host will not remove stays, and the probe names it instead of forcing it.
+        branch = git(self.repo, "branch", "--list", "gsd-path-verify/*").lstrip("+* ")
+        self.assertTrue(branch)
+        self.assertIn(branch, result["leftovers"][0])
+        self.assertIn(result["leftovers"][0], str(result["message"]))
+
+    def test_claude_code_version_reads_the_cli_or_reports_none(self) -> None:
+        with mock.patch.object(isolation.shutil, "which", return_value=None):
+            self.assertIsNone(isolation.claude_code_version())
+        completed = subprocess.CompletedProcess((), 0, stdout="2.1.325 (Claude Code)\n", stderr="")
+        with mock.patch.object(isolation.shutil, "which", return_value="/bin/claude"), \
+                mock.patch.object(isolation.subprocess, "run", return_value=completed):
+            self.assertEqual(isolation.claude_code_version(), "2.1.325")
+        with mock.patch.object(isolation.shutil, "which", return_value="/bin/claude"), \
+                mock.patch.object(isolation.subprocess, "run", side_effect=subprocess.TimeoutExpired("claude", 10)):
+            self.assertIsNone(isolation.claude_code_version())
 
 
 if __name__ == "__main__":

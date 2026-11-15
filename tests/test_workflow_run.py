@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -366,11 +367,41 @@ class WorkflowRunTests(unittest.TestCase):
             root = (Path(tmp) / "repo").resolve()
             root.mkdir()
             head = test_isolation.IsolationTests().init_bound_repo(root)
-            with mock.patch.object(workflow_run.isolation.worktree_paths, "worktree_path",
-                                   side_effect=OSError("workspace pin is unreadable")):
+            with mock.patch.object(workflow_run.isolation, "probe_worktree", return_value={"status": "ok"}), \
+                    mock.patch.object(workflow_run.isolation.worktree_paths, "worktree_path",
+                                      side_effect=OSError("workspace pin is unreadable")):
                 result = workflow_run.run_workflow(root, "prepare-task", ".project", head, "T001", 1)
             self.assertEqual((result["status"], result["reason"]), ("blocked", "workspace pin is unreadable"))
             self.assertEqual([step["script"] for step in result["steps"]], ["isolation.py"])
+
+    @unittest.skipIf(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+                     "needs POSIX permissions")
+    def test_prepare_stops_before_isolation_when_worktree_creation_is_refused(self):
+        from unittest import mock
+        from scripts import workflow_run
+        from tests import test_isolation
+        with tempfile.TemporaryDirectory() as tmp:
+            root = (Path(tmp) / "repo").resolve()
+            root.mkdir()
+            head = test_isolation.IsolationTests().init_bound_repo(root)
+            registry = root / ".git" / "worktrees"
+            registry.mkdir()
+            registry.chmod(0o555)  # what the Claude Code sandbox does from 2.1.325
+            self.addCleanup(lambda: registry.is_dir() and registry.chmod(0o755))
+            managed = Path(tmp) / "managed"
+            for round_size in (1, 2):
+                with self.subTest(round_size=round_size), \
+                        mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(managed)}), \
+                        mock.patch.object(workflow_run.isolation, "claude_code_version", return_value=None):
+                    result = workflow_run.run_workflow(root, "prepare-task", ".project", head, "T001", round_size)
+                    self.assertEqual(result["status"], "blocked", result)
+                    self.assertIn("worktree creation was refused", result["reason"])
+                    self.assertEqual([step["script"] for step in result["steps"]],
+                                     ["isolation.py probe-worktree"])
+                    self.assertEqual(run_git(root, "branch", "--list", "gsd-path-*").stdout.strip(), "")
+                    self.assertEqual(list(registry.iterdir()), [])
+                    self.assertFalse(managed.exists())
+                    self.assertEqual(run_git(root, "rev-parse", "HEAD").stdout.strip(), head)
 
     def test_packaged_runner_uses_its_bundled_dependencies(self):
         for skill in ("gsd-path", "gsd-path-plan", "gsd-path-build"):
